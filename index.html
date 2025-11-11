@@ -540,21 +540,34 @@
  */
 /**
 /**
-/**
- * --- NUEVA ESTRATEGIA ROBUSTA: IA extrae, JS estructura ---
- * Pedimos a la IA un formato simple y nuestro código lo convierte a JSON.
+ * --- VERSIÓN ROBUSTA "FEW-SHOT" ---
+ * Le damos a la IA ejemplos concretos para que no pueda equivocarse.
  */
 async function extractTripsWithLLM(ocrText) {
-    // --- PROMPT SIMPLIFICADO A UN FORMATO DE LISTA ---
+    // --- PROMPT CON EJEMPLOS CONCRETOS ---
     const prompt = `
-Analyze the following ride-hailing text and list every trip.
-For each trip, provide the data on a new line in this format: Destination|Total Price|Status
+Your task is to extract trip data from the following text and format it as a JSON array of strings.
 
-- Destination: The full name of the place.
-- Total Price: The number only (e.g., 250.00). Correct 'Q' or 'O' to '0'.
-- Status: "valid" for complete or canceled rides, "invalid" for food/delivery, "incomplete" if a destination is found but no price.
+Each string in the array must be in the format: "destination|total_lkr|status".
+- destination: The name of the destination.
+- total_lkr: The price number only (e.g., "250.00"). Correct 'Q' or 'O' to '0'.
+- status: "valid", "invalid", or "incomplete".
 
-Do not add any other text or explanations. Just the list.
+Here are some examples of how to format the output:
+
+Example 1:
+Input text: "Mireka Tower Nov 10 -12:34 PM LKR254.35"
+Output JSON: ["Mireka Tower|254.35|valid"]
+
+Example 2:
+Input text: "Seylan Bank PLC - Bambalapitiya Nov7-124PM LKR250.07"
+Output JSON: ["Seylan Bank|250.07|valid"]
+
+Example 3:
+Input text: "43b Lauries Rd ¢ Rebook LKRQ.OO - Canceled"
+Output JSON: ["43b Lauries Rd|0.00|valid"]
+
+Now, process the text below and return ONLY the JSON array. Do not add any other text or explanation.
 
 Text to analyze:
 """
@@ -579,31 +592,31 @@ Text to analyze:
         }
 
         const llmResponse = data.message;
-        console.log("--- RESPUESTA COMPLETA DE LA IA (Formato Lista) ---");
+        console.log("--- RESPUESTA COMPLETA DE LA IA (Formato JSON Simple) ---");
         console.log(llmResponse);
-        console.log("----------------------------------------------------");
+        console.log("--------------------------------------------------------");
 
-        // --- NUEVA LÓGICA: Nuestro código parsea la lista simple ---
-        const tripsData = [];
-        const lines = llmResponse.trim().split('\n');
-
-        for (const line of lines) {
-            const parts = line.split('|');
-            // Nos aseguramos de que la línea tenga exactamente 3 partes
-            if (parts.length === 3) {
-                const destination = parts[0].trim();
-                const total_lkr = parts[1].trim();
-                const status = parts[2].trim();
-
-                // Validación básica para asegurarnos de que los datos no estén vacíos
-                if (destination && total_lkr && status) {
-                    tripsData.push({
-                        destination: destination,
-                        total_lkr: total_lkr,
-                        status: status
-                    });
+        // --- LÓGICA PARA PARSEAR EL JSON SIMPLE ---
+        let tripsData = [];
+        try {
+            // Intentamos parsear la respuesta como un array de strings
+            const stringArray = JSON.parse(llmResponse);
+            
+            if (Array.isArray(stringArray)) {
+                for (const tripString of stringArray) {
+                    const parts = tripString.split('|');
+                    if (parts.length === 3) {
+                        tripsData.push({
+                            destination: parts[0].trim(),
+                            total_lkr: parts[1].trim(),
+                            status: parts[2].trim()
+                        });
+                    }
                 }
             }
+        } catch (e) {
+            console.error("❌ La IA no devolvió un JSON válido.");
+            throw new Error('The AI response was not valid JSON. Check the console for the full response.');
         }
 
         if (tripsData.length === 0) {
