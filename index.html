@@ -756,39 +756,40 @@ Text:
  * --- VERSIÓN ACTUALIZADA: La validación ahora maneja el estado "incomplete" ---
  */
 /**
- * --- VERSIÓN MEJORADA CON PATRONES: El validador ahora aprende ---
- * Usa una lista estática Y reglas de patrones para ser más adaptable.
+/**
+ * --- VERSIÓN REFACTORIZADA: Lógica Separada para PDF e Imagen ---
+ * Dos caminos completamente independientes desde el principio.
  */
 function validateTrip(tripInfo, type) {
-    if (tripInfo.status === 'invalid') {
-        return { isValid: false, details: 'Invalid: Classified as Food/Delivery by AI.', direction: null };
-    }
+    // --- CAMINO 1: LÓGICA PARA IMÁGENES ---
+    if (type === 'image') {
+        // Primero, revisamos el estado que nos dio la IA.
+        if (tripInfo.status === 'invalid') {
+            return { isValid: false, details: 'Invalid: Classified as Food/Delivery by AI.', direction: null };
+        }
 
-    if (tripInfo.status === 'incomplete') {
-        return { isValid: false, details: 'Incomplete receipt: Missing price or other data.', direction: null };
-    }
+        if (tripInfo.status === 'incomplete') {
+            return { isValid: false, details: 'Incomplete receipt: Missing price or other data.', direction: null };
+        }
 
-    if (tripInfo.status === 'valid') {
-        if (type === 'image') {
+        if (tripInfo.status === 'valid') {
             const destinationText = (tripInfo.destination || '').toLowerCase().trim();
 
-            // --- REGLA 1: PATRONES PARA DESTINOS VÁLIDOS (FUTURO-PRUEBA) ---
+            // --- REGLA 1: PATRONES PARA DESTINOS VÁLIDOS ---
             const validPatterns = [
                 /^43b/, // Empieza con "43b"
                 /^43d/, // Empieza con "43d"
                 /^mireka/ // Empieza con "mireka"
             ];
-
             const isDestinationValidByPattern = validPatterns.some(pattern => pattern.test(destinationText));
 
             if (isDestinationValidByPattern) {
                 return { isValid: true, details: 'Valid (matches a valid destination pattern)', direction: null };
             }
 
-            // --- REGLA 2: LISTA ESTÁTICA (PARA CASOS ESPECIALES O CONOCIDOS) ---
-            // Mantenemos la lista por si hay algún destino que no siga el patrón.
+            // --- REGLA 2: LISTA ESTÁTICA (PARA CASOS ESPECIALES) ---
             const staticValidDestinations = [ 
-                'colombo 00400' // Este no sigue el patrón 43b/d/mireka
+                'colombo 00400'
             ];
             const isDestinationValidByList = staticValidDestinations.some(validDest => destinationText.includes(validDest));
             
@@ -799,18 +800,43 @@ function validateTrip(tripInfo, type) {
             // --- SI NADA COINCIDE, ES INVÁLIDO ---
             return { isValid: false, details: 'Invalid (Destination does not match any known pattern or list)', direction: null };
         }
-        
-        // Lógica para PDF (sin cambios)
-        if (!tripInfo.origin || !tripInfo.destination) { return { isValid: false, details: 'Could not extract addresses.', direction: null }; }
-        const originText = tripInfo.origin.trim(); const destinationText = tripInfo.destination.trim().toLowerCase();
-        const isHome = (address) => address.startsWith('43'); const isOffice = (address) => { const addr = address.toLowerCase(); return addr.startsWith('324') || addr.includes('havelock') || addr.includes('mireka tower'); };
-        const isOriginHome = isHome(originText); const isDestinationOffice = isOffice(destinationText); const isOriginOffice = isOffice(originText); const isDestinationHome = isHome(destinationText);
-        if (isOriginHome && isDestinationOffice) { return { isValid: true, details: 'Valid: Home -> Office route.', direction: 'home-to-office' }; }
-        if (isOriginOffice && isDestinationHome) { return { isValid: true, details: 'Valid: Office -> Home route.', direction: 'office-to-home' }; }
-        return { isValid: false, details: 'Invalid: Addresses do not meet rules.', direction: null }; 
     }
 
-    return { isValid: false, details: 'Invalid: Unknown status from AI.', direction: null };
+    // --- CAMINO 2: LÓGICA PARA PDFs (COMPLETAMENTE SEPARADA) ---
+    if (type === 'pdf') {
+        // Para PDFs, esperamos que tripInfo tenga 'origin' y 'destination'
+        if (!tripInfo.origin || !tripInfo.destination) {
+            return { isValid: false, details: 'Could not extract addresses from PDF.', direction: null };
+        }
+
+        const originText = tripInfo.origin.trim();
+        const destinationText = tripInfo.destination.trim().toLowerCase();
+
+        // Reglas para identificar "Home" y "Office"
+        const isHome = (address) => address.startsWith('43');
+        const isOffice = (address) => {
+            const addr = address.toLowerCase();
+            return addr.startsWith('324') || addr.includes('havelock') || addr.includes('mireka tower');
+        };
+
+        const isOriginHome = isHome(originText);
+        const isDestinationOffice = isOffice(destinationText);
+        const isOriginOffice = isOffice(originText);
+        const isDestinationHome = isHome(destinationText);
+
+        if (isOriginHome && isDestinationOffice) {
+            return { isValid: true, details: 'Valid: Home -> Office route.', direction: 'home-to-office' };
+        }
+
+        if (isOriginOffice && isDestinationHome) {
+            return { isValid: true, details: 'Valid: Office -> Home route.', direction: 'office-to-home' };
+        }
+
+        return { isValid: false, details: 'Invalid: Addresses do not meet rules.', direction: null };
+    }
+
+    // --- CASO POR DEFECTO: Si el tipo no es ni 'image' ni 'pdf' ---
+    return { isValid: false, details: 'Invalid: Unknown file type or status from AI.', direction: null };
 }
         
         function displayMap(fileName, direction) { 
