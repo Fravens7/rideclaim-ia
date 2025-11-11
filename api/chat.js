@@ -1,6 +1,7 @@
 export default async function handler(req, res) {
   try {
-    const { prompt } = await req.json(); // o req.body si usas Node 16
+    const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
+    const { prompt } = body;
 
     const r = await fetch("https://api.deepseek.com/v1/chat/completions", {
       method: "POST",
