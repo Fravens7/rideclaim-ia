@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>DeepSeek Demo</title></head>
+<body>
+  <textarea id="prompt" rows="5" cols="50" placeholder="Escribe algo..."></textarea><br>
+  <button onclick="enviar()">Enviar</button>
+  <pre id="respuesta"></pre>
+
+  <script>
+    async function enviar() {
+      const prompt = document.getElementById('prompt').value;
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt })
+      });
+      const data = await res.json();
+      document.getElementById('respuesta').textContent = data.choices?.[0]?.message?.content || 'Error';
+    }
+  </script>
+</body>
+</html>
