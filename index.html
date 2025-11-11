@@ -656,31 +656,36 @@ Text to analyze:
  * --- VERSIÓN ACTUALIZADA: La validación ahora maneja el estado "incomplete" ---
  */
 /**
- * --- VERSIÓN ACTUALIZADA: Añadimos "Seylan Bank" a los destinos válidos ---
+ * --- VERSIÓN CORREGIDA: La validación respeta la "regla de oro" ---
  */
 function validateTrip(tripInfo, type) {
+    // 1. Primero, revisamos el estado que nos dio la IA.
     if (tripInfo.status === 'invalid') {
         return { isValid: false, details: 'Invalid: Classified as Food/Delivery by AI.', direction: null };
     }
 
+    // 2. Si la IA lo marca como "incomplete", lo reflejamos aquí.
     if (tripInfo.status === 'incomplete') {
         return { isValid: false, details: 'Incomplete receipt: Missing price or other data.', direction: null };
     }
 
+    // 3. Si la IA dice que es "valid", aplicamos nuestras reglas de negocio.
     if (tripInfo.status === 'valid') {
         if (type === 'image') {
             const destinationText = (tripInfo.destination || '').toLowerCase().trim();
+            // --- LISTA CORREGIDA: Solo los destinos permitidos por la "regla de oro" ---
             const staffhouse1ValidDestinations = [ 
                 '43b lauries rd', 
                 'mireka tower', 
                 '43d lauries rd', 
-                'colombo 00400',
-                'seylan bank' // <-- ¡AQUÍ AÑADIMOS EL NUEVO DESTINO!
+                'colombo 00400'
+                // 'seylan bank' <-- ¡QUITADO! Este era el error.
             ];
             const isValidDestination = staffhouse1ValidDestinations.some(validDest => destinationText.includes(validDest));
             if (isValidDestination) { 
                 return { isValid: true, details: 'Valid (staffhouse1 rule)', direction: null }; 
             } else { 
+                // --- ESTA ES LA RUTA CORRECTA PARA "SEYLAN BANK" ---
                 return { isValid: false, details: 'Invalid (staffhouse1 rule - Destination not recognized)', direction: null }; 
             }
         }
@@ -694,6 +699,7 @@ function validateTrip(tripInfo, type) {
         return { isValid: false, details: 'Invalid: Addresses do not meet rules.', direction: null }; 
     }
 
+    // Caso por defecto si el estado no es ninguno de los esperados
     return { isValid: false, details: 'Invalid: Unknown status from AI.', direction: null };
 }
         
