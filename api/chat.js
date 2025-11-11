@@ -4,17 +4,17 @@ export default async function handler(req, res) {
       return res.status(405).json({ error: 'Method Not Allowed' });
     }
 
-    let body;
-    try {
-      body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
-    } catch (e) {
-      return res.status(400).json({ error: 'Invalid JSON in request body' });
-    }
+    let body = {};
+try {
+  body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
+} catch (e) {
+  return res.status(400).json({ error: "Invalid JSON body" });
+}
 
-    const prompt = body?.prompt;
-    if (!prompt) {
-      return res.status(400).json({ error: 'Missing "prompt" field' });
-    }
+const prompt = body?.prompt;
+if (!prompt) {
+  return res.status(400).json({ error: "Missing 'prompt' field" });
+}
 
     const apiKey = process.env.GROQ_API_KEY;
     if (!apiKey) {
@@ -22,18 +22,18 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Missing GROQ API key' });
     }
 
-    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: "llama-3.1-70b-versatile",
-  // puedes cambiarlo a otro
-        messages: [{ role: "user", content: prompt }],
-      }),
-    });
+const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${process.env.GROQ_API_KEY}`,
+  },
+  body: JSON.stringify({
+    model: "llama-3.1-70b-versatile",
+    messages: [{ role: "user", content: prompt }]
+  }),
+});
+
 
     const text = await response.text();
     let data;
