@@ -756,39 +756,50 @@ Text:
  * --- VERSIÓN ACTUALIZADA: La validación ahora maneja el estado "incomplete" ---
  */
 /**
- * --- VERSIÓN CORREGIDA: La validación respeta la "regla de oro" ---
+ * --- VERSIÓN MEJORADA CON PATRONES: El validador ahora aprende ---
+ * Usa una lista estática Y reglas de patrones para ser más adaptable.
  */
 function validateTrip(tripInfo, type) {
-    // 1. Primero, revisamos el estado que nos dio la IA.
     if (tripInfo.status === 'invalid') {
         return { isValid: false, details: 'Invalid: Classified as Food/Delivery by AI.', direction: null };
     }
 
-    // 2. Si la IA lo marca como "incomplete", lo reflejamos aquí.
     if (tripInfo.status === 'incomplete') {
         return { isValid: false, details: 'Incomplete receipt: Missing price or other data.', direction: null };
     }
 
-    // 3. Si la IA dice que es "valid", aplicamos nuestras reglas de negocio.
     if (tripInfo.status === 'valid') {
         if (type === 'image') {
             const destinationText = (tripInfo.destination || '').toLowerCase().trim();
-            // --- LISTA CORREGIDA: Solo los destinos permitidos por la "regla de oro" ---
-            const staffhouse1ValidDestinations = [ 
-                '43b lauries rd', 
-                'mireka tower', 
-                '43d lauries rd', 
-                'colombo 00400'
-                // 'seylan bank' <-- ¡QUITADO! Este era el error.
+
+            // --- REGLA 1: PATRONES PARA DESTINOS VÁLIDOS (FUTURO-PRUEBA) ---
+            const validPatterns = [
+                /^43b/, // Empieza con "43b"
+                /^43d/, // Empieza con "43d"
+                /^mireka/ // Empieza con "mireka"
             ];
-            const isValidDestination = staffhouse1ValidDestinations.some(validDest => destinationText.includes(validDest));
-            if (isValidDestination) { 
-                return { isValid: true, details: 'Valid (staffhouse1 rule)', direction: null }; 
-            } else { 
-                // --- ESTA ES LA RUTA CORRECTA PARA "SEYLAN BANK" ---
-                return { isValid: false, details: 'Invalid (staffhouse1 rule - Destination not recognized)', direction: null }; 
+
+            const isDestinationValidByPattern = validPatterns.some(pattern => pattern.test(destinationText));
+
+            if (isDestinationValidByPattern) {
+                return { isValid: true, details: 'Valid (matches a valid destination pattern)', direction: null };
             }
+
+            // --- REGLA 2: LISTA ESTÁTICA (PARA CASOS ESPECIALES O CONOCIDOS) ---
+            // Mantenemos la lista por si hay algún destino que no siga el patrón.
+            const staticValidDestinations = [ 
+                'colombo 00400' // Este no sigue el patrón 43b/d/mireka
+            ];
+            const isDestinationValidByList = staticValidDestinations.some(validDest => destinationText.includes(validDest));
+            
+            if (isDestinationValidByList) {
+                return { isValid: true, details: 'Valid (found in static list)', direction: null };
+            }
+
+            // --- SI NADA COINCIDE, ES INVÁLIDO ---
+            return { isValid: false, details: 'Invalid (Destination does not match any known pattern or list)', direction: null };
         }
+        
         // Lógica para PDF (sin cambios)
         if (!tripInfo.origin || !tripInfo.destination) { return { isValid: false, details: 'Could not extract addresses.', direction: null }; }
         const originText = tripInfo.origin.trim(); const destinationText = tripInfo.destination.trim().toLowerCase();
@@ -799,7 +810,6 @@ function validateTrip(tripInfo, type) {
         return { isValid: false, details: 'Invalid: Addresses do not meet rules.', direction: null }; 
     }
 
-    // Caso por defecto si el estado no es ninguno de los esperados
     return { isValid: false, details: 'Invalid: Unknown status from AI.', direction: null };
 }
         
