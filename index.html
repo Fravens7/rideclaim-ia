@@ -541,26 +541,20 @@
 /**
 /**
 /**
- * --- VERSIÓN DEFINITIVA: Algoritmo de parsing para la IA ---
- * Le enseña a la IA a "leer hacia atrás" desde el precio para encontrar el destino completo.
+ * --- NUEVA ESTRATEGIA ROBUSTA: IA extrae, JS estructura ---
+ * Pedimos a la IA un formato simple y nuestro código lo convierte a JSON.
  */
 async function extractTripsWithLLM(ocrText) {
-    // --- PROMPT CON ALGORITMO PASO A PASO ---
+    // --- PROMPT SIMPLIFICADO A UN FORMATO DE LISTA ---
     const prompt = `
-You are an expert document parser for ride-hailing receipts. Your task is to extract every individual trip from the following text. Follow this exact algorithm:
+Analyze the following ride-hailing text and list every trip.
+For each trip, provide the data on a new line in this format: Destination|Total Price|Status
 
-1.  Scan the text from top to bottom and find every line that contains a price in the format "LKR<number>.<number>". Each of these lines marks the END of a trip.
-2.  For each price line you find, look at the lines DIRECTLY ABOVE it to identify the destination.
-3.  The destination name may be split across multiple lines (e.g., "Seylan Bank PLC" on one line, "- Bambalapitiya" on the next). Combine all relevant lines into a single destination name. If it's very long, shorten it to the most relevant part (e.g., "Seylan Bank").
-4.  The trip block is the contiguous set of lines from the destination down to the price line.
-5.  Once you have processed a trip, continue scanning for the NEXT price line to find the NEXT trip.
+- Destination: The full name of the place.
+- Total Price: The number only (e.g., 250.00). Correct 'Q' or 'O' to '0'.
+- Status: "valid" for complete or canceled rides, "invalid" for food/delivery, "incomplete" if a destination is found but no price.
 
-**Extraction Rules:**
-- "destination": The full, combined destination name.
-- "total_lkr": The price as a number string (e.g., "250.00"). Correct 'Q' or 'O' to '0'.
-- "status": "valid" for complete or canceled rides, "invalid" for food/delivery, "incomplete" if a destination is found but no price.
-
-Return ONLY a JSON array of all the trips you find. No other text.
+Do not add any other text or explanations. Just the list.
 
 Text to analyze:
 """
@@ -585,29 +579,38 @@ Text to analyze:
         }
 
         const llmResponse = data.message;
-        console.log("--- RESPUESTA COMPLETA DE LA IA ---");
+        console.log("--- RESPUESTA COMPLETA DE LA IA (Formato Lista) ---");
         console.log(llmResponse);
-        console.log("------------------------------------");
+        console.log("----------------------------------------------------");
 
-        try {
-            const tripsData = JSON.parse(llmResponse);
-            if (Array.isArray(tripsData)) {
-                return tripsData;
+        // --- NUEVA LÓGICA: Nuestro código parsea la lista simple ---
+        const tripsData = [];
+        const lines = llmResponse.trim().split('\n');
+
+        for (const line of lines) {
+            const parts = line.split('|');
+            // Nos aseguramos de que la línea tenga exactamente 3 partes
+            if (parts.length === 3) {
+                const destination = parts[0].trim();
+                const total_lkr = parts[1].trim();
+                const status = parts[2].trim();
+
+                // Validación básica para asegurarnos de que los datos no estén vacíos
+                if (destination && total_lkr && status) {
+                    tripsData.push({
+                        destination: destination,
+                        total_lkr: total_lkr,
+                        status: status
+                    });
+                }
             }
-        } catch (e) {
-            console.log("La respuesta no es JSON puro. Intentando extraer un array JSON del texto...");
-            const jsonMatch = llmResponse.match(/(\[[\s\S]*?\])/);
-            if (!jsonMatch) {
-                console.error("❌ No se pudo encontrar un JSON válido en la respuesta de la IA.");
-                throw new Error('The AI response did not contain valid JSON. Check the console for the full response.');
-            }
-            
-            const jsonString = jsonMatch[1];
-            console.log("String JSON extraído:", jsonString);
-            
-            const tripsData = JSON.parse(jsonString);
-            return tripsData;
         }
+
+        if (tripsData.length === 0) {
+            console.warn("No se pudieron extraer viajes válidos de la respuesta de la IA.");
+        }
+
+        return tripsData;
 
     } catch (error) {
         console.error('Error calling LLM API:', error);
