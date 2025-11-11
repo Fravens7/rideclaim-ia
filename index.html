@@ -535,65 +535,93 @@
         }
         
         /**
-         * --- NUEVO: Función para llamar a la API de Groq ---
-         * Esta función hace una llamada a tu API de Groq en Vercel.
-         * @param {string} ocrText - El texto crudo del OCR.
-         * @returns {Promise<Array<Object>>} - Un array de objetos de viaje limpios.
-         */
-        async function extractTripsWithLLM(ocrText) {
-            // Este es el PROMPT que se enviará al LLM.
-            const prompt = `
-            Analiza el siguiente texto de un recibo de viaje y extrae cada viaje individual.
-            Para cada viaje, identifica el 'destino' y el 'total_lkr'.
-            Un viaje es inválido si contiene la frase "View store".
-            Si un viaje está cancelado, su total es 0.00.
-            Corrige errores comunes de OCR, por ejemplo, 'LKR0O.QO' debe ser '0.00', 'LKRA76.34' debe ser '476.34', y 'LKR351.8O' debe ser '351.80'. Presta especial atención a las letras que parecen números (como 'A' por '4', 'O' por '0').
-            Los recibos están marcados con "[[" al inicio y "]]" al final.
-            Devuelve el resultado como un array JSON de objetos, donde cada objeto tiene las claves: "destination", "total_lkr", y "is_valid".
-            
-            Texto a analizar:
-            """
-            ${ocrText}
-            """
-            `;
+ * --- VERSIÓN MEJORADA: Función para llamar a la API de Groq ---
+ * Esta versión es más robusta y añade mensajes de depuración.
+ */
+async function extractTripsWithLLM(ocrText) {
+    // --- PROMPT MÁS ESTRICTO ---
+    // Le decimos a la IA EXACTAMENTE qué formato queremos y le damos un ejemplo.
+    const prompt = `
+You are an expert data extraction AI. Analyze the following OCR text from a ride receipt and extract each individual trip.
 
-            try {
-                // Llamada a tu API de Groq en Vercel
-                const response = await fetch('/api/chat', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ prompt })
-                });
+Your task is to return ONLY a valid JSON array of objects. Do not include any explanations, greetings, or markdown formatting like \`\`\`json ... \`\`\`.
 
-                if (!response.ok) {
-                    throw new Error(`API request failed with status ${response.status}`);
-                }
+Each object in the array must have the following keys:
+- "destination": The name of the destination place.
+- "total_lkr": The total cost of the trip as a string, corrected for OCR errors (e.g., 'A' -> '4', 'O' -> '0').
+- "is_valid": A boolean. Set to false if the trip is for food/delivery (contains "View store" or similar) or if the trip is incomplete. Set to true for valid rides. A canceled trip has a total of "0.00" and is considered valid.
 
-                const data = await response.json();
-                
-                if (data.error) {
-                    throw new Error(data.error);
-                }
+OCR Correction Rules:
+- 'LKR0O.QO' -> '0.00'
+- 'LKRA76.34' -> '476.34'
+- 'LKR351.8O' -> '351.80'
+- Pay close attention to letters that look like numbers.
 
-                // Extraer el JSON de la respuesta del LLM
-                const llmResponse = data.message;
-                
-                // Buscar el JSON en la respuesta del LLM
-                const jsonMatch = llmResponse.match(/\[[\s\S]*\]/);
-                if (!jsonMatch) {
-                    throw new Error('No valid JSON found in LLM response');
-                }
-                
-                const tripsData = JSON.parse(jsonMatch[0]);
-                return tripsData;
-            } catch (error) {
-                console.error('Error calling LLM API:', error);
-                throw error;
-            }
+The receipts are delimited by "[[" at the start and "]]" at the end.
+
+Example of a CORRECT response:
+[{"destination": "Mireka Tower", "total_lkr": "351.82", "is_valid": true}, {"destination": "Keells", "total_lkr": "0.00", "is_valid": true}]
+
+Now, analyze the text below and provide the JSON array.
+
+Text to analyze:
+"""
+ ${ocrText}
+"""
+`;
+
+    try {
+        const response = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prompt })
+        });
+
+        if (!response.ok) {
+            throw new Error(`API request failed with status ${response.status}`);
         }
 
+        const data = await response.json();
+        if (data.error) {
+            throw new Error(data.error);
+        }
+
+        const llmResponse = data.message;
+        
+        // --- PASO CLAVE DE DEPURACIÓN ---
+        // Abre la consola de desarrollador (F12) para ver este mensaje.
+        // Te mostrará exactamente lo que la IA respondió.
+        console.log("Respuesta cruda de la LLM:", llmResponse);
+
+        // Intenta parsear la respuesta completa como JSON (por si acaso la IA es perfecta)
+        try {
+            const tripsData = JSON.parse(llmResponse);
+            if (Array.isArray(tripsData)) {
+                return tripsData;
+            }
+        } catch (e) {
+            console.log("La respuesta completa no es JSON, intentando extraerlo del texto...");
+        }
+
+        // Si lo anterior falla, busca un array JSON dentro del texto.
+        // Esta regex es más segura.
+        const jsonMatch = llmResponse.match(/(\[[\s\S]*?\])/);
+        if (!jsonMatch) {
+            console.error("No se encontró un array JSON en la respuesta de la LLM.");
+            throw new Error('No valid JSON found in LLM response');
+        }
+        
+        const jsonString = jsonMatch[1]; // Extrae solo el JSON
+        console.log("String JSON extraído:", jsonString); // Otro mensaje de depuración
+        
+        const tripsData = JSON.parse(jsonString);
+        return tripsData;
+
+    } catch (error) {
+        console.error('Error calling LLM API:', error);
+        throw new Error(`Failed to process LLM response: ${error.message}`);
+    }
+}
         // --- LÓGICA COMPARTIDA (con ajustes menores) ---
         function createFileItem(file, type) { 
             const fileItem = document.createElement('div'); 
