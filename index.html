@@ -442,54 +442,25 @@
         
         closeBtn.onclick = () => modal.style.display = 'none';
         window.onclick = (event) => { if (event.target == modal) modal.style.display = 'none'; };
-        clearBtn.addEventListener('click', () => {
-        fileResults = [];
-        pdfFileList.innerHTML = ''; 
-        pdfFileList.style.display = 'none';
-        imageFileList.innerHTML = ''; 
-        imageFileList.style.display = 'none';
-        resultsContainer.style.display = 'none'; 
-        resultsBody.innerHTML = ''; 
-        summary.innerHTML = '';
-        mapContainer.innerHTML = ''; 
-        if (map) { 
-          map.remove(); 
-          map = null; 
+clearBtn.addEventListener('click', () => {
+    fileResults = [];
+    pdfFileList.innerHTML = ''; 
+    pdfFileList.style.display = 'none';
+    imageFileList.innerHTML = ''; 
+    imageFileList.style.display = 'none';
+    resultsContainer.style.display = 'none'; 
+    resultsBody.innerHTML = ''; 
+    summary.innerHTML = '';
+    mapContainer.innerHTML = ''; 
+    if (map) { 
+      map.remove(); 
+      map = null; 
     }
     
-    apiStatus.style.display = 'none';      // Limpia el estado de la UI de imágenes
-    processedPdfNames.clear();            // Limpia la memoria de PDFs
-});
+    apiStatus.style.display = 'none';      
+    processedPdfNames.clear();            
+}); // <-- AHORA ESTA LLAVE CIERRA CORRECTAMENTE LA FUNCIÓN DEL `addEventListener`
 
-        // --- LÓGICA PDF (sin cambios) ---
-        function handlePdfFiles(files) {
-    const pdfFilesArr = Array.from(files).filter(file => file.type === 'application/pdf');
-    if (pdfFilesArr.length === 0) {
-        alert('Please select at least one valid PDF file.');
-        return;
-    }
-    pdfFileList.style.display = 'block';
-    pdfFileList.innerHTML = '';
-    
-    pdfFilesArr.forEach(file => {
-        // --- INICIO DEL LIMPIADOR DE DUPLICADOS ---
-        if (processedPdfNames.has(file.name)) {
-            // Si el archivo ya fue procesado, lo ignora y muestra un aviso
-            const duplicateItem = createDuplicateFileItem(file, 'pdf');
-            pdfFileList.appendChild(duplicateItem);
-            return; // Detiene el procesamiento para este archivo
-        }
-        
-        // --- CAMBIO CLAVE: AÑADIMOS EL NOMBRE A LA MEMORIA AQUÍ ---
-        processedPdfNames.add(file.name);
-        // --- FIN DEL CAMBIO ---
-
-        const fileItem = createFileItem(file, 'pdf');
-        pdfFileList.appendChild(fileItem);
-        processPdfFile(file, fileItem);
-    });
-}
-        
         
         
         
