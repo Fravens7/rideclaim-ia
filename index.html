@@ -538,9 +538,13 @@
  * --- VERSIÓN MEJORADA: Función para llamar a la API de Groq ---
  * Esta versión es más robusta y añade mensajes de depuración.
  */
+/**
+ * --- VERSIÓN ACTUALIZADA: Función para llamar a la API de Groq ---
+ * Ahora maneja explícitamente los viajes incompletos.
+ */
 async function extractTripsWithLLM(ocrText) {
-    // --- PROMPT MÁS ESTRICTO ---
-    // Le decimos a la IA EXACTAMENTE qué formato queremos y le damos un ejemplo.
+    // --- PROMPT ACTUALIZADO ---
+    // Le damos una nueva instrucción: identificar y marcar los viajes incompletos.
     const prompt = `
 You are an expert data extraction AI. Analyze the following OCR text from a ride receipt and extract each individual trip.
 
@@ -548,8 +552,8 @@ Your task is to return ONLY a valid JSON array of objects. Do not include any ex
 
 Each object in the array must have the following keys:
 - "destination": The name of the destination place.
-- "total_lkr": The total cost of the trip as a string, corrected for OCR errors (e.g., 'A' -> '4', 'O' -> '0').
-- "is_valid": A boolean. Set to false if the trip is for food/delivery (contains "View store" or similar) or if the trip is incomplete. Set to true for valid rides. A canceled trip has a total of "0.00" and is considered valid.
+- "total_lkr": The total cost of the trip as a string, corrected for OCR errors (e.g., 'A' -> '4', 'O' -> '0'). If the price is missing, set this to null.
+- "status": A string. Set to "valid" for complete rides, "incomplete" for rides that are missing data (like the price), and "invalid" for food/delivery trips.
 
 OCR Correction Rules:
 - 'LKR0O.QO' -> '0.00'
@@ -559,8 +563,10 @@ OCR Correction Rules:
 
 The receipts are delimited by "[[" at the start and "]]" at the end.
 
+IMPORTANT: If you find a trip (e.g., between [[...]]) but it's missing the total price (LKR...), mark its status as 'incomplete' and set total_lkr to null.
+
 Example of a CORRECT response:
-[{"destination": "Mireka Tower", "total_lkr": "351.82", "is_valid": true}, {"destination": "Keells", "total_lkr": "0.00", "is_valid": true}]
+[{"destination": "Mireka Tower", "total_lkr": "351.82", "status": "valid"}, {"destination": "Keells", "total_lkr": "0.00", "status": "valid"}, {"destination": "43b Lauries Rd", "total_lkr": null, "status": "incomplete"}]
 
 Now, analyze the text below and provide the JSON array.
 
@@ -587,13 +593,8 @@ Text to analyze:
         }
 
         const llmResponse = data.message;
-        
-        // --- PASO CLAVE DE DEPURACIÓN ---
-        // Abre la consola de desarrollador (F12) para ver este mensaje.
-        // Te mostrará exactamente lo que la IA respondió.
         console.log("Respuesta cruda de la LLM:", llmResponse);
 
-        // Intenta parsear la respuesta completa como JSON (por si acaso la IA es perfecta)
         try {
             const tripsData = JSON.parse(llmResponse);
             if (Array.isArray(tripsData)) {
@@ -603,16 +604,14 @@ Text to analyze:
             console.log("La respuesta completa no es JSON, intentando extraerlo del texto...");
         }
 
-        // Si lo anterior falla, busca un array JSON dentro del texto.
-        // Esta regex es más segura.
         const jsonMatch = llmResponse.match(/(\[[\s\S]*?\])/);
         if (!jsonMatch) {
             console.error("No se encontró un array JSON en la respuesta de la LLM.");
             throw new Error('No valid JSON found in LLM response');
         }
         
-        const jsonString = jsonMatch[1]; // Extrae solo el JSON
-        console.log("String JSON extraído:", jsonString); // Otro mensaje de depuración
+        const jsonString = jsonMatch[1];
+        console.log("String JSON extraído:", jsonString);
         
         const tripsData = JSON.parse(jsonString);
         return tripsData;
@@ -657,29 +656,46 @@ Text to analyze:
          * --- SIMPLIFICADO: La validación ahora es mucho más simple ---
          * El LLM ya hizo el trabajo duro.
          */
-        function validateTrip(tripInfo, type) {
-            // El LLM ya nos dice si es válido o no. Solo lo traducimos.
-            if (tripInfo.is_valid === false) {
-                return { isValid: false, details: 'Invalid: Classified as Food/Delivery by AI.', direction: null };
+/**
+ * --- VERSIÓN ACTUALIZADA: La validación ahora maneja el estado "incomplete" ---
+ */
+function validateTrip(tripInfo, type) {
+    // 1. Primero, revisamos el estado que nos dio la IA.
+    if (tripInfo.status === 'invalid') {
+        return { isValid: false, details: 'Invalid: Classified as Food/Delivery by AI.', direction: null };
+    }
+
+    // 2. Si la IA lo marca como "incomplete", lo reflejamos aquí.
+    if (tripInfo.status === 'incomplete') {
+        return { isValid: false, details: 'Incomplete receipt: Missing price or other data.', direction: null };
+    }
+
+    // 3. Si la IA dice que es "valid", aplicamos nuestras reglas de negocio.
+    if (tripInfo.status === 'valid') {
+        if (type === 'image') {
+            const destinationText = (tripInfo.destination || '').toLowerCase().trim();
+            const staffhouse1ValidDestinations = [ '43b lauries rd', 'mireka tower', '43d lauries rd', 'colombo 00400' ];
+            const isValidDestination = staffhouse1ValidDestinations.some(validDest => destinationText.includes(validDest));
+            if (isValidDestination) { 
+                return { isValid: true, details: 'Valid (staffhouse1 rule)', direction: null }; 
+            } else { 
+                return { isValid: false, details: 'Invalid (staffhouse1 rule - Destination not recognized)', direction: null }; 
             }
-            
-            // Aplicamos la regla de "staffhouse1" solo a los viajes válidos.
-            if (type === 'image') {
-                const destinationText = (tripInfo.destination || '').toLowerCase().trim();
-                const staffhouse1ValidDestinations = [ '43b lauries rd', 'mireka tower', '43d lauries rd', 'colombo 00400' ];
-                const isValidDestination = staffhouse1ValidDestinations.some(validDest => destinationText.includes(validDest));
-                if (isValidDestination) { return { isValid: true, details: 'Valid (staffhouse1 rule)', direction: null }; } 
-                else { return { isValid: false, details: 'Invalid (staffhouse1 rule - Destination not recognized)', direction: null }; }
-            }
-            // Lógica para PDF (sin cambios)
-            if (!tripInfo.origin || !tripInfo.destination) { return { isValid: false, details: 'Could not extract addresses.', direction: null }; }
-            const originText = tripInfo.origin.trim(); const destinationText = tripInfo.destination.trim().toLowerCase();
-            const isHome = (address) => address.startsWith('43'); const isOffice = (address) => { const addr = address.toLowerCase(); return addr.startsWith('324') || addr.includes('havelock') || addr.includes('mireka tower'); };
-            const isOriginHome = isHome(originText); const isDestinationOffice = isOffice(destinationText); const isOriginOffice = isOffice(originText); const isDestinationHome = isHome(destinationText);
-            if (isOriginHome && isDestinationOffice) { return { isValid: true, details: 'Valid: Home -> Office route.', direction: 'home-to-office' }; }
-            if (isOriginOffice && isDestinationHome) { return { isValid: true, details: 'Valid: Office -> Home route.', direction: 'office-to-home' }; }
-            return { isValid: false, details: 'Invalid: Addresses do not meet rules.', direction: null }; 
         }
+        // Lógica para PDF (sin cambios)
+        if (!tripInfo.origin || !tripInfo.destination) { return { isValid: false, details: 'Could not extract addresses.', direction: null }; }
+        const originText = tripInfo.origin.trim(); const destinationText = tripInfo.destination.trim().toLowerCase();
+        const isHome = (address) => address.startsWith('43'); const isOffice = (address) => { const addr = address.toLowerCase(); return addr.startsWith('324') || addr.includes('havelock') || addr.includes('mireka tower'); };
+        const isOriginHome = isHome(originText); const isDestinationOffice = isOffice(destinationText); const isOriginOffice = isOffice(originText); const isDestinationHome = isHome(destinationText);
+        if (isOriginHome && isDestinationOffice) { return { isValid: true, details: 'Valid: Home -> Office route.', direction: 'home-to-office' }; }
+        if (isOriginOffice && isDestinationHome) { return { isValid: true, details: 'Valid: Office -> Home route.', direction: 'office-to-home' }; }
+        return { isValid: false, details: 'Invalid: Addresses do not meet rules.', direction: null }; 
+    }
+
+    // Caso por defecto si el estado no es ninguno de los esperados
+    return { isValid: false, details: 'Invalid: Unknown status from AI.', direction: null };
+}
+
         
         function displayMap(fileName, direction) { 
             mapContainer.style.display = 'block'; 
