@@ -1,26 +1,738 @@
 <!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><title>DeepSeek Demo</title></head>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rideclaim - AI-Powered</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" 
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" 
+          crossorigin=""/>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+    <!-- Tesseract.js para OCR -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+    
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+            display: flex;
+            align-items: flex-start;
+        }
+        .logo-container {
+            margin-right: 30px;
+            flex-shrink: 0;
+        }
+        .logo-container img {
+            max-width: 120px;
+            height: auto;
+        }
+        .main-content {
+            flex: 1;
+        }
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .tabs {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #ddd;
+        }
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            background-color: #f1f1f1;
+            border: 1px solid #ddd;
+            border-bottom: none;
+            border-radius: 5px 5px 0 0;
+            margin-right: 5px;
+        }
+        .tab.active {
+            background-color: white;
+            border-bottom: 1px solid white;
+            margin-bottom: -1px;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .upload-area {
+            border: 2px dashed #ccc;
+            border-radius: 10px;
+            padding: 40px;
+            text-align: center;
+            margin-bottom: 20px;
+            transition: all 0.3s;
+        }
+        .upload-area:hover {
+            border-color: #007bff;
+            background-color: #f8f9fa;
+        }
+        .upload-area.dragover {
+            border-color: #007bff;
+            background-color: #e9f7fe;
+        }
+        input[type="file"] {
+            display: none;
+        }
+        .upload-label {
+            display: inline-block;
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .upload-label:hover {
+            background-color: #0056b3;
+        }
+        .file-list {
+            margin-top: 20px;
+            display: none;
+        }
+        .file-item {
+            display: flex;
+            flex-direction: column;
+            padding: 15px;
+            margin-bottom: 10px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            border-left: 5px solid #ccc;
+        }
+        .file-item.processing {
+            background-color: #e9f7fe;
+            border-left-color: #007bff;
+        }
+        .file-item.success {
+            background-color: #d4edda;
+            border-left-color: #28a745;
+        }
+        .file-item.error {
+            background-color: #f8d7da;
+            border-left-color: #dc3545;
+        }
+        .file-item.invalid {
+            background-color: #fff3cd;
+            border-left-color: #ffc107;
+        }
+        .file-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .file-name {
+            font-weight: bold;
+            flex-grow: 1;
+        }
+        .file-status {
+            padding: 5px 10px;
+            border-radius: 3px;
+            font-size: 0.9em;
+        }
+        .status-processing {
+            background-color: #cce5ff;
+            color: #004085;
+        }
+        .status-success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .status-error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .status-invalid {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background-color: #f0f0f0;
+            border-radius: 10px;
+            margin-top: 10px;
+            overflow: hidden;
+        }
+        .progress {
+            height: 100%;
+            background-color: #007bff;
+            width: 0%;
+            transition: width 0.3s;
+        }
+        .map-container {
+            height: 400px;
+            margin-top: 20px;
+            border-radius: 10px;
+            border: 1px solid #ddd;
+            display: none;
+        }
+        .map-title {
+            font-size: 1.2em;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        .results-container {
+            margin-top: 30px;
+            display: none;
+        }
+        .results-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        .results-table th, .results-table td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        .results-table th {
+            background-color: #f8f9fa;
+            font-weight: bold;
+        }
+        .results-table tr:hover {
+            background-color: #f5f5f5;
+        }
+        .view-details-btn {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 0.8em;
+        }
+        .view-details-btn:hover {
+            background-color: #0056b3;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.4);
+        }
+        .modal-content {
+            background-color: #fefefe;
+            margin: 5% auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 80%;
+            max-width: 700px;
+            border-radius: 5px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .close:hover {
+            color: black;
+        }
+        .extracted-text {
+            margin-top: 15px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .clear-btn {
+            margin-top: 20px;
+            padding: 10px 20px;
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .clear-btn:hover {
+            background-color: #c82333;
+        }
+        .summary {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #e9f7fe;
+            border-radius: 5px;
+            text-align: right;
+            font-weight: bold;
+        }
+        .valid-badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 3px;
+            font-size: 0.8em;
+            font-weight: bold;
+        }
+        .valid-badge.valid {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .valid-badge.invalid {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .valid-badge.incomplete {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        .validation-details {
+            font-size: 0.8em;
+            color: #666;
+            margin-top: 5px;
+        }
+        .image-preview {
+            max-width: 200px;
+            max-height: 150px;
+            margin-top: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .file-details {
+            font-size: 0.9em;
+            color: #555;
+            margin-top: 5px;
+        }
+        .api-status {
+            margin-top: 10px;
+            padding: 8px;
+            border-radius: 5px;
+            font-size: 0.9em;
+            text-align: center;
+        }
+        .api-status.success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .api-status.error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .api-status.processing {
+            background-color: #cce5ff;
+            color: #004085;
+        }
+    </style>
+</head>
 <body>
-  <textarea id="prompt" placeholder="Escribe algo"></textarea>
-<button onclick="enviar()">Enviar</button>
-<pre id="respuesta"></pre>
+    <div class="logo-container">
+        <img src="logo.png" alt="Rideclaim Logo">
+    </div>
+    
+    <div class="main-content">
+        <div class="container">
+            <h1>Rideclaim - AI-Powered</h1>
+            
+            <div class="tabs">
+                <div class="tab" id="pdf-tab">PDF</div>
+                <div class="tab active" id="image-tab">Image</div>
+            </div>
+            
+            <div id="pdf-content" class="tab-content">
+                <div class="upload-area" id="pdfUploadArea">
+                    <label for="pdfFiles" class="upload-label">Select PDFs</label>
+                    <p>or drag and drop files here</p>
+                    <input type="file" id="pdfFiles" accept="application/pdf" multiple>
+                </div>
+                <div class="file-list" id="pdfFileList"></div>
+            </div>
+            
+            <div id="image-content" class="tab-content active">
+                <div class="upload-area" id="imageUploadArea">
+                    <label for="imageFiles" class="upload-label">Select Images</label>
+                    <p>or drag and drop files here (PNG, JPG)</p>
+                    <input type="file" id="imageFiles" accept="image/png, image/jpeg, image/jpg" multiple>
+                </div>
+                <div class="file-list" id="imageFileList"></div>
+                <div id="apiStatus" class="api-status" style="display: none;"></div>
+            </div>
+            
+            <div id="map-container" class="map-container"></div>
+            
+            <div class="results-container" id="resultsContainer">
+                <h2>Results</h2>
+                <table class="results-table" id="resultsTable">
+                    <thead>
+                        <tr>
+                            <th>File</th>
+                            <th>Type</th>
+                            <th>Origin</th>
+                            <th>Destination</th>
+                            <th>Total LKR</th>
+                            <th>Validation</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="resultsBody"></tbody>
+                </table>
+                <div class="summary" id="summary"></div>
+                <button class="clear-btn" id="clearBtn">Clear results</button>
+            </div>
+        </div>
+    </div>
 
-<script>
-async function enviar() {
-  const prompt = document.getElementById('prompt').value;
-  
-  const res = await fetch('/api/chat', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt }) // ❌ Muy importante que la clave sea "prompt"
-  });
+    <div id="detailsModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>File Details</h2>
+            <div class="extracted-text" id="modalExtractedText"></div>
+        </div>
+    </div>
 
-  const data = await res.json();
-  document.getElementById('respuesta').textContent =
-    data.message || data.error || 'Error desconocido';
-}
-</script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+        
+        const staticLocations = {
+            home: { lat: 6.89535, lng: 79.85766 }, office: { lat: 6.91379, lng: 79.86533 }
+        };
+        
+        const pdfTab = document.getElementById('pdf-tab'); const imageTab = document.getElementById('image-tab');
+        const pdfContent = document.getElementById('pdf-content'); const imageContent = document.getElementById('image-content');
+        const pdfUploadArea = document.getElementById('pdfUploadArea'); const imageUploadArea = document.getElementById('imageUploadArea');
+        const pdfFiles = document.getElementById('pdfFiles'); const imageFiles = document.getElementById('imageFiles');
+        const pdfFileList = document.getElementById('pdfFileList'); const imageFileList = document.getElementById('imageFileList');
+        const resultsContainer = document.getElementById('resultsContainer'); const resultsBody = document.getElementById('resultsBody');
+        const summary = document.getElementById('summary'); const clearBtn = document.getElementById('clearBtn'); const mapContainer = document.getElementById('map-container');
+        const modal = document.getElementById('detailsModal'); const modalExtractedText = document.getElementById('modalExtractedText');
+        const closeBtn = document.getElementsByClassName('close')[0];
+        const apiStatus = document.getElementById('apiStatus');
+        
+        let fileResults = []; let map = null;
+
+        pdfTab.addEventListener('click', () => { pdfTab.classList.add('active'); imageTab.classList.remove('active'); pdfContent.classList.add('active'); imageContent.classList.remove('active'); });
+        imageTab.addEventListener('click', () => { imageTab.classList.add('active'); pdfTab.classList.remove('active'); imageContent.classList.add('active'); pdfContent.classList.remove('active'); });
+        
+        pdfFiles.addEventListener('change', handlePdfFileSelect);
+        pdfUploadArea.addEventListener('dragover', (e) => { e.preventDefault(); pdfUploadArea.classList.add('dragover'); });
+        pdfUploadArea.addEventListener('dragleave', () => { pdfUploadArea.classList.remove('dragover'); });
+        pdfUploadArea.addEventListener('drop', (e) => { e.preventDefault(); pdfUploadArea.classList.remove('dragover'); if (e.dataTransfer.files.length) handlePdfFiles(e.dataTransfer.files); });
+
+        imageFiles.addEventListener('change', handleImageFileSelect);
+        imageUploadArea.addEventListener('dragover', (e) => { e.preventDefault(); imageUploadArea.classList.add('dragover'); });
+        imageUploadArea.addEventListener('dragleave', () => { imageUploadArea.classList.remove('dragover'); });
+        imageUploadArea.addEventListener('drop', (e) => { e.preventDefault(); imageUploadArea.classList.remove('dragover'); if (e.dataTransfer.files.length) handleImageFiles(e.dataTransfer.files); });
+        
+        closeBtn.onclick = () => modal.style.display = 'none';
+        window.onclick = (event) => { if (event.target == modal) modal.style.display = 'none'; };
+        clearBtn.addEventListener('click', () => {
+            fileResults = [];
+            pdfFileList.innerHTML = ''; pdfFileList.style.display = 'none';
+            imageFileList.innerHTML = ''; imageFileList.style.display = 'none';
+            resultsContainer.style.display = 'none'; resultsBody.innerHTML = ''; summary.innerHTML = '';
+            mapContainer.innerHTML = ''; if (map) { map.remove(); map = null; }
+            apiStatus.style.display = 'none';
+        });
+
+        // --- LÓGICA PDF (sin cambios) ---
+        function handlePdfFileSelect(e) { if (e.target.files.length) handlePdfFiles(e.target.files); }
+        function handlePdfFiles(files) { const pdfFilesArr = Array.from(files).filter(file => file.type === 'application/pdf'); if (pdfFilesArr.length === 0) { alert('Please select at least one valid PDF file.'); return; } pdfFileList.style.display = 'block'; pdfFileList.innerHTML = ''; pdfFilesArr.forEach(file => { const fileItem = createFileItem(file, 'pdf'); pdfFileList.appendChild(fileItem); processPdfFile(file, fileItem); }); }
+        function processPdfFile(file, fileItem) { const fileReader = new FileReader(); fileReader.onload = function() { const typedarray = new Uint8Array(this.result); pdfjsLib.getDocument(typedarray).promise.then(function(pdf) { let totalPages = pdf.numPages; let fullText = ''; let pagePromises = []; for (let i = 1; i <= totalPages; i++) { pagePromises.push(pdf.getPage(i).then(function(page) { return page.getTextContent().then(function(textContent) { let pageText = ''; textContent.items.forEach(function(item) { pageText += item.str + ' '; }); return pageText; }); })); } Promise.all(pagePromises).then(function(pageTexts) { pageTexts.forEach(function(text) { fullText += text + '\n'; }); const tripInfo = extractTripInfoFromPdf(fullText); processExtractedText(file, fileItem, fullText, 'pdf', tripInfo); }); }).catch(function(error) { console.error('Error processing PDF:', error); fileItem.className = 'file-item error'; const fileStatus = fileItem.querySelector('.file-status'); fileStatus.className = 'file-status status-error'; fileStatus.textContent = 'Error processing'; mapContainer.style.display = 'none'; }); }; fileReader.readAsArrayBuffer(file); }
+        function extractTripInfoFromPdf(text) { let origin = null; let destination = null; const timePattern = /(\d{1,2}:\d{2})\s+([a-zA-Z0-9\s,]+Sri Lanka)/g; let match; const addresses = []; while ((match = timePattern.exec(text)) !== null) { addresses.push({ time: match[1], address: match[2].trim() }); } if (addresses.length >= 2) { origin = addresses[0].address; destination = addresses[1].address; } else { const addressPattern = /([a-zA-Z0-9\s,]+Sri Lanka)/g; const allAddresses = []; while ((match = addressPattern.exec(text)) !== null) { allAddresses.push(match[1].trim()); } if (allAddresses.length >= 2) { origin = allAddresses[0]; destination = allAddresses[1]; } } return { origin, destination }; }
+
+        // --- LÓGICA IMAGEN (MODIFICADA) ---
+        function handleImageFileSelect(e) { if (e.target.files.length) handleImageFiles(e.target.files); }
+        function handleImageFiles(files) { const imageFilesArr = Array.from(files).filter(file => /image\/(png|jpeg|jpg)/.test(file.type)); if (imageFilesArr.length === 0) { alert('Please select at least one valid image file (PNG, JPG).'); return; } imageFileList.style.display = 'block'; imageFileList.innerHTML = ''; imageFilesArr.forEach(file => { const fileItem = createFileItem(file, 'image'); imageFileList.appendChild(fileItem); processImageFile(file, fileItem); }); }
+        function processImageFile(file, fileItem) {
+            const fileReader = new FileReader();
+            fileReader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    const processedImgSrc = preprocessImage(img);
+                    
+                    const progressBar = fileItem.querySelector('.progress'); const fileStatus = fileItem.querySelector('.file-status');
+                    Tesseract.recognize(processedImgSrc, 'eng', { logger: m => { if (m.status === 'recognizing text') { const progress = Math.round(m.progress * 100); progressBar.style.width = `${progress}%`; fileStatus.textContent = `Processing... ${progress}%`; } } })
+                    .then(({ data: { text } }) => {
+                        console.log("Raw OCR Text:", text);
+                        
+                        // --- NUEVO: Usar LLM para estructurar los datos ---
+                        // Mostrar estado de procesamiento de la API
+                        apiStatus.style.display = 'block';
+                        apiStatus.className = 'api-status processing';
+                        apiStatus.textContent = 'Processing with AI...';
+                        
+                        extractTripsWithLLM(text)
+                            .then(trips => {
+                                console.log("Structured Data from LLM:", trips);
+                                
+                                // Ocultar estado de procesamiento
+                                apiStatus.style.display = 'none';
+                                
+                                const fileDetails = document.createElement('div'); fileDetails.className = 'file-details'; fileDetails.textContent = `${trips.length} trip(s) found.`; fileItem.appendChild(fileDetails);
+                                let validTripsFound = 0;
+                                trips.forEach(trip => {
+                                    const validationResult = validateTrip(trip, 'image');
+                                    if (validationResult.isValid) validTripsFound++;
+                                    fileResults.push({ name: file.name, type: 'image', total: trip.total_lkr, origin: trip.origin || 'Not specified', destination: trip.destination, isValid: validationResult.isValid, validationDetails: validationResult.details, text: text });
+                                });
+                                fileItem.className = validTripsFound > 0 ? 'file-item success' : 'file-item invalid';
+                                fileStatus.className = `file-status ${validTripsFound > 0 ? 'status-success' : 'status-invalid'}`;
+                                fileStatus.textContent = `Completed (${validTripsFound} valid)`;
+                                progressBar.style.display = 'none';
+                                updateResultsTable();
+                            })
+                            .catch(error => {
+                                console.error('Error processing with LLM:', error);
+                                
+                                // Mostrar estado de error
+                                apiStatus.className = 'api-status error';
+                                apiStatus.textContent = `Error processing with AI: ${error.message}`;
+                                
+                                fileItem.className = 'file-item error';
+                                fileStatus.className = 'file-status status-error';
+                                fileStatus.textContent = 'Error processing with AI';
+                                progressBar.style.display = 'none';
+                            });
+                    }).catch(err => { console.error('Error processing image:', err); fileItem.className = 'file-item error'; fileStatus.className = 'file-status status-error'; fileStatus.textContent = 'Error processing'; progressBar.style.display = 'none'; });
+                };
+                img.src = e.target.result;
+            };
+            fileReader.readAsDataURL(file);
+        }
+        
+        function preprocessImage(img) {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = img.width; canvas.height = img.height;
+            ctx.drawImage(img, 0, 0);
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imageData.data;
+            for (let i = 0; i < data.length; i += 4) {
+                const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+                const threshold = 150;
+                const value = gray > threshold ? 255 : 0;
+                data[i] = value; data[i + 1] = value; data[i + 2] = value;
+            }
+            ctx.putImageData(imageData, 0, 0);
+            return canvas.toDataURL();
+        }
+        
+        /**
+         * --- NUEVO: Función para llamar a la API de Groq ---
+         * Esta función hace una llamada a tu API de Groq en Vercel.
+         * @param {string} ocrText - El texto crudo del OCR.
+         * @returns {Promise<Array<Object>>} - Un array de objetos de viaje limpios.
+         */
+        async function extractTripsWithLLM(ocrText) {
+            // Este es el PROMPT que se enviará al LLM.
+            const prompt = `
+            Analiza el siguiente texto de un recibo de viaje y extrae cada viaje individual.
+            Para cada viaje, identifica el 'destino' y el 'total_lkr'.
+            Un viaje es inválido si contiene la frase "View store".
+            Si un viaje está cancelado, su total es 0.00.
+            Corrige errores comunes de OCR, por ejemplo, 'LKR0O.QO' debe ser '0.00', 'LKRA76.34' debe ser '476.34', y 'LKR351.8O' debe ser '351.80'. Presta especial atención a las letras que parecen números (como 'A' por '4', 'O' por '0').
+            Los recibos están marcados con "[[" al inicio y "]]" al final.
+            Devuelve el resultado como un array JSON de objetos, donde cada objeto tiene las claves: "destination", "total_lkr", y "is_valid".
+            
+            Texto a analizar:
+            """
+            ${ocrText}
+            """
+            `;
+
+            try {
+                // Llamada a tu API de Groq en Vercel
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ prompt })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`API request failed with status ${response.status}`);
+                }
+
+                const data = await response.json();
+                
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+
+                // Extraer el JSON de la respuesta del LLM
+                const llmResponse = data.message;
+                
+                // Buscar el JSON en la respuesta del LLM
+                const jsonMatch = llmResponse.match(/\[[\s\S]*\]/);
+                if (!jsonMatch) {
+                    throw new Error('No valid JSON found in LLM response');
+                }
+                
+                const tripsData = JSON.parse(jsonMatch[0]);
+                return tripsData;
+            } catch (error) {
+                console.error('Error calling LLM API:', error);
+                throw error;
+            }
+        }
+
+        // --- LÓGICA COMPARTIDA (con ajustes menores) ---
+        function createFileItem(file, type) { 
+            const fileItem = document.createElement('div'); 
+            fileItem.className = 'file-item processing'; 
+            fileItem.id = `file-${type}-${file.name.replace(/\s/g, '-')}`; 
+            const fileHeader = document.createElement('div'); fileHeader.className = 'file-header'; 
+            const fileName = document.createElement('div'); fileName.className = 'file-name'; fileName.textContent = file.name; 
+            const fileStatus = document.createElement('div'); fileStatus.className = 'file-status status-processing'; fileStatus.textContent = 'Processing...'; 
+            fileHeader.appendChild(fileName); fileHeader.appendChild(fileStatus); fileItem.appendChild(fileHeader); 
+            const progressBar = document.createElement('div'); progressBar.className = 'progress-bar'; 
+            const progress = document.createElement('div'); progress.className = 'progress'; progressBar.appendChild(progress); fileItem.appendChild(progressBar); 
+            if (type === 'image') { const imgPreview = document.createElement('img'); imgPreview.className = 'image-preview'; imgPreview.src = URL.createObjectURL(file); fileItem.appendChild(imgPreview); } 
+            return fileItem; 
+        }
+        
+        function processExtractedText(file, fileItem, text, type, tripInfo) {
+            const totalMatch = text.match(/Total\s+([\d,.]+)\s+LKR/i);
+            const total = totalMatch ? totalMatch[1] : null;
+            const validationResult = validateTrip(tripInfo, type);
+            const fileStatus = fileItem.querySelector('.file-status');
+            const progressBar = fileItem.querySelector('.progress-bar');
+            if (progressBar) progressBar.style.display = 'none';
+            if (total) {
+                const fileTotal = document.createElement('div'); fileTotal.className = 'file-total'; fileTotal.textContent = `${total} LKR`; fileItem.appendChild(fileTotal);
+                if (validationResult.isValid) { fileItem.className = 'file-item success'; fileStatus.className = 'file-status status-success'; fileStatus.textContent = 'Valid'; if (type === 'pdf' && validationResult.direction) displayMap(file.name, validationResult.direction); } 
+                else { fileItem.className = 'file-item invalid'; fileStatus.className = 'file-status status-invalid'; fileStatus.textContent = 'Invalid'; mapContainer.style.display = 'none'; }
+            } else { fileItem.className = 'file-item error'; fileStatus.className = 'file-status status-error'; fileStatus.textContent = 'Error: Total not found'; mapContainer.style.display = 'none'; }
+            fileResults.push({ name: file.name, type: type, total: total, origin: tripInfo.origin || 'Not specified', destination: tripInfo.destination || 'Not specified', isValid: validationResult.isValid, validationDetails: validationResult.details, text: text });
+            updateResultsTable();
+        }
+        
+        /**
+         * --- SIMPLIFICADO: La validación ahora es mucho más simple ---
+         * El LLM ya hizo el trabajo duro.
+         */
+        function validateTrip(tripInfo, type) {
+            // El LLM ya nos dice si es válido o no. Solo lo traducimos.
+            if (tripInfo.is_valid === false) {
+                return { isValid: false, details: 'Invalid: Classified as Food/Delivery by AI.', direction: null };
+            }
+            
+            // Aplicamos la regla de "staffhouse1" solo a los viajes válidos.
+            if (type === 'image') {
+                const destinationText = (tripInfo.destination || '').toLowerCase().trim();
+                const staffhouse1ValidDestinations = [ '43b lauries rd', 'mireka tower', '43d lauries rd', 'colombo 00400' ];
+                const isValidDestination = staffhouse1ValidDestinations.some(validDest => destinationText.includes(validDest));
+                if (isValidDestination) { return { isValid: true, details: 'Valid (staffhouse1 rule)', direction: null }; } 
+                else { return { isValid: false, details: 'Invalid (staffhouse1 rule - Destination not recognized)', direction: null }; }
+            }
+            // Lógica para PDF (sin cambios)
+            if (!tripInfo.origin || !tripInfo.destination) { return { isValid: false, details: 'Could not extract addresses.', direction: null }; }
+            const originText = tripInfo.origin.trim(); const destinationText = tripInfo.destination.trim().toLowerCase();
+            const isHome = (address) => address.startsWith('43'); const isOffice = (address) => { const addr = address.toLowerCase(); return addr.startsWith('324') || addr.includes('havelock') || addr.includes('mireka tower'); };
+            const isOriginHome = isHome(originText); const isDestinationOffice = isOffice(destinationText); const isOriginOffice = isOffice(originText); const isDestinationHome = isHome(destinationText);
+            if (isOriginHome && isDestinationOffice) { return { isValid: true, details: 'Valid: Home -> Office route.', direction: 'home-to-office' }; }
+            if (isOriginOffice && isDestinationHome) { return { isValid: true, details: 'Valid: Office -> Home route.', direction: 'office-to-home' }; }
+            return { isValid: false, details: 'Invalid: Addresses do not meet rules.', direction: null }; 
+        }
+        
+        function displayMap(fileName, direction) { 
+            mapContainer.style.display = 'block'; 
+            let mapTitle = document.querySelector('.map-title'); if (!mapTitle) { mapTitle = document.createElement('div'); mapTitle.className = 'map-title'; mapContainer.prepend(mapTitle); } 
+            mapTitle.textContent = `Trip Map: ${fileName}`; 
+            let originCoords, destCoords; if (direction === 'home-to-office') { originCoords = staticLocations.home; destCoords = staticLocations.office; } 
+            else { originCoords = staticLocations.office; destCoords = staticLocations.home; } 
+            if (!map) { map = L.map('map-container').setView([6.9, 79.86], 13); L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' }).addTo(map); } 
+            map.eachLayer(layer => { if (layer instanceof L.Marker || layer instanceof L.Polyline) { map.removeLayer(layer); } }); 
+            L.marker(originCoords).addTo(map).bindPopup('Origin').openPopup(); L.marker(destCoords).addTo(map).bindPopup('Destination'); 
+            const lineColor = (direction === 'home-to-office') ? 'blue' : 'green'; const route = L.polyline([originCoords, destCoords], { color: lineColor, weight: 5, opacity: 0.7 }).addTo(map); 
+            const group = new L.featureGroup([L.marker(originCoords), L.marker(destCoords)]); map.fitBounds(group.getBounds().pad(0.1)); 
+            setTimeout(() => { map.invalidateSize(); }, 0); 
+        }
+        
+        function updateResultsTable() {
+            resultsContainer.style.display = 'block'; resultsBody.innerHTML = '';
+            let totalSum = 0; let validCount = 0; let invalidCount = 0;
+            fileResults.forEach((result, index) => {
+                const row = document.createElement('tr');
+                const nameCell = document.createElement('td'); nameCell.textContent = result.name;
+                const typeCell = document.createElement('td'); typeCell.textContent = result.type === 'pdf' ? 'PDF' : 'Image';
+                const originCell = document.createElement('td'); originCell.textContent = result.origin ? result.origin.substring(0, 50) + (result.origin.length > 50 ? '...' : '') : 'Not found';
+                const destCell = document.createElement('td'); destCell.textContent = result.destination ? result.destination.substring(0, 50) + (result.destination.length > 50 ? '...' : '') : 'Not found';
+                
+                const totalCell = document.createElement('td'); 
+                if (result.total && result.total !== '.' && result.total !== '.') {
+                    totalCell.textContent = `${result.total} LKR`;
+                } else {
+                    totalCell.textContent = '0.00 LKR';
+                }
+
+                const validationCell = document.createElement('td');
+                let badgeText, badgeClass;
+                if (result.validationDetails.includes('Incomplete receipt')) {
+                    badgeText = 'Incomplete';
+                    badgeClass = 'valid-badge incomplete';
+                } else if (result.isValid) {
+                    badgeText = 'Valid';
+                    badgeClass = 'valid-badge valid';
+                } else {
+                    badgeText = 'Invalid';
+                    badgeClass = 'valid-badge invalid';
+                }
+
+                const validationBadge = document.createElement('span'); 
+                validationBadge.className = badgeClass;
+                validationBadge.textContent = badgeText; 
+                validationCell.appendChild(validationBadge);
+                
+                const detailsDiv = document.createElement('div'); 
+                detailsDiv.className = 'validation-details'; 
+                detailsDiv.textContent = result.validationDetails || ''; 
+                validationCell.appendChild(detailsDiv);
+                
+                const actionsCell = document.createElement('td'); 
+                const viewBtn = document.createElement('button'); 
+                viewBtn.className = 'view-details-btn'; 
+                viewBtn.textContent = 'View details'; 
+                viewBtn.onclick = function() { 
+                    modalExtractedText.textContent = result.text; 
+                    modal.style.display = 'block'; 
+                }; 
+                actionsCell.appendChild(viewBtn);
+                
+                row.appendChild(nameCell); row.appendChild(typeCell); row.appendChild(originCell); row.appendChild(destCell); 
+                row.appendChild(totalCell); row.appendChild(validationCell); row.appendChild(actionsCell); 
+                resultsBody.appendChild(row);
+                
+                if (result.total && result.total !== '.' && result.total !== '0.00' && result.isValid) {
+                    totalSum += parseFloat(result.total.replace(',', '.'));
+                }
+                
+                if (result.isValid) { 
+                    validCount++; 
+                } else { 
+                    invalidCount++; 
+                }
+            });
+            summary.innerHTML = `<p>Total files processed: ${fileResults.length}</p><p>Valid trips: ${validCount}</p><p>Invalid trips: ${invalidCount}</p><p>Total LKR sum (valid trips): ${totalSum.toFixed(2)} LKR</p>`;
+        }
+    </script>
 </body>
 </html>
