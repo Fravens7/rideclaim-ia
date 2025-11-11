@@ -541,6 +541,10 @@ function createDuplicateFileItem(file, type) {
 
         // --- LÓGICA IMAGEN (MODIFICADA) ---
         function handleImageFileSelect(e) { if (e.target.files.length) handleImageFiles(e.target.files); }
+
+        //supuestamente falta esto
+        function handlePdfFileSelect(e) { if (e.target.files.length) handlePdfFiles(e.target.files); }
+
         function handleImageFiles(files) { const imageFilesArr = Array.from(files).filter(file => /image\/(png|jpeg|jpg)/.test(file.type)); if (imageFilesArr.length === 0) { alert('Please select at least one valid image file (PNG, JPG).'); return; } imageFileList.style.display = 'block'; imageFileList.innerHTML = ''; imageFilesArr.forEach(file => { const fileItem = createFileItem(file, 'image'); imageFileList.appendChild(fileItem); processImageFile(file, fileItem); }); }
         function processImageFile(file, fileItem) {
             const fileReader = new FileReader();
