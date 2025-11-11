@@ -540,31 +540,25 @@
  */
 /**
 /**
- /**
 /**
- * --- VERSIÓN PRECISA: Arregla la extracción del total y el estado de cancelados ---
+ * --- VERSIÓN SIMPLIFICADA Y ROBUSTA ---
+ * Un prompt más directo para evitar que la IA se confunda.
  */
 async function extractTripsWithLLM(ocrText) {
-    // --- PROMPT CON REGLAS DE PRECISIÓN ---
+    // --- PROMPT MÁS SENCILLO Y DIRECTO ---
     const prompt = `
-You are an expert parser for ride-hailing receipts. Analyze the following OCR text, which contains a history of multiple trips. Your task is to identify and extract each individual trip.
+Analyze the following text from a ride-hailing app and extract every trip.
 
-A "trip" is a block of text with the following structure:
-1.  It starts with a destination name (e.g., "Mireka Tower", "43b Lauries Rd", "Seylan Bank PLC").
-2.  It contains a date and time.
-3.  It ends with a line containing the price, in the format "LKR<number>.<number>".
+A trip consists of a destination, a date, and a price line like "LKR250.00".
 
-**CRITICAL RULES FOR EXTRACTION:**
-1.  **Canceled Trips:** If a trip ends with "- Canceled" (e.g., "LKR0.00 - Canceled"), it is a valid, canceled trip. The status is "valid" and the total is "0.00".
-2.  **Total Value:** For the "total_lkr" key, you MUST return ONLY the numerical value as a string (e.g., "250.00", "0.00"). Do NOT include "LKR" or any other text.
-3.  **OCR Correction:** Correct common errors: 'Q' or 'O' is '0', 'A' is '4'. So 'LKRQ.OO' is '0.00'.
+For each trip you find, create a JSON object with:
+- "destination": The destination name (e.g., "Mireka Tower").
+- "total_lkr": The price as a number string (e.g., "250.00"). Correct 'Q' or 'O' to '0'.
+- "status": "valid" if complete or canceled, "invalid" if it's food/delivery, "incomplete" if price is missing.
 
-For each trip block you find, extract:
-- "destination": The full destination name. If it's very long, shorten it to the most relevant part (e.g., "Seylan Bank").
-- "total_lkr": The price as a string, containing ONLY numbers and a decimal point.
-- "status": "valid" for complete or canceled rides, "incomplete" if a destination is found but no price, "invalid" for food/delivery.
+Return ONLY a JSON array of these objects. No other text.
 
-Return ONLY a single JSON array of all the trips you find. Do not include any other text.
+Example output: [{"destination": "Mireka Tower", "total_lkr": "250.00", "status": "valid"}]
 
 Text to analyze:
 """
@@ -589,32 +583,39 @@ Text to analyze:
         }
 
         const llmResponse = data.message;
-        console.log("Respuesta cruda de la LLM:", llmResponse);
+        
+        // --- MEJORA CLAVE PARA LA DEPURACIÓN ---
+        // Esto nos mostrará EXACTAMENTE lo que la IA respondió.
+        console.log("--- RESPUESTA COMPLETA DE LA IA ---");
+        console.log(llmResponse);
+        console.log("------------------------------------");
 
+        // Intentamos parsear la respuesta completa primero.
         try {
             const tripsData = JSON.parse(llmResponse);
             if (Array.isArray(tripsData)) {
                 return tripsData;
             }
         } catch (e) {
-            console.log("La respuesta completa no es JSON, intentando extraerlo del texto...");
+            // Si falla, intentamos buscar un JSON dentro del texto.
+            console.log("La respuesta no es JSON puro. Intentando extraer un array JSON del texto...");
+            const jsonMatch = llmResponse.match(/(\[[\s\S]*?\])/);
+            if (!jsonMatch) {
+                // --- MEJORA EN EL MENSAJE DE ERROR ---
+                console.error("❌ No se pudo encontrar un JSON válido en la respuesta de la IA.");
+                throw new Error('The AI response did not contain valid JSON. Check the console for the full response.');
+            }
+            
+            const jsonString = jsonMatch[1];
+            console.log("String JSON extraído:", jsonString);
+            
+            const tripsData = JSON.parse(jsonString);
+            return tripsData;
         }
-
-        const jsonMatch = llmResponse.match(/(\[[\s\S]*?\])/);
-        if (!jsonMatch) {
-            console.error("No se encontró un array JSON en la respuesta de la LLM.");
-            throw new Error('No valid JSON found in LLM response');
-        }
-        
-        const jsonString = jsonMatch[1];
-        console.log("String JSON extraído:", jsonString);
-        
-        const tripsData = JSON.parse(jsonString);
-        return tripsData;
 
     } catch (error) {
         console.error('Error calling LLM API:', error);
-        throw new Error(`Failed to process LLM response: ${error.message}`);
+        throw error; // Relanzamos el error para que el frontend lo capture.
     }
 }
         // --- LÓGICA COMPARTIDA (con ajustes menores) ---
