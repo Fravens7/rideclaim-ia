@@ -541,25 +541,28 @@
 /**
 /**
  /**
- * --- VERSIÓN FINAL Y CORRECTA: La IA actúa como un parser de documentos ---
- * Enviamos todo el OCR y la IA identifica y extrae cada viaje individual.
+/**
+ * --- VERSIÓN PRECISA: Arregla la extracción del total y el estado de cancelados ---
  */
 async function extractTripsWithLLM(ocrText) {
-    // --- PROMPT DISEÑADO PARA PARSEAR UN DOCUMENTO COMPLETO ---
+    // --- PROMPT CON REGLAS DE PRECISIÓN ---
     const prompt = `
 You are an expert parser for ride-hailing receipts. Analyze the following OCR text, which contains a history of multiple trips. Your task is to identify and extract each individual trip.
 
 A "trip" is a block of text with the following structure:
-1.  It starts with a destination name (e.g., "Mireka Tower", "43b Lauries Rd", "Seylan Bank PLC"). The name may span multiple lines.
-2.  It contains a date and time somewhere in the middle (e.g., "Nov 10 -12:34 PM").
-3.  It ends with a line containing the price, in the format "LKR<number>.<number>" (e.g., "LKR254.35"). A canceled trip ends with "LKR0.00 - Canceled".
+1.  It starts with a destination name (e.g., "Mireka Tower", "43b Lauries Rd", "Seylan Bank PLC").
+2.  It contains a date and time.
+3.  It ends with a line containing the price, in the format "LKR<number>.<number>".
 
-Your job is to find ALL such trip blocks in the text.
+**CRITICAL RULES FOR EXTRACTION:**
+1.  **Canceled Trips:** If a trip ends with "- Canceled" (e.g., "LKR0.00 - Canceled"), it is a valid, canceled trip. The status is "valid" and the total is "0.00".
+2.  **Total Value:** For the "total_lkr" key, you MUST return ONLY the numerical value as a string (e.g., "250.00", "0.00"). Do NOT include "LKR" or any other text.
+3.  **OCR Correction:** Correct common errors: 'Q' or 'O' is '0', 'A' is '4'. So 'LKRQ.OO' is '0.00'.
 
 For each trip block you find, extract:
 - "destination": The full destination name. If it's very long, shorten it to the most relevant part (e.g., "Seylan Bank").
-- "total_lkr": The price as a string. Correct OCR errors: 'Q' or 'O' is '0', 'A' is '4'. So 'LKRQ.OO' is '0.00'.
-- "status": "valid" for complete rides, "incomplete" if a destination is found but no price, "invalid" for food/delivery.
+- "total_lkr": The price as a string, containing ONLY numbers and a decimal point.
+- "status": "valid" for complete or canceled rides, "incomplete" if a destination is found but no price, "invalid" for food/delivery.
 
 Return ONLY a single JSON array of all the trips you find. Do not include any other text.
 
