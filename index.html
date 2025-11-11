@@ -540,36 +540,105 @@
  */
 /**
 /**
- * --- VERSIÓN ROBUSTA "FEW-SHOT" ---
- * Le damos a la IA ejemplos concretos para que no pueda equivocarse.
+ * --- VERSIÓN HÍBRIDA DEFINITIVA: Parser JS + LLM Fallback ---
+ * Primero usa lógica dura y determinista. La IA es solo un respaldo.
  */
 async function extractTripsWithLLM(ocrText) {
-    // --- PROMPT CON EJEMPLOS CONCRETOS ---
+    console.log("🚀 Iniciando Parser Híbrido...");
+
+    // --- PASO 1: PARSER DETERMINISTA DE JAVASCRIPT ---
+    const jsTrips = parseTripsWithJS(ocrText);
+
+    if (jsTrips.length > 0) {
+        console.log(`✅ Parser JS encontró ${jsTrips.length} viajes. No se necesita la IA.`);
+        return jsTrips;
+    }
+
+    // --- PASO 2: FALLBACK A LA IA (si el parser JS falló) ---
+    console.log("⚠️ El parser JS no encontró viajes. Activando fallback a la IA...");
+    return await parseTripsWithLLM(ocrText);
+}
+
+/**
+ * --- FUNCIÓN AUXILIAR: El parser de JavaScript ---
+ * Usa regex para encontrar precios y luego lee hacia atrás para encontrar el destino.
+ */
+function parseTripsWithJS(text) {
+    const trips = [];
+    const lines = text.split('\n');
+    const priceRegex = /LKR\s*([0-9QOA.]+)/i;
+
+    // Encontrar todas las líneas que contienen un precio
+    const priceLineIndices = [];
+    lines.forEach((line, index) => {
+        if (priceRegex.test(line)) {
+            priceLineIndices.push(index);
+        }
+    });
+
+    // Limitar a los primeros 8 precios (regla del usuario)
+    const relevantPriceLines = priceLineIndices.slice(0, 8);
+
+    for (let i = 0; i < relevantPriceLines.length; i++) {
+        const priceLineIndex = relevantPriceLines[i];
+        const priceLine = lines[priceLineIndex];
+        
+        // Extraer y limpiar el precio
+        const priceMatch = priceLine.match(priceRegex);
+        let total_lkr = priceMatch[1].replace(/Q|O/g, '0').replace(/A/g, '4');
+
+        // Determinar el estado
+        let status = 'valid';
+        if (priceLine.toLowerCase().includes('canceled')) {
+            status = 'valid'; // Los cancelados son válidos con costo 0
+        } else if (priceLine.toLowerCase().includes('view store')) {
+            status = 'invalid';
+        }
+
+        // Leer hacia atrás para encontrar el destino
+        let destination = '';
+        for (let j = priceLineIndex - 1; j >= 0; j--) {
+            const lineAbove = lines[j].trim();
+            // Detenerse si encontramos otro precio o una línea de actividad
+            if (priceRegex.test(lineAbove) || lineAbove.toLowerCase().includes('activity')) {
+                break;
+            }
+            // Ignorar líneas de fecha/hora o símbolos sueltos
+            if (/\d{1,2}:\d{2}|^[~©¢&]/.test(lineAbove) || lineAbove.length < 2) {
+                continue;
+            }
+            destination = lineAbove + ' ' + destination;
+        }
+        
+        destination = destination.trim();
+
+        // Limpiar el nombre del destino (ej: "Seylan Bank PLC - Bambalapitiya" -> "Seylan Bank")
+        if (destination.toLowerCase().includes('seylan')) destination = 'Seylan Bank';
+        if (destination.toLowerCase().includes('ar exotics')) destination = 'AR Exotics Marine';
+        if (destination.toLowerCase().includes('get u fit')) destination = 'Get U Fit Gym';
+        if (destination.toLowerCase().includes('keells')) destination = 'Keells - Lauries';
+        if (destination.toLowerCase().includes('jungle juice')) destination = 'Jungle Juice Bar';
+        
+        if (destination) {
+            trips.push({ destination, total_lkr, status });
+        }
+    }
+    
+    return trips;
+}
+
+/**
+ * --- FUNCIÓN AUXILIAR: El fallback a la IA (simplificado) ---
+ * Solo se llama si el parser JS falla.
+ */
+async function parseTripsWithLLM(ocrText) {
+    // Usamos el prompt "few-shot" que ya funcionaba bien
     const prompt = `
-Your task is to extract trip data from the following text and format it as a JSON array of strings.
+Extract trip data from the following text. Return a JSON array of strings, each in format: "destination|total_lkr|status".
+Max 8 trips.
+Example: ["Mireka Tower|250.00|valid"]
 
-Each string in the array must be in the format: "destination|total_lkr|status".
-- destination: The name of the destination.
-- total_lkr: The price number only (e.g., "250.00"). Correct 'Q' or 'O' to '0'.
-- status: "valid", "invalid", or "incomplete".
-
-Here are some examples of how to format the output:
-
-Example 1:
-Input text: "Mireka Tower Nov 10 -12:34 PM LKR254.35"
-Output JSON: ["Mireka Tower|254.35|valid"]
-
-Example 2:
-Input text: "Seylan Bank PLC - Bambalapitiya Nov7-124PM LKR250.07"
-Output JSON: ["Seylan Bank|250.07|valid"]
-
-Example 3:
-Input text: "43b Lauries Rd ¢ Rebook LKRQ.OO - Canceled"
-Output JSON: ["43b Lauries Rd|0.00|valid"]
-
-Now, process the text below and return ONLY the JSON array. Do not add any other text or explanation.
-
-Text to analyze:
+Text:
 """
  ${ocrText}
 """
@@ -592,16 +661,12 @@ Text to analyze:
         }
 
         const llmResponse = data.message;
-        console.log("--- RESPUESTA COMPLETA DE LA IA (Formato JSON Simple) ---");
+        console.log("--- Respuesta del Fallback a la IA ---");
         console.log(llmResponse);
-        console.log("--------------------------------------------------------");
 
-        // --- LÓGICA PARA PARSEAR EL JSON SIMPLE ---
         let tripsData = [];
         try {
-            // Intentamos parsear la respuesta como un array de strings
             const stringArray = JSON.parse(llmResponse);
-            
             if (Array.isArray(stringArray)) {
                 for (const tripString of stringArray) {
                     const parts = tripString.split('|');
@@ -615,18 +680,14 @@ Text to analyze:
                 }
             }
         } catch (e) {
-            console.error("❌ La IA no devolvió un JSON válido.");
-            throw new Error('The AI response was not valid JSON. Check the console for the full response.');
+            console.error("❌ El fallback de la IA también falló.");
+            throw new Error('Both JS parser and LLM fallback failed.');
         }
-
-        if (tripsData.length === 0) {
-            console.warn("No se pudieron extraer viajes válidos de la respuesta de la IA.");
-        }
-
+        
         return tripsData;
 
     } catch (error) {
-        console.error('Error calling LLM API:', error);
+        console.error('Error en el fallback a la IA:', error);
         throw error;
     }
 }
