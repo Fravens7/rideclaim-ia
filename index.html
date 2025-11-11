@@ -539,34 +539,30 @@
  * Esta versión es más robusta y añade mensajes de depuración.
  */
 /**
- * --- VERSIÓN ACTUALIZADA: Función para llamar a la API de Groq ---
- * Ahora maneja explícitamente los viajes incompletos.
+/**
+ * --- VERSIÓN MEJORADA: Función para llamar a la API de Groq ---
+ * Ahora maneja nombres de destino multilínea y define mejor los límites de un viaje.
  */
 async function extractTripsWithLLM(ocrText) {
-    // --- PROMPT ACTUALIZADO ---
-    // Le damos una nueva instrucción: identificar y marcar los viajes incompletos.
+    // --- PROMPT MÁS INTELIGENTE Y ESPECÍFICO ---
     const prompt = `
 You are an expert data extraction AI. Analyze the following OCR text from a ride receipt and extract each individual trip.
 
-Your task is to return ONLY a valid JSON array of objects. Do not include any explanations, greetings, or markdown formatting like \`\`\`json ... \`\`\`.
+**CRITICAL RULES:**
+1.  **Trip Delimiter:** Each trip is contained within [[ and ]].
+2.  **Trip End:** A trip is considered complete and ends ONLY when you find a price in the format LKR<number>.<number>.
+3.  **Destination:** The destination name may be on one or multiple lines. Combine all lines of text between the start of the trip ([[ or the date/time) and the price. If the name is very long (e.g., "Seylan Bank PLC - Bambalapitiya"), shorten it to the most relevant part (e.g., "Seylan Bank").
+4.  **Incomplete Trips:** If you find a trip delimited by [[...]] that starts with "43b" or "Mireka" but does NOT have a LKR<number>.<number> price, mark its status as 'incomplete' and set total_lkr to null.
+
+Your task is to return ONLY a valid JSON array of objects. Do not include any explanations, greetings, or markdown formatting.
 
 Each object in the array must have the following keys:
-- "destination": The name of the destination place.
-- "total_lkr": The total cost of the trip as a string, corrected for OCR errors (e.g., 'A' -> '4', 'O' -> '0'). If the price is missing, set this to null.
-- "status": A string. Set to "valid" for complete rides, "incomplete" for rides that are missing data (like the price), and "invalid" for food/delivery trips.
+- "destination": The cleaned-up name of the destination place.
+- "total_lkr": The total cost as a string. If the price is missing, set this to null.
+- "status": A string. Set to "valid" for complete rides, "incomplete" for rides missing the price, and "invalid" for food/delivery trips.
 
-OCR Correction Rules:
-- 'LKR0O.QO' -> '0.00'
-- 'LKRA76.34' -> '476.34'
-- 'LKR351.8O' -> '351.80'
-- Pay close attention to letters that look like numbers.
-
-The receipts are delimited by "[[" at the start and "]]" at the end.
-
-IMPORTANT: If you find a trip (e.g., between [[...]]) but it's missing the total price (LKR...), mark its status as 'incomplete' and set total_lkr to null.
-
-Example of a CORRECT response:
-[{"destination": "Mireka Tower", "total_lkr": "351.82", "status": "valid"}, {"destination": "Keells", "total_lkr": "0.00", "status": "valid"}, {"destination": "43b Lauries Rd", "total_lkr": null, "status": "incomplete"}]
+Example of a CORRECT response for the input [[Seylan Bank PLC -\\n~ Bambalapitiya\\nC Nov7-124PM & Rebook\\nLKR250.07]]:
+[{"destination": "Seylan Bank", "total_lkr": "250.07", "status": "valid"}]
 
 Now, analyze the text below and provide the JSON array.
 
@@ -659,22 +655,28 @@ Text to analyze:
 /**
  * --- VERSIÓN ACTUALIZADA: La validación ahora maneja el estado "incomplete" ---
  */
+/**
+ * --- VERSIÓN ACTUALIZADA: Añadimos "Seylan Bank" a los destinos válidos ---
+ */
 function validateTrip(tripInfo, type) {
-    // 1. Primero, revisamos el estado que nos dio la IA.
     if (tripInfo.status === 'invalid') {
         return { isValid: false, details: 'Invalid: Classified as Food/Delivery by AI.', direction: null };
     }
 
-    // 2. Si la IA lo marca como "incomplete", lo reflejamos aquí.
     if (tripInfo.status === 'incomplete') {
         return { isValid: false, details: 'Incomplete receipt: Missing price or other data.', direction: null };
     }
 
-    // 3. Si la IA dice que es "valid", aplicamos nuestras reglas de negocio.
     if (tripInfo.status === 'valid') {
         if (type === 'image') {
             const destinationText = (tripInfo.destination || '').toLowerCase().trim();
-            const staffhouse1ValidDestinations = [ '43b lauries rd', 'mireka tower', '43d lauries rd', 'colombo 00400' ];
+            const staffhouse1ValidDestinations = [ 
+                '43b lauries rd', 
+                'mireka tower', 
+                '43d lauries rd', 
+                'colombo 00400',
+                'seylan bank' // <-- ¡AQUÍ AÑADIMOS EL NUEVO DESTINO!
+            ];
             const isValidDestination = staffhouse1ValidDestinations.some(validDest => destinationText.includes(validDest));
             if (isValidDestination) { 
                 return { isValid: true, details: 'Valid (staffhouse1 rule)', direction: null }; 
@@ -692,10 +694,8 @@ function validateTrip(tripInfo, type) {
         return { isValid: false, details: 'Invalid: Addresses do not meet rules.', direction: null }; 
     }
 
-    // Caso por defecto si el estado no es ninguno de los esperados
     return { isValid: false, details: 'Invalid: Unknown status from AI.', direction: null };
 }
-
         
         function displayMap(fileName, direction) { 
             mapContainer.style.display = 'block'; 
