@@ -541,24 +541,26 @@
 /**
 /**
 /**
- * --- VERSIÓN SIMPLIFICADA Y ROBUSTA ---
- * Un prompt más directo para evitar que la IA se confunda.
+ * --- VERSIÓN DEFINITIVA: Algoritmo de parsing para la IA ---
+ * Le enseña a la IA a "leer hacia atrás" desde el precio para encontrar el destino completo.
  */
 async function extractTripsWithLLM(ocrText) {
-    // --- PROMPT MÁS SENCILLO Y DIRECTO ---
+    // --- PROMPT CON ALGORITMO PASO A PASO ---
     const prompt = `
-Analyze the following text from a ride-hailing app and extract every trip.
+You are an expert document parser for ride-hailing receipts. Your task is to extract every individual trip from the following text. Follow this exact algorithm:
 
-A trip consists of a destination, a date, and a price line like "LKR250.00".
+1.  Scan the text from top to bottom and find every line that contains a price in the format "LKR<number>.<number>". Each of these lines marks the END of a trip.
+2.  For each price line you find, look at the lines DIRECTLY ABOVE it to identify the destination.
+3.  The destination name may be split across multiple lines (e.g., "Seylan Bank PLC" on one line, "- Bambalapitiya" on the next). Combine all relevant lines into a single destination name. If it's very long, shorten it to the most relevant part (e.g., "Seylan Bank").
+4.  The trip block is the contiguous set of lines from the destination down to the price line.
+5.  Once you have processed a trip, continue scanning for the NEXT price line to find the NEXT trip.
 
-For each trip you find, create a JSON object with:
-- "destination": The destination name (e.g., "Mireka Tower").
+**Extraction Rules:**
+- "destination": The full, combined destination name.
 - "total_lkr": The price as a number string (e.g., "250.00"). Correct 'Q' or 'O' to '0'.
-- "status": "valid" if complete or canceled, "invalid" if it's food/delivery, "incomplete" if price is missing.
+- "status": "valid" for complete or canceled rides, "invalid" for food/delivery, "incomplete" if a destination is found but no price.
 
-Return ONLY a JSON array of these objects. No other text.
-
-Example output: [{"destination": "Mireka Tower", "total_lkr": "250.00", "status": "valid"}]
+Return ONLY a JSON array of all the trips you find. No other text.
 
 Text to analyze:
 """
@@ -583,25 +585,19 @@ Text to analyze:
         }
 
         const llmResponse = data.message;
-        
-        // --- MEJORA CLAVE PARA LA DEPURACIÓN ---
-        // Esto nos mostrará EXACTAMENTE lo que la IA respondió.
         console.log("--- RESPUESTA COMPLETA DE LA IA ---");
         console.log(llmResponse);
         console.log("------------------------------------");
 
-        // Intentamos parsear la respuesta completa primero.
         try {
             const tripsData = JSON.parse(llmResponse);
             if (Array.isArray(tripsData)) {
                 return tripsData;
             }
         } catch (e) {
-            // Si falla, intentamos buscar un JSON dentro del texto.
             console.log("La respuesta no es JSON puro. Intentando extraer un array JSON del texto...");
             const jsonMatch = llmResponse.match(/(\[[\s\S]*?\])/);
             if (!jsonMatch) {
-                // --- MEJORA EN EL MENSAJE DE ERROR ---
                 console.error("❌ No se pudo encontrar un JSON válido en la respuesta de la IA.");
                 throw new Error('The AI response did not contain valid JSON. Check the console for the full response.');
             }
@@ -615,7 +611,7 @@ Text to analyze:
 
     } catch (error) {
         console.error('Error calling LLM API:', error);
-        throw error; // Relanzamos el error para que el frontend lo capture.
+        throw error;
     }
 }
         // --- LÓGICA COMPARTIDA (con ajustes menores) ---
