@@ -1,22 +1,59 @@
 export default async function handler(req, res) {
   try {
-    const { prompt } = await req.json(); // o req.body si usas Node 16
+    if (req.method !== 'POST') {
+      return res.status(405).json({ error: 'Method Not Allowed' });
+    }
 
-    const r = await fetch("https://api.deepseek.com/v1/chat/completions", {
+    let body;
+    try {
+      body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
+    } catch (e) {
+      return res.status(400).json({ error: 'Invalid JSON in request body' });
+    }
+
+    const prompt = body?.prompt;
+    if (!prompt) {
+      return res.status(400).json({ error: 'Missing "prompt" field' });
+    }
+
+    const apiKey = process.env.GROQ_API_KEY;
+    if (!apiKey) {
+      console.error("❌ No GROQ_API_KEY found in environment variables");
+      return res.status(500).json({ error: 'Missing GROQ API key' });
+    }
+
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${process.env.DEEPSEEK_API_KEY}`
+        "Authorization": `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: "deepseek-chat",   // o el modelo que prefieras
-        messages: [{ role: "user", content: prompt }]
-      })
+        model: "llama3-70b-8192",  // puedes cambiarlo a otro
+        messages: [{ role: "user", content: prompt }],
+      }),
     });
 
-    const data = await r.json();
-    res.status(200).json(data);
+    const text = await response.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      console.error("⚠️ GROQ no devolvió JSON:", text);
+      return res.status(500).json({ error: 'Invalid JSON response from GROQ' });
+    }
+
+    if (!response.ok) {
+      console.error("❌ GROQ API Error:", data);
+      return res.status(response.status).json({ error: data.error || 'GROQ API error' });
+    }
+
+    return res.status(200).json({
+      message: data.choices?.[0]?.message?.content || '(sin respuesta)',
+    });
+
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("💥 Server error:", err);
+    return res.status(500).json({ error: err.message });
   }
 }
