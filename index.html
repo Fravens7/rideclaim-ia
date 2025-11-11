@@ -425,7 +425,7 @@
         const closeBtn = document.getElementsByClassName('close')[0];
         const apiStatus = document.getElementById('apiStatus');
         
-        let fileResults = []; let map = null;
+        let fileResults = []; let map = null; let processedPdfNames = new Set(); 
 
         pdfTab.addEventListener('click', () => { pdfTab.classList.add('active'); imageTab.classList.remove('active'); pdfContent.classList.add('active'); imageContent.classList.remove('active'); });
         imageTab.addEventListener('click', () => { imageTab.classList.add('active'); pdfTab.classList.remove('active'); imageContent.classList.add('active'); pdfContent.classList.remove('active'); });
@@ -443,18 +443,129 @@
         closeBtn.onclick = () => modal.style.display = 'none';
         window.onclick = (event) => { if (event.target == modal) modal.style.display = 'none'; };
         clearBtn.addEventListener('click', () => {
-            fileResults = [];
-            pdfFileList.innerHTML = ''; pdfFileList.style.display = 'none';
-            imageFileList.innerHTML = ''; imageFileList.style.display = 'none';
-            resultsContainer.style.display = 'none'; resultsBody.innerHTML = ''; summary.innerHTML = '';
-            mapContainer.innerHTML = ''; if (map) { map.remove(); map = null; }
-            apiStatus.style.display = 'none';
-        });
+        fileResults = [];
+        pdfFileList.innerHTML = ''; 
+        pdfFileList.style.display = 'none';
+        imageFileList.innerHTML = ''; 
+        imageFileList.style.display = 'none';
+        resultsContainer.style.display = 'none'; 
+        resultsBody.innerHTML = ''; 
+        summary.innerHTML = '';
+        mapContainer.innerHTML = ''; 
+        if (map) { 
+          map.remove(); 
+          map = null; 
+    }
+    
+    apiStatus.style.display = 'none';      // Limpia el estado de la UI de imágenes
+    processedPdfNames.clear();            // Limpia la memoria de PDFs
+});
 
         // --- LÓGICA PDF (sin cambios) ---
-        function handlePdfFileSelect(e) { if (e.target.files.length) handlePdfFiles(e.target.files); }
-        function handlePdfFiles(files) { const pdfFilesArr = Array.from(files).filter(file => file.type === 'application/pdf'); if (pdfFilesArr.length === 0) { alert('Please select at least one valid PDF file.'); return; } pdfFileList.style.display = 'block'; pdfFileList.innerHTML = ''; pdfFilesArr.forEach(file => { const fileItem = createFileItem(file, 'pdf'); pdfFileList.appendChild(fileItem); processPdfFile(file, fileItem); }); }
-        function processPdfFile(file, fileItem) { const fileReader = new FileReader(); fileReader.onload = function() { const typedarray = new Uint8Array(this.result); pdfjsLib.getDocument(typedarray).promise.then(function(pdf) { let totalPages = pdf.numPages; let fullText = ''; let pagePromises = []; for (let i = 1; i <= totalPages; i++) { pagePromises.push(pdf.getPage(i).then(function(page) { return page.getTextContent().then(function(textContent) { let pageText = ''; textContent.items.forEach(function(item) { pageText += item.str + ' '; }); return pageText; }); })); } Promise.all(pagePromises).then(function(pageTexts) { pageTexts.forEach(function(text) { fullText += text + '\n'; }); const tripInfo = extractTripInfoFromPdf(fullText); processExtractedText(file, fileItem, fullText, 'pdf', tripInfo); }); }).catch(function(error) { console.error('Error processing PDF:', error); fileItem.className = 'file-item error'; const fileStatus = fileItem.querySelector('.file-status'); fileStatus.className = 'file-status status-error'; fileStatus.textContent = 'Error processing'; mapContainer.style.display = 'none'; }); }; fileReader.readAsArrayBuffer(file); }
+        function handlePdfFiles(files) {
+    const pdfFilesArr = Array.from(files).filter(file => file.type === 'application/pdf');
+    if (pdfFilesArr.length === 0) {
+        alert('Please select at least one valid PDF file.');
+        return;
+    }
+    pdfFileList.style.display = 'block';
+    pdfFileList.innerHTML = '';
+    
+    pdfFilesArr.forEach(file => {
+        // --- INICIO DEL LIMPIADOR DE DUPLICADOS ---
+        if (processedPdfNames.has(file.name)) {
+            // Si el archivo ya fue procesado, lo ignora y muestra un aviso
+            const duplicateItem = createDuplicateFileItem(file, 'pdf');
+            pdfFileList.appendChild(duplicateItem);
+            return; // Detiene el procesamiento para este archivo
+        }
+        
+        // --- CAMBIO CLAVE: AÑADIMOS EL NOMBRE A LA MEMORIA AQUÍ ---
+        processedPdfNames.add(file.name);
+        // --- FIN DEL CAMBIO ---
+
+        const fileItem = createFileItem(file, 'pdf');
+        pdfFileList.appendChild(fileItem);
+        processPdfFile(file, fileItem);
+    });
+}
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        function handlePdfFiles(files) {
+    const pdfFilesArr = Array.from(files).filter(file => file.type === 'application/pdf');
+    if (pdfFilesArr.length === 0) {
+        alert('Please select at least one valid PDF file.');
+        return;
+    }
+    pdfFileList.style.display = 'block';
+    pdfFileList.innerHTML = '';
+    
+    pdfFilesArr.forEach(file => {
+        // --- INICIO DEL LIMPIADOR DE DUPLICADOS ---
+        if (processedPdfNames.has(file.name)) {
+            // Si el archivo ya fue procesado, lo ignora y muestra un aviso
+            const duplicateItem = createDuplicateFileItem(file, 'pdf');
+            pdfFileList.appendChild(duplicateItem);
+            return; // Detiene el procesamiento para este archivo
+        }
+        // --- FIN DEL LIMPIADOR ---
+        
+        const fileItem = createFileItem(file, 'pdf');
+        pdfFileList.appendChild(fileItem);
+        processPdfFile(file, fileItem);
+    });
+}
+        
+        
+        
+        /**
+ * --- FUNCIÓN AUXILIAR: Crea un elemento visual para archivos duplicados ---
+ */
+function createDuplicateFileItem(file, type) {
+    const fileItem = document.createElement('div');
+    fileItem.className = 'file-item invalid'; // Usa el estilo 'invalid' (amarillo)
+    fileItem.id = `file-${type}-${file.name.replace(/\s/g, '-')}`;
+
+    const fileHeader = document.createElement('div');
+    fileHeader.className = 'file-header';
+
+    const fileName = document.createElement('div');
+    fileName.className = 'file-name';
+    fileName.textContent = file.name;
+
+    const fileStatus = document.createElement('div');
+    fileStatus.className = 'file-status status-invalid';
+    fileStatus.textContent = 'Duplicate file ignored';
+
+    fileHeader.appendChild(fileName);
+    fileHeader.appendChild(fileStatus);
+    fileItem.appendChild(fileHeader);
+
+    return fileItem;}
+        
+        
+        
+        
+        
+        
+        
+    function processPdfFile(file, fileItem) { const fileReader = new FileReader(); fileReader.onload = function() { const typedarray = new Uint8Array(this.result); pdfjsLib.getDocument(typedarray).promise.then(function(pdf) { let totalPages = pdf.numPages; let fullText = ''; let pagePromises = []; for (let i = 1; i <= totalPages; i++) { pagePromises.push(pdf.getPage(i).then(function(page) { return page.getTextContent().then(function(textContent) { let pageText = ''; textContent.items.forEach(function(item) { pageText += item.str + ' '; }); return pageText; }); })); } Promise.all(pagePromises).then(function(pageTexts) { pageTexts.forEach(function(text) { fullText += text + '\n'; }); const tripInfo = extractTripInfoFromPdf(fullText); processExtractedText(file, fileItem, fullText, 'pdf', tripInfo); }); }).catch(function(error) { console.error('Error processing PDF:', error); fileItem.className = 'file-item error'; const fileStatus = fileItem.querySelector('.file-status'); fileStatus.className = 'file-status status-error'; fileStatus.textContent = 'Error processing'; mapContainer.style.display = 'none'; }); }; fileReader.readAsArrayBuffer(file); }
+        
+        
+        
+        
+        
+        
+        
+        
+        
         function extractTripInfoFromPdf(text) { let origin = null; let destination = null; const timePattern = /(\d{1,2}:\d{2})\s+([a-zA-Z0-9\s,]+Sri Lanka)/g; let match; const addresses = []; while ((match = timePattern.exec(text)) !== null) { addresses.push({ time: match[1], address: match[2].trim() }); } if (addresses.length >= 2) { origin = addresses[0].address; destination = addresses[1].address; } else { const addressPattern = /([a-zA-Z0-9\s,]+Sri Lanka)/g; const allAddresses = []; while ((match = addressPattern.exec(text)) !== null) { allAddresses.push(match[1].trim()); } if (allAddresses.length >= 2) { origin = allAddresses[0]; destination = allAddresses[1]; } } return { origin, destination }; }
 
         // --- LÓGICA IMAGEN (MODIFICADA) ---
