@@ -560,15 +560,53 @@ async function extractTripsWithLLM(ocrText) {
 }
 
 /**
+ * --- NUEVA FUNCIÓN: LIMPIADOR DE NOMBRES DE DESTINO ---
+ * Usa una lista blanca para limpiar los nombres extraídos por el OCR.
+ */
+function cleanDestinationName(rawDestination) {
+    if (!rawDestination) return '';
+
+    const cleanedText = rawDestination.toLowerCase().trim();
+
+    // Lista blanca de destinos conocidos y sus nombres limpios
+    const knownDestinations = {
+        'mireka tower': 'Mireka Tower',
+        '43b lauries rd': '43b Lauries Rd',
+        '43d lauries rd': '43d Lauries Rd',
+        'colombo 00400': 'Colombo 00400',
+        'seylan bank': 'Seylan Bank',
+        'ar exotics': 'AR Exotics Marine',
+        'get u fit': 'Get U Fit Gym',
+        'keells': 'Keells - Lauries',
+        'jungle juice': 'Jungle Juice Bar'
+    };
+
+    // Busca si el texto sucio contiene alguno de nuestros destinos conocidos
+    for (const keyword in knownDestinations) {
+        if (cleanedText.includes(keyword)) {
+            return knownDestinations[keyword];
+        }
+    }
+
+    // Si no se encuentra en la lista blanca, devuelve el texto original.
+    // La validación posterior se encargará de marcarlo como inválido.
+    console.warn(`⚠️ No se pudo limpiar el destino: "${rawDestination}"`);
+    return rawDestination.trim();
+}
+
+/**
  * --- FUNCIÓN AUXILIAR: El parser de JavaScript ---
  * Usa regex para encontrar precios y luego lee hacia atrás para encontrar el destino.
+ */
+/**
+ * --- FUNCIÓN AUXILIAR: El parser de JavaScript (MODIFICADO) ---
+ * Ahora usa el cleaner para asegurar que los destinos sean correctos.
  */
 function parseTripsWithJS(text) {
     const trips = [];
     const lines = text.split('\n');
     const priceRegex = /LKR\s*([0-9QOA.]+)/i;
 
-    // Encontrar todas las líneas que contienen un precio
     const priceLineIndices = [];
     lines.forEach((line, index) => {
         if (priceRegex.test(line)) {
@@ -576,51 +614,39 @@ function parseTripsWithJS(text) {
         }
     });
 
-    // Limitar a los primeros 8 precios (regla del usuario)
     const relevantPriceLines = priceLineIndices.slice(0, 8);
 
     for (let i = 0; i < relevantPriceLines.length; i++) {
         const priceLineIndex = relevantPriceLines[i];
         const priceLine = lines[priceLineIndex];
         
-        // Extraer y limpiar el precio
         const priceMatch = priceLine.match(priceRegex);
         let total_lkr = priceMatch[1].replace(/Q|O/g, '0').replace(/A/g, '4');
 
-        // Determinar el estado
         let status = 'valid';
         if (priceLine.toLowerCase().includes('canceled')) {
-            status = 'valid'; // Los cancelados son válidos con costo 0
+            status = 'valid';
         } else if (priceLine.toLowerCase().includes('view store')) {
             status = 'invalid';
         }
 
-        // Leer hacia atrás para encontrar el destino
         let destination = '';
         for (let j = priceLineIndex - 1; j >= 0; j--) {
             const lineAbove = lines[j].trim();
-            // Detenerse si encontramos otro precio o una línea de actividad
             if (priceRegex.test(lineAbove) || lineAbove.toLowerCase().includes('activity')) {
                 break;
             }
-            // Ignorar líneas de fecha/hora o símbolos sueltos
             if (/\d{1,2}:\d{2}|^[~©¢&]/.test(lineAbove) || lineAbove.length < 2) {
                 continue;
             }
             destination = lineAbove + ' ' + destination;
         }
         
-        destination = destination.trim();
-
-        // Limpiar el nombre del destino (ej: "Seylan Bank PLC - Bambalapitiya" -> "Seylan Bank")
-        if (destination.toLowerCase().includes('seylan')) destination = 'Seylan Bank';
-        if (destination.toLowerCase().includes('ar exotics')) destination = 'AR Exotics Marine';
-        if (destination.toLowerCase().includes('get u fit')) destination = 'Get U Fit Gym';
-        if (destination.toLowerCase().includes('keells')) destination = 'Keells - Lauries';
-        if (destination.toLowerCase().includes('jungle juice')) destination = 'Jungle Juice Bar';
+        // --- CAMBIO CLAVE: AQUÍ USAMOS EL LIMPIADOR ---
+        const cleanDestination = cleanDestinationName(destination);
         
-        if (destination) {
-            trips.push({ destination, total_lkr, status });
+        if (cleanDestination) {
+            trips.push({ destination: cleanDestination, total_lkr, status });
         }
     }
     
