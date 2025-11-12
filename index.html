@@ -589,6 +589,10 @@ document.addEventListener('DOMContentLoaded', () => {
     closeBtn.onclick = () => modal.style.display = 'none';
     window.onclick = (event) => { if (event.target == modal) modal.style.display = 'none'; };
     clearBtn.addEventListener('click', () => {
+        console.log("🔧 Botón 'Clear Results' presionado. ANTES de limpiar:");
+        console.log("processedPdfNames (antes):", new Set(processedPdfNames)); // Usar new Set para ver el contenido actual
+        console.log("processedImageNames (antes):", new Set(processedImageNames));
+
         fileResults = [];
         pdfFileList.innerHTML = ''; 
         pdfFileList.style.display = 'none';
