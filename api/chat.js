@@ -16,9 +16,9 @@ if (!prompt) {
   return res.status(400).json({ error: "Missing 'prompt' field" });
 }
 
-    const apiKey = process.env.GROQ_API_KEY;
+    const apiKey = process.env.GROQ_API_KEY_IMAGES;
     if (!apiKey) {
-      console.error("❌ No GROQ_API_KEY found in environment variables");
+      console.error("❌ No GROQ_API_KEY_IMAGES found in environment variables");
       return res.status(500).json({ error: 'Missing GROQ API key' });
     }
 
@@ -26,7 +26,7 @@ const response = await fetch("https://api.groq.com/openai/v1/chat/completions", 
   method: "POST",
   headers: {
     "Content-Type": "application/json",
-    "Authorization": `Bearer ${process.env.GROQ_API_KEY}`,
+    "Authorization": `Bearer ${process.env.GROQ_API_KEY_IMAGES}`,
   },
   body: JSON.stringify({
     model: "llama-3.1-8b-instant",
