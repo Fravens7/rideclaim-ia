@@ -903,8 +903,12 @@ Text:
 /**
  * --- VERSIÓN LIMPIA Y ORDENADA: Procesa el texto extraído ---
  */
-async function processExtractedText(file, fileItem, text, type, tripInfo) {
-    // --- PASO 1: Extraer el Total (con respaldo) ---
+/**
+ * --- VERSIÓN LIMPIA Y ESTABLE DE processExtractedText ---
+ * Se enfoca únicamente en extraer datos y mostrarlos en la tabla.
+ */
+function processExtractedText(file, fileItem, text, type, tripInfo) {
+    // --- PASO 1: Extraer el Total ---
     let totalMatch = text.match(/Total\s+([\d,.]+)\s+LKR/i);
     if (!totalMatch) {
         totalMatch = text.match(/Total.*?LKR\s*([\d,.]+)/i);
@@ -929,7 +933,7 @@ async function processExtractedText(file, fileItem, text, type, tripInfo) {
             fileStatus.className = 'file-status status-success';
             fileStatus.textContent = 'Valid';
             if (type === 'pdf' && validationResult.direction) {
-                await displayMap(file.name, validationResult.direction, tripInfo.origin, tripInfo.destination);
+                displayMap(file.name, validationResult.direction, tripInfo.origin, tripInfo.destination);
             }
         } else {
             fileItem.className = 'file-item invalid';
@@ -944,11 +948,7 @@ async function processExtractedText(file, fileItem, text, type, tripInfo) {
         mapContainer.style.display = 'none';
     }
 
-    // --- PASO 4: Extraer la Fecha del Viaje ---
-    const dateMatch = text.match(/\b(\d{1,2}\s+\w{3})\b/i); // Busca "1 oct", "2 nov", etc.
-    const tripDate = dateMatch ? dateMatch[1] : 'Unknown Date';
-
-    // --- PASO 5: Añadir el Resultado al Array Global ---
+    // --- PASO 4: Añadir el Resultado a la Lista Global ---
     fileResults.push({
         name: file.name,
         type: type,
@@ -957,15 +957,12 @@ async function processExtractedText(file, fileItem, text, type, tripInfo) {
         destination: tripInfo.destination || 'Not specified',
         isValid: validationResult.isValid,
         validationDetails: validationResult.details,
-        text: text,
-        tripDate: tripDate,
-        direction: validationResult.direction
+        text: text
     });
 
-    // --- PASO 6: Actualizar la Tabla y el Gráfico ---
+    // --- PASO 5: Actualizar la Tabla de Resultados ---
     updateResultsTable();
-    updateTripChart();
-}   
+}  
 
 /**
  * --- VERSIÓN 2: LÓGICA DE VALIDACIÓN CON SEGUNDA OPORTUNIDAD ---
@@ -1581,19 +1578,28 @@ function displaySpecificTripOnMap(tripData) {
  * --- FUNCIÓN AUXILIAR PARA DIBUJAR LA RUTA ---
  * Limpia el mapa y dibuja la nueva ruta.
  */
+/**
+ * --- VERSIÓN CORREGIDA: Función para Dibujar la Ruta ---
+ * Añade una comprobación de seguridad para evitar errores con coordenadas nulas.
+ */
 function drawRouteOnMap(originCoords, destCoords, direction) {
-    // Limpiar capas anteriores
+    // --- COMPROBACIÓN DE SEGURIDAD ---
+    if (!originCoords || !destCoords) {
+        console.error("🚨 Error: No se pueden dibujar la ruta. Faltan coordenadas de origen o destino.");
+        mapContainer.style.display = 'none'; // Ocultar el mapa si no hay datos
+        return; // Salir de la función para evitar el error
+    }
+
+    // ... el resto del código de la función se queda igual ...
     map.eachLayer(layer => {
         if (layer instanceof L.Marker || layer instanceof L.Polyline) {
             map.removeLayer(layer);
         }
     });
 
-    // Añadir marcadores
     L.marker(originCoords).addTo(map).bindPopup('Origin').openPopup();
     L.marker(destCoords).addTo(map).bindPopup('Destination');
 
-    // Añadir la línea de ruta
     const lineColor = (direction === 'home-to-office') ? 'blue' : 'green';
     const route = L.polyline([originCoords, destCoords], {
         color: lineColor,
@@ -1601,7 +1607,6 @@ function drawRouteOnMap(originCoords, destCoords, direction) {
         opacity: 0.7
     }).addTo(map);
 
-    // Ajustar la vista del mapa
     const group = new L.featureGroup([L.marker(originCoords), L.marker(destCoords)]);
     map.fitBounds(group.getBounds().pad(0.1));
     setTimeout(() => {
