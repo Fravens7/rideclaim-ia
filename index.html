@@ -842,7 +842,7 @@ Text:
         
         function processExtractedText(file, fileItem, text, type, tripInfo) {
             // --- INTENTO 1: Lógica principal para el formato común ---
-            const totalMatch = text.match(/Total\s+([\d,.]+)\s+LKR/i);
+            let totalMatch = text.match(/Total\s+([\d,.]+)\s+LKR/i);
             // --- INTENTO 2: Respaldo para formatos inusuales (solo si el primero falla) --
             if(!totalMatch){
                 totalMatch = text.match(/Total\s+LKR\s*([\d,.]+)/i);
