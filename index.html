@@ -938,7 +938,8 @@ fileResults.push({
     isValid: validationResult.isValid, 
     validationDetails: validationResult.details, 
     text: text,
-    tripDate: tripDate // <-- AÑADE LA FECHA AL OBJETO
+    tripDate: tripDate,
+    direction: validationResult.direction // <-- AÑADE LA FECHA AL OBJETO
 });
 
 updateResultsTable();
@@ -1132,60 +1133,96 @@ window.onclick = (event) => { if (event.target == chartModal) chartModal.style.d
 /**
  * --- FUNCIÓN PRINCIPAL: Actualiza y dibuja el gráfico ---
  */
+/**
+ * --- VERSIÓN ACTUALIZADA: Gráfico de Barras Apiladas con Fechas Ordenadas ---
+ */
 function updateTripChart() {
     // 1. Filtrar solo los PDFs válidos
     const validPdfTrips = fileResults.filter(result => result.type === 'pdf' && result.isValid);
 
-    // 2. Contar los viajes por día
+    // 2. Contar los viajes por día y por dirección
     const tripsPerDay = {};
     validPdfTrips.forEach(trip => {
         const day = trip.tripDate;
-        tripsPerDay[day] = (tripsPerDay[day] || 0) + 1;
+        if (!tripsPerDay[day]) {
+            tripsPerDay[day] = { "home-to-office": 0, "office-to-home": 0 };
+        }
+        if (trip.direction) {
+            tripsPerDay[day][trip.direction]++;
+        }
     });
 
-    // 3. Preparar los datos para Chart.js
-    const chartLabels = Object.keys(tripsPerDay).sort(); // Días en el eje X
-    const chartData = chartLabels.map(label => tripsPerDay[label]); // Número de viajes en el eje Y
+    // 3. Función auxiliar para ordenar las fechas cronológicamente
+    function parseDayMonth(dayMonthStr) {
+        const parts = dayMonthStr.split(' ');
+        const day = parseInt(parts[0], 10);
+        const monthMap = { 'jan': 0, 'feb': 1, 'mar': 2, 'apr': 3, 'may': 4, 'jun': 5, 'jul': 6, 'aug': 7, 'sep': 8, 'oct': 9, 'nov': 10, 'dec': 11 };
+        const month = monthMap[parts[1].toLowerCase().substring(0, 3)];
+        return new Date(2024, month, day); // El año no importa para el orden
+    }
 
-    // 4. Obtener el contexto del canvas
-    const ctx = document.getElementById('tripChartCanvas').getContext('2d');
+    // 4. Ordenar los días cronológicamente
+    const sortedDays = Object.keys(tripsPerDay).sort((a, b) => parseDayMonth(a) - parseDayMonth(b));
+    const chartLabels = sortedDays;
+    const homeToOfficeData = sortedDays.map(day => tripsPerDay[day]["home-to-office"]);
+    const officeToHomeData = sortedDays.map(day => tripsPerDay[day]["office-to-home"]);
 
-    // 5. Destruir el gráfico anterior si existe (para actualizarlo)
+    // 5. Destruir el gráfico anterior si existe
     if (tripChart) {
         tripChart.destroy();
     }
 
-    // 6. Crear el nuevo gráfico
+    // 6. Crear el nuevo gráfico de barras apiladas
+    const ctx = document.getElementById('tripChartCanvas').getContext('2d');
     tripChart = new Chart(ctx, {
         type: 'bar',
         data: {
             labels: chartLabels,
-            datasets: [{
-                label: 'Number of Trips',
-                data: chartData,
-                backgroundColor: 'rgba(54, 162, 235, 0.6)',
-                borderColor: 'rgba(54, 162, 235, 1)',
-                borderWidth: 1
-            }]
+            datasets: [
+                {
+                    label: 'Home -> Office',
+                    data: homeToOfficeData,
+                    backgroundColor: 'rgba(54, 162, 235, 0.6)', // Azul
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    borderWidth: 1
+                },
+                {
+                    label: 'Office -> Home',
+                    data: officeToHomeData,
+                    backgroundColor: 'rgba(40, 167, 69, 0.6)', // Verde
+                    borderColor: 'rgba(40, 167, 69, 1)',
+                    borderWidth: 1
+                }
+            ]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
             scales: {
+                x: {
+                    stacked: true, // Clave para apilar las barras
+                },
                 y: {
+                    stacked: true, // Clave para apilar las barras
                     beginAtZero: true,
                     ticks: {
-                        stepSize: 1 // Asegura que el eje Y muestre números enteros
+                        stepSize: 1 // El eje Y muestra números enteros
+                    },
+                    title: {
+                        display: true,
+                        text: 'Number of Trips'
                     }
                 }
             },
             plugins: {
                 title: {
                     display: true,
-                    text: 'Valid Trips per Day (PDFs only)',
-                    font: {
-                        size: 16
-                    }
+                    text: 'Daily Trip Pattern (PDFs only)',
+                    font: { size: 16 }
+                },
+                tooltip: {
+                    mode: 'index', // Muestra el tooltip para todo el día
+                    intersect: false
                 }
             }
         }
