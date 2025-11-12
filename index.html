@@ -1182,7 +1182,7 @@ Output:
 `;
 
     try {
-        const response = await fetch('/api/chat', {
+        const response = await fetch('/api/chat-pdf', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ prompt })
