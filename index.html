@@ -23,13 +23,13 @@
 
     <div id="detailsModal" class="modal">...</div>
 
-<!-- NUEVA MODAL PARA EL GRÁFICO -->
-<div id="chartModal" class="modal">
-    <div class="modal-content" style="max-width: 800px;">
-        <span class="close" id="closeChartBtn">&times;</span>
-        <h2>Daily Trip Analysis</h2>
-        <div style="position: relative; height: 400px; width: 100%;">
-            <canvas id="tripChartCanvas"></canvas>
+<!-- VENTANA MODAL PARA LA TABLA RESUMEN -->
+<div id="summaryModal" class="modal">
+    <div class="modal-content" style="max-width: 900px;">
+        <span class="close" id="closeSummaryBtn">&times;</span>
+        <h2>Daily Trip Summary</h2>
+        <div id="summaryTableContainer">
+            <!-- La tabla se generará aquí con JavaScript -->
         </div>
     </div>
 </div>
@@ -363,6 +363,70 @@
             background-color: #cce5ff;
             color: #004085;
         }
+    
+    /* --- ESTILOS PARA LA TABLA RESUMEN --- */
+.summary-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+    font-size: 0.95em;
+}
+
+.summary-table th, .summary-table td {
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 1px solid #ddd;
+}
+
+.summary-table th {
+    background-color: #f2f2f2;
+    font-weight: bold;
+}
+
+.summary-table tr:hover {
+    background-color: #f5f5f5;
+}
+
+.details-link {
+    color: #007bff;
+    cursor: pointer;
+    text-decoration: underline;
+}
+
+.details-link:hover {
+    color: #0056b3;
+}
+
+.trip-details-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+    font-size: 0.85em;
+    background-color: #f9f9f9;
+    border-radius: 5px;
+    overflow: hidden;
+}
+
+.trip-details-table th, .trip-details-table td {
+    padding: 8px 10px;
+    text-align: left;
+    border-bottom: 1px solid #eee;
+}
+
+.trip-details-table th {
+    background-color: #e9ecef;
+    font-weight: bold;
+}
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     </style>
 </head>
 <body>
@@ -417,9 +481,8 @@
                     <tbody id="resultsBody"></tbody>
                 </table>
                 <div class="summary" id="summary"></div>
-                <button class="clear-btn" id="clearBtn">Clear results</button>
-                <button class="clear-btn" id="viewChartBtn" style="background-color: #17a2b8; margin-left: 10px;">View Trip Chart</button>
-
+                <button class="clear-btn" id="clearBtn">Clear results</button>                
+                <button class="clear-btn" id="viewSummaryBtn" style="background-color: #17a2b8; margin-left: 10px;">View Daily Summary</button>
 
             </div>
         </div>
@@ -1412,6 +1475,171 @@ function drawRouteOnMap(originCoords, destCoords, direction) {
     setTimeout(() => {
         map.invalidateSize();
     }, 0);
+}
+
+
+// --- LÓGICA PARA LA TABLA RESUMEN INTERACTIVA ---
+
+const viewSummaryBtn = document.getElementById('viewSummaryBtn');
+const summaryModal = document.getElementById('summaryModal');
+const closeSummaryBtn = document.getElementById('closeSummaryBtn');
+
+viewSummaryBtn.addEventListener('click', () => {
+    summaryModal.style.display = 'block';
+    updateSummaryTable();
+});
+
+closeSummaryBtn.onclick = () => summaryModal.style.display = 'none';
+window.onclick = (event) => { if (event.target == summaryModal) summaryModal.style.display = 'none'; };
+
+/**
+ * --- FUNCIÓN PRINCIPAL: Agrupa los datos y renderiza la tabla ---
+ */
+function updateSummaryTable() {
+    // 1. Filtrar solo los PDFs válidos
+    const validPdfTrips = fileResults.filter(result => result.type === 'pdf' && result.isValid);
+
+    // 2. Agrupar los viajes por día
+    const tripsByDay = {};
+    validPdfTrips.forEach(trip => {
+        const day = trip.tripDate;
+        if (!tripsByDay[day]) {
+            tripsByDay[day] = [];
+        }
+        tripsByDay[day].push(trip);
+    });
+
+    // 3. Ordenar los días cronológicamente
+    const sortedDays = Object.keys(tripsByDay).sort((a, b) => {
+        const dateA = parseDayMonth(a);
+        const dateB = parseDayMonth(b);
+        return dateA - dateB;
+    });
+
+    // 4. Renderizar la tabla en el contenedor
+    const container = document.getElementById('summaryTableContainer');
+    container.innerHTML = ''; // Limpiar contenido anterior
+
+    if (sortedDays.length === 0) {
+        container.innerHTML = '<p>No valid PDF trips found to summarize.</p>';
+        return;
+    }
+
+    let tableHTML = `
+        <table class="summary-table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Total Trips</th>
+                    <th>Total LKR</th>
+                    <th>Trips</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+
+    let grandTotalTrips = 0;
+    let grandTotalLKR = 0;
+
+    sortedDays.forEach(day => {
+        const trips = tripsByDay[day];
+        const totalTrips = trips.length;
+        const totalLKR = trips.reduce((sum, trip) => sum + parseFloat(trip.total.replace(',', '.')), 0).toFixed(2);
+
+        grandTotalTrips += totalTrips;
+        grandTotalLKR += parseFloat(totalLKR);
+
+        tableHTML += `
+            <tr>
+                <td>${day}</td>
+                <td>${totalTrips}</td>
+                <td>${totalLKR} LKR</td>
+                <td><a href="#" class="details-link" data-day="${day}">View Details (${totalTrips})</a></td>
+            </tr>
+        `;
+    });
+
+    tableHTML += `
+            </tbody>
+        </table>
+        <div class="summary" style="text-align: left; margin-top: 20px;">
+            <p><strong>Total Days Processed:</strong> ${sortedDays.length}</p>
+            <p><strong>Total Trips:</strong> ${grandTotalTrips}</p>
+            <p><strong>Total LKR Sum:</strong> ${grandTotalLKR.toFixed(2)} LKR</p>
+        </div>
+    `;
+
+    container.innerHTML = tableHTML;
+
+    // 5. Añadir los event listeners para el "drill-down"
+    container.querySelectorAll('.details-link').forEach(link => {
+        link.addEventListener('click', (event) => {
+            event.preventDefault();
+            const day = event.target.getAttribute('data-day');
+            showTripDetails(day, tripsByDay[day]);
+        });
+    });
+}
+
+/**
+ * --- FUNCIÓN AUXILIAR: Muestra los detalles de un día específico ---
+ */
+function showTripDetails(day, trips) {
+    // Crear la tabla de detalles
+    let detailsHTML = `
+        <h4>Details for ${day}</h4>
+        <table class="trip-details-table">
+            <thead>
+                <tr>
+                    <th>Origin</th>
+                    <th>Destination</th>
+                    <th>Total LKR</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+
+    trips.forEach(trip => {
+        detailsHTML += `
+            <tr>
+                <td>${trip.origin.substring(0, 40)}${trip.origin.length > 40 ? '...' : ''}</td>
+                <td>${trip.destination.substring(0, 40)}${trip.destination.length > 40 ? '...' : ''}</td>
+                <td>${trip.total} LKR</td>
+            </tr>
+        `;
+    });
+
+    detailsHTML += `</tbody></table>`;
+
+    // Encontrar la fila del día en la tabla principal y añadir la subtabla debajo
+    const allRows = document.querySelectorAll('#summaryTableContainer .summary-table tbody tr');
+    for (const row of allRows) {
+        if (row.cells[0].textContent === day) {
+            // Si ya hay una subtabla visible, la quitamos
+            const existingDetails = row.parentNode.querySelector('.trip-details-table');
+            if (existingDetails) {
+                existingDetails.remove();
+            } else {
+                // Si no, añadimos la nueva
+                const detailsCell = document.createElement('td');
+                detailsCell.colSpan = 4; // Ocupa las 4 columnas
+                detailsCell.innerHTML = detailsHTML;
+                row.parentNode.insertBefore(detailsCell, row.nextSibling);
+            }
+            break;
+        }
+    }
+}
+
+/**
+ * --- FUNCIÓN AUXILIAR: Función de ordenamiento de fechas (reutilizada) ---
+ */
+function parseDayMonth(dayMonthStr) {
+    const parts = dayMonthStr.split(' ');
+    const day = parseInt(parts[0], 10);
+    const monthMap = { 'jan': 0, 'feb': 1, 'mar': 2, 'apr': 3, 'may': 4, 'jun': 5, 'jul': 6, 'aug': 7, 'sep': 8, 'oct': 9, 'nov': 10, 'dec': 11 };
+    const month = monthMap[parts[1].toLowerCase().substring(0, 3)];
+    return new Date(2024, month, day);
 }
 
 
