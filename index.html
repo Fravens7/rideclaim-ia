@@ -13,29 +13,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
     <!-- Tesseract.js para OCR -->
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
-
-    <!--chart.js para graficos-->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-
-
-    <!--Modal para el grafico-->
-
-    <div id="detailsModal" class="modal">...</div>
-
-<!-- VENTANA MODAL PARA LA TABLA RESUMEN -->
-<div id="summaryModal" class="modal">
-    <div class="modal-content" style="max-width: 900px;">
-        <span class="close" id="closeSummaryBtn">&times;</span>
-        <h2>Daily Trip Summary</h2>
-        <div id="summaryTableContainer">
-            <!-- La tabla se generará aquí con JavaScript -->
-        </div>
-    </div>
-</div>
-
-
-
     
     <style>
         body {
@@ -199,13 +176,11 @@
             transition: width 0.3s;
         }
         .map-container {
-            width: 425px;
-            height: 702px;
+            height: 400px;
             margin-top: 20px;
             border-radius: 10px;
             border: 1px solid #ddd;
             display: none;
-            z-index:1000;
         }
         .map-title {
             font-size: 1.2em;
@@ -215,6 +190,7 @@
         }
         .results-container {
             margin-top: 30px;
+            display: none;
         }
         .results-table {
             width: 100%;
@@ -248,7 +224,7 @@
         .modal {
             display: none;
             position: fixed;
-            z-index: 999;
+            z-index: 1;
             left: 0;
             top: 0;
             width: 100%;
@@ -362,70 +338,6 @@
             background-color: #cce5ff;
             color: #004085;
         }
-    
-    /* --- ESTILOS PARA LA TABLA RESUMEN --- */
-.summary-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 20px;
-    font-size: 0.95em;
-}
-
-.summary-table th, .summary-table td {
-    padding: 12px 15px;
-    text-align: left;
-    border-bottom: 1px solid #ddd;
-}
-
-.summary-table th {
-    background-color: #f2f2f2;
-    font-weight: bold;
-}
-
-.summary-table tr:hover {
-    background-color: #f5f5f5;
-}
-
-.details-link {
-    color: #007bff;
-    cursor: pointer;
-    text-decoration: underline;
-}
-
-.details-link:hover {
-    color: #0056b3;
-}
-
-.trip-details-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 10px;
-    font-size: 0.85em;
-    background-color: #f9f9f9;
-    border-radius: 5px;
-    overflow: hidden;
-}
-
-.trip-details-table th, .trip-details-table td {
-    padding: 8px 10px;
-    text-align: left;
-    border-bottom: 1px solid #eee;
-}
-
-.trip-details-table th {
-    background-color: #e9ecef;
-    font-weight: bold;
-}
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
     </style>
 </head>
 <body>
@@ -480,9 +392,7 @@
                     <tbody id="resultsBody"></tbody>
                 </table>
                 <div class="summary" id="summary"></div>
-                <button class="clear-btn" id="clearBtn">Clear results</button>                
-                <button class="clear-btn" id="viewSummaryBtn" style="background-color: #17a2b8; margin-left: 10px;">View Daily Summary</button>
-
+                <button class="clear-btn" id="clearBtn">Clear results</button>
             </div>
         </div>
     </div>
@@ -501,8 +411,7 @@
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
         
         const staticLocations = {
-            home: { lat: 6.89535, lng: 79.85766 },
-            office: {  lat: 6.882986650923001, lng: 79.86809890134177 }
+            home: { lat: 6.89535, lng: 79.85766 }, office: { lat: 6.91379, lng: 79.86533 }
         };
 
         const zoneKeywords = {
@@ -541,122 +450,39 @@
         let processedPdfNames = new Set(); //memory for pdf
         let processedImageNames = new Set(); //memory for png or images
 
-// --- ESPERAR A QUE EL DOCUMENTO ESTÉ COMPLETAMENTE CARGADO ---
-document.addEventListener('DOMContentLoaded', () => {
-    console.log("✅ DOM Cargado. Inicializando event listeners...");
+        pdfTab.addEventListener('click', () => { pdfTab.classList.add('active'); imageTab.classList.remove('active'); pdfContent.classList.add('active'); imageContent.classList.remove('active'); });
+        imageTab.addEventListener('click', () => { imageTab.classList.add('active'); pdfTab.classList.remove('active'); imageContent.classList.add('active'); pdfContent.classList.remove('active'); });
+        
+        pdfFiles.addEventListener('change', handlePdfFileSelect);
+        pdfUploadArea.addEventListener('dragover', (e) => { e.preventDefault(); pdfUploadArea.classList.add('dragover'); });
+        pdfUploadArea.addEventListener('dragleave', () => { pdfUploadArea.classList.remove('dragover'); });
+        pdfUploadArea.addEventListener('drop', (e) => { e.preventDefault(); pdfUploadArea.classList.remove('dragover'); if (e.dataTransfer.files.length) handlePdfFiles(e.dataTransfer.files); });
 
-    // --- LÓGICA DE PESTAÑAS ---
-    const pdfTab = document.getElementById('pdf-tab');
-    const imageTab = document.getElementById('image-tab');
-    const pdfContent = document.getElementById('pdf-content');
-    const imageContent = document.getElementById('image-content');
-    const pdfUploadArea = document.getElementById('pdfUploadArea');
-    const imageUploadArea = document.getElementById('imageUploadArea');
-    const pdfFiles = document.getElementById('pdfFiles');
-    const imageFiles = document.getElementById('imageFiles');
-    const pdfFileList = document.getElementById('pdfFileList');
-    const imageFileList = document.getElementById('imageFileList');
-    const resultsContainer = document.getElementById('resultsContainer');
-    const resultsBody = document.getElementById('resultsBody');
-    const summary = document.getElementById('summary');
-    const clearBtn = document.getElementById('clearBtn');
-    const mapContainer = document.getElementById('map-container');
-    const modal = document.getElementById('detailsModal');
-    const modalExtractedText = document.getElementById('modalExtractedText');
-    const closeBtn = document.getElementsByClassName('close')[0];
-    const apiStatus = document.getElementById('apiStatus');
-    
-    let fileResults = []; 
-    let map = null; 
-    let processedPdfNames = new Set();
-    let processedImageNames = new Set();
-
-
-
-    pdfTab.addEventListener('click', () => { pdfTab.classList.add('active'); imageTab.classList.remove('active'); pdfContent.classList.add('active'); imageContent.classList.remove('active'); });
-    imageTab.addEventListener('click', () => { imageTab.classList.add('active'); pdfTab.classList.remove('active'); imageContent.classList.add('active'); pdfContent.classList.remove('active'); });
-    
-    pdfFiles.addEventListener('change', handlePdfFileSelect);
-    pdfUploadArea.addEventListener('dragover', (e) => { e.preventDefault(); pdfUploadArea.classList.add('dragover'); });
-    pdfUploadArea.addEventListener('dragleave', () => { pdfUploadArea.classList.remove('dragover'); });
-    pdfUploadArea.addEventListener('drop', (e) => { e.preventDefault(); pdfUploadArea.classList.remove('dragover'); if (e.dataTransfer.files.length) handlePdfFiles(e.dataTransfer.files); });
-
-    imageFiles.addEventListener('change', handleImageFileSelect);
-    imageUploadArea.addEventListener('dragover', (e) => { e.preventDefault(); imageUploadArea.classList.add('dragover'); });
-    imageUploadArea.addEventListener('dragleave', () => { imageUploadArea.classList.remove('dragover'); });
-    imageUploadArea.addEventListener('drop', (e) => { e.preventDefault(); imageUploadArea.classList.remove('dragover'); if (e.dataTransfer.files.length) handleImageFiles(e.dataTransfer.files); });
-    
-    closeBtn.onclick = () => modal.style.display = 'none';
-    window.onclick = (event) => { if (event.target == modal) modal.style.display = 'none'; };
-    clearBtn.addEventListener('click', () => {
-        console.log("🔧 Botón 'Clear Results' presionado. ANTES de limpiar:");
-        console.log("processedPdfNames (antes):", new Set(processedPdfNames)); // Usar new Set para ver el contenido actual
-        console.log("processedImageNames (antes):", new Set(processedImageNames));
-
-        fileResults = [];
-        pdfFileList.innerHTML = ''; 
-        pdfFileList.style.display = 'none';
-        imageFileList.innerHTML = ''; 
-        imageFileList.style.display = 'none';
-        resultsContainer.style.display = 'none'; 
-        resultsBody.innerHTML = ''; 
-        summary.innerHTML = '';
-        mapContainer.innerHTML = ''; 
-        if (map) { 
-            map.remove(); 
-            map = null; 
-        }
-        apiStatus.style.display = 'none';      
-        processedPdfNames.clear();            
-        processedImageNames.clear();
-
-
-  // --- AÑADE ESTA LÍNEA PARA DEBUGGING ---
-        console.log("🔧 Botón 'Clear Results' presionado. Estado limpio:");
-        console.log("fileResults:", fileResults);
-        console.log("processedPdfNames:", processedPdfNames);
-        console.log("processedImageNames:", processedImageNames);
-
-
-    });
-
-
-
-
-    // --- INICIALIZAR VENTANAS MODALES Y BOTONES ADICIONALES ---
-    const chartModal = document.getElementById('chartModal');
-    const closeChartBtn = document.getElementById('closeChartBtn');
-    const summaryModal = document.getElementById('summaryModal');
-    const closeSummaryBtn = document.getElementById('closeSummaryBtn');
-    let tripChart = null;
-
-    if (chartModal) {
-        closeChartBtn.onclick = () => chartModal.style.display = 'none';
-        window.onclick = (event) => { if (event.target == chartModal) chartModal.style.display = 'none'; };
-    }
-
-    if (summaryModal) {
-        closeSummaryBtn.onclick = () => summaryModal.style.display = 'none';
-        window.onclick = (event) => { if (event.target == summaryModal) summaryModal.style.display = 'none'; };
+        imageFiles.addEventListener('change', handleImageFileSelect);
+        imageUploadArea.addEventListener('dragover', (e) => { e.preventDefault(); imageUploadArea.classList.add('dragover'); });
+        imageUploadArea.addEventListener('dragleave', () => { imageUploadArea.classList.remove('dragover'); });
+        imageUploadArea.addEventListener('drop', (e) => { e.preventDefault(); imageUploadArea.classList.remove('dragover'); if (e.dataTransfer.files.length) handleImageFiles(e.dataTransfer.files); });
+        
+        closeBtn.onclick = () => modal.style.display = 'none';
+        window.onclick = (event) => { if (event.target == modal) modal.style.display = 'none'; };
+clearBtn.addEventListener('click', () => {
+    fileResults = [];
+    pdfFileList.innerHTML = ''; 
+    pdfFileList.style.display = 'none';
+    imageFileList.innerHTML = ''; 
+    imageFileList.style.display = 'none';
+    resultsContainer.style.display = 'none'; 
+    resultsBody.innerHTML = ''; 
+    summary.innerHTML = '';
+    mapContainer.innerHTML = ''; 
+    if (map) { 
+      map.remove(); 
+      map = null; 
     }
     
-    const viewChartBtn = document.getElementById('viewChartBtn');
-    const viewSummaryBtn = document.getElementById('viewSummaryBtn');
-
-    if (viewChartBtn) {
-        viewChartBtn.addEventListener('click', () => {
-            chartModal.style.display = 'block';
-            updateTripChart();
-        });
-    }
-
-    if (viewSummaryBtn) {
-        viewSummaryBtn.addEventListener('click', () => {
-            summaryModal.style.display = 'block';
-            updateSummaryTable();
-        });
-    }
-}); // <-- ESTE ES EL COMENTARIO CORRECTO
+    apiStatus.style.display = 'none';      
+    processedPdfNames.clear();            
+}); // <-- AHORA ESTA LLAVE CIERRA CORRECTAMENTE LA FUNCIÓN DEL `addEventListener`
 
         
         
@@ -744,40 +570,7 @@ function createDuplicateFileItem(file, type) {
         //supuestamente falta esto
         function handlePdfFileSelect(e) { if (e.target.files.length) handlePdfFiles(e.target.files); }
 
-        //function handleImageFiles(files) { const imageFilesArr = Array.from(files).filter(file => /image\/(png|jpeg|jpg)/.test(file.type)); if (imageFilesArr.length === 0) { alert('Please select at least one valid image file (PNG, JPG).'); return; } imageFileList.style.display = 'block'; imageFileList.innerHTML = ''; imageFilesArr.forEach(file => { const fileItem = createFileItem(file, 'image'); imageFileList.appendChild(fileItem); processImageFile(file, fileItem); }); }
-        function handleImageFiles(files) {
-    const imageFilesArr = Array.from(files).filter(file => /image\/(png|jpeg|jpg)/.test(file.type));
-    if (imageFilesArr.length === 0) {
-        alert('Please select at least one valid image file (PNG, JPG).');
-        return;
-    }
-    imageFileList.style.display = 'block';
-    imageFileList.innerHTML = '';
-    
-    imageFilesArr.forEach(file => {
-        // --- INICIO DEL LIMPIADOR DE DUPLICADOS ---
-        if (processedImageNames.has(file.name)) {
-            // Si la imagen ya fue procesada, la ignora y muestra un aviso
-            const duplicateItem = createDuplicateFileItem(file, 'image');
-            imageFileList.appendChild(duplicateItem);
-            return; // Detiene el procesamiento para este archivo
-        }
-        
-        // --- CAMBIO CLAVE: AÑADIMOS EL NOMBRE A LA MEMORIA ---
-        processedImageNames.add(file.name);
-        // --- FIN DEL CAMBIO ---
-
-        const fileItem = createFileItem(file, 'image');
-        imageFileList.appendChild(fileItem);
-        processImageFile(file, fileItem);
-    });
-}
-
-
-
-
-
-
+        function handleImageFiles(files) { const imageFilesArr = Array.from(files).filter(file => /image\/(png|jpeg|jpg)/.test(file.type)); if (imageFilesArr.length === 0) { alert('Please select at least one valid image file (PNG, JPG).'); return; } imageFileList.style.display = 'block'; imageFileList.innerHTML = ''; imageFilesArr.forEach(file => { const fileItem = createFileItem(file, 'image'); imageFileList.appendChild(fileItem); processImageFile(file, fileItem); }); }
         function processImageFile(file, fileItem) {
             const fileReader = new FileReader();
             fileReader.onload = function(e) {
@@ -852,7 +645,11 @@ function createDuplicateFileItem(file, type) {
             return canvas.toDataURL();
         }
         
-
+        /**
+ * --- VERSIÓN MEJORADA: Función para llamar a la API de Groq ---
+ * Esta versión es más robusta y añade mensajes de depuración.
+ */
+/**
 /**
  * --- VERSIÓN HÍBRIDA DEFINITIVA: Parser JS + LLM Fallback ---
  * Primero usa lógica dura y determinista. La IA es solo un respaldo.
@@ -1046,78 +843,39 @@ Text:
             return fileItem; 
         }
         
-/**
- * --- VERSIÓN LIMPIA Y CORREGIDA: Procesa el texto extraído ---
- */
-async function processExtractedText(file, fileItem, text, type, tripInfo) {
-    // --- PASO 1: Extraer el Total (con respaldo) ---
-    let totalMatch = text.match(/Total\s+([\d,.]+)\s+LKR/i);
-    if (!totalMatch) {
-        totalMatch = text.match(/Total.*?LKR\s*([\d,.]+)/i);
-    }
-    const total = totalMatch ? totalMatch[1] : null;
-
-    // --- PASO 2: Validar el Viaje ---
-    const validationResult = validateTrip(tripInfo, type);
-    const fileStatus = fileItem.querySelector('.file-status');
-    const progressBar = fileItem.querySelector('.progress-bar');
-    if (progressBar) progressBar.style.display = 'none';
-
-    // --- PASO 3: Actualizar la Interfaz del Archivo ---
-    if (total) {
-        const fileTotal = document.createElement('div');
-        fileTotal.className = 'file-total';
-        fileTotal.textContent = `${total} LKR`;
-        fileItem.appendChild(fileTotal);
-
-        if (validationResult.isValid) {
-            fileItem.className = 'file-item success';
-            fileStatus.className = 'file-status status-success';
-            fileStatus.textContent = 'Valid';
-            
-            // --- LÓGICA DEL MAPA SIMPLIFICADA ---
-            if (type === 'pdf' && validationResult.direction) {
-                const validPdfTrips = fileResults.filter(r => r.type === 'pdf' && r.isValid);
-                if (validPdfTrips.length === 1) {
-                    displayMap(file.name, validationResult.direction, tripInfo.origin, tripInfo.destination);
-                }
+        function processExtractedText(file, fileItem, text, type, tripInfo) {
+            // --- INTENTO 1: Lógica principal para el formato común ---
+            let totalMatch = text.match(/Total\s+([\d,.]+)\s+LKR/i);
+            // --- INTENTO 2: Respaldo para formatos inusuales (solo si el primero falla) --
+            if(!totalMatch){
+                totalMatch = text.match(/Total\s+LKR\s*([\d,.]+)/i);
             }
-        } else {
-            fileItem.className = 'file-item invalid';
-            fileStatus.className = 'file-status status-invalid';
-            fileStatus.textContent = 'Invalid';
-            mapContainer.style.display = 'none';
+            const total = totalMatch ? totalMatch[1] : null;
+            const validationResult = validateTrip(tripInfo, type);
+            const fileStatus = fileItem.querySelector('.file-status');
+            const progressBar = fileItem.querySelector('.progress-bar');
+            if (progressBar) progressBar.style.display = 'none';
+            if (total) {
+                const fileTotal = document.createElement('div'); fileTotal.className = 'file-total'; fileTotal.textContent = `${total} LKR`; fileItem.appendChild(fileTotal);
+                if (validationResult.isValid) { fileItem.className = 'file-item success'; fileStatus.className = 'file-status status-success'; fileStatus.textContent = 'Valid'; if (type === 'pdf' && validationResult.direction) displayMap(file.name, validationResult.direction); } 
+                else { fileItem.className = 'file-item invalid'; fileStatus.className = 'file-status status-invalid'; fileStatus.textContent = 'Invalid'; mapContainer.style.display = 'none'; }
+            } else { fileItem.className = 'file-item error'; fileStatus.className = 'file-status status-error'; fileStatus.textContent = 'Error: Total not found'; mapContainer.style.display = 'none'; }
+            fileResults.push({ name: file.name, type: type, total: total, origin: tripInfo.origin || 'Not specified', destination: tripInfo.destination || 'Not specified', isValid: validationResult.isValid, validationDetails: validationResult.details, text: text });
+            updateResultsTable();
         }
-    } else {
-        fileItem.className = 'file-item error';
-        fileStatus.className = 'file-status status-error';
-        fileStatus.textContent = 'Error: Total not found';
-        mapContainer.style.display = 'none';
-    }
-
-    // --- PASO 4: Extraer la Fecha del Viaje ---
-    const dateMatch = text.match(/\b(\d{1,2}\s+\w{3})\b/i);
-    const tripDate = dateMatch ? dateMatch[1] : 'Unknown Date';
-
-    // --- PASO 5: Añadir el Resultado al Array Global ---
-    fileResults.push({
-        name: file.name,
-        type: type,
-        total: total,
-        origin: tripInfo.origin || 'Not specified',
-        destination: tripInfo.destination || 'Not specified',
-        isValid: validationResult.isValid,
-        validationDetails: validationResult.details,
-        text: text,
-        tripDate: tripDate,
-        direction: validationResult.direction
-    });
-
-    // --- PASO 6: Actualizar la Tabla y el Gráfico ---
-    updateResultsTable();
-    updateTripChart();
-} 
-
+        
+        /**
+         * --- SIMPLIFICADO: La validación ahora es mucho más simple ---
+         * El LLM ya hizo el trabajo duro.
+         */
+/**
+ * --- VERSIÓN ACTUALIZADA: La validación ahora maneja el estado "incomplete" ---
+ */
+/**
+/**
+ * --- VERSIÓN REFACTORIZADA: Lógica Separada para PDF e Imagen ---
+ * Dos caminos completamente independientes desde el principio.
+ */
 /**
  * --- VERSIÓN 2: LÓGICA DE VALIDACIÓN CON SEGUNDA OPORTUNIDAD ---
  * Mantiene la lógica estricta y añade una flexible como respaldo.
@@ -1194,82 +952,20 @@ function validateTrip(tripInfo, type) {
     return { isValid: false, details: 'Invalid: Unknown file type or status from AI.', direction: null };
 }
         
-/**
- * --- VERSIÓN FINAL Y LIMPIA: Mapa Dinámico Híbrido ---
- * La lógica de fallback ahora está dentro de geocodeAddress.
- */
-function displayMap(fileName, direction, originAddress, destinationAddress) {
-    mapContainer.style.display = 'block';
-    let mapTitle = document.querySelector('.map-title');
-    if (!mapTitle) {
-        mapTitle = document.createElement('div');
-        mapTitle.className = 'map-title';
-        mapContainer.prepend(mapTitle);
-    }
-    mapTitle.textContent = `Trip Map: ${fileName}`;
-    
-    let originCoords, destCoords;
-    if (direction === 'home-to-office') {
-        originCoords = staticLocations.home;
-        destCoords = staticLocations.office;
-    } else {
-        originCoords = staticLocations.office;
-        destCoords = staticLocations.home;
-    }
-    
-    if (!map) {
-        map = L.map('map-container').setView([6.9, 79.86], 13);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        }).addTo(map);
-    }
-    
-    map.eachLayer(layer => {
-        if (layer instanceof L.Marker || layer instanceof L.Polyline) {
-            map.removeLayer(layer);
+        function displayMap(fileName, direction) { 
+            mapContainer.style.display = 'block'; 
+            let mapTitle = document.querySelector('.map-title'); if (!mapTitle) { mapTitle = document.createElement('div'); mapTitle.className = 'map-title'; mapContainer.prepend(mapTitle); } 
+            mapTitle.textContent = `Trip Map: ${fileName}`; 
+            let originCoords, destCoords; if (direction === 'home-to-office') { originCoords = staticLocations.home; destCoords = staticLocations.office; } 
+            else { originCoords = staticLocations.office; destCoords = staticLocations.home; } 
+            if (!map) { map = L.map('map-container').setView([6.9, 79.86], 13); L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' }).addTo(map); } 
+            map.eachLayer(layer => { if (layer instanceof L.Marker || layer instanceof L.Polyline) { map.removeLayer(layer); } }); 
+            L.marker(originCoords).addTo(map).bindPopup('Origin').openPopup(); L.marker(destCoords).addTo(map).bindPopup('Destination'); 
+            const lineColor = (direction === 'home-to-office') ? 'blue' : 'green'; const route = L.polyline([originCoords, destCoords], { color: lineColor, weight: 5, opacity: 0.7 }).addTo(map); 
+            const group = new L.featureGroup([L.marker(originCoords), L.marker(destCoords)]); map.fitBounds(group.getBounds().pad(0.1)); 
+            setTimeout(() => { map.invalidateSize(); }, 0); 
         }
-    });
-    
-    L.marker(originCoords).addTo(map).bindPopup('Origin').openPopup();
-    L.marker(destCoords).addTo(map).bindPopup('Destination');
-    
-    const lineColor = (direction === 'home-to-office') ? 'blue' : 'green';
-    const route = L.polyline([originCoords, destCoords], {
-        color: lineColor,
-        weight: 5,
-        opacity: 0.7
-    }).addTo(map);
-    
-    const group = new L.featureGroup([L.marker(originCoords), L.marker(destCoords)]);
-    map.fitBounds(group.getBounds().pad(0.1));
-    setTimeout(() => {
-        map.invalidateSize();
-    }, 0);
-}
-
-
-
-
-/**
- * --- FUNCIÓN AUXILIAR: Simplifica una dirección para un segundo intento ---
- */
-function simplifyAddress(address) {
-    if (!address) return '';
-    // Extrae las palabras clave conocidas
-    const keywords = ['mireka', 'havelock', '43b', '43d', 'lauries'];
-    const parts = address.toLowerCase().split(',');
-    
-    // Devuelve la primera parte que contenga una palabra clave
-    for (const part of parts) {
-        if (keywords.some(keyword => part.includes(keyword))) {
-            return part.trim();
-        }
-    }
-    return address; // Devuelve la original si no encuentra nada
-}
-
-
-
+        
         function updateResultsTable() {
             resultsContainer.style.display = 'block'; resultsBody.innerHTML = '';
             let totalSum = 0; let validCount = 0; let invalidCount = 0;
@@ -1320,7 +1016,6 @@ function simplifyAddress(address) {
                 }; 
                 actionsCell.appendChild(viewBtn);
                 
-
                 row.appendChild(nameCell); row.appendChild(typeCell); row.appendChild(originCell); row.appendChild(destCell); 
                 row.appendChild(totalCell); row.appendChild(validationCell); row.appendChild(actionsCell); 
                 resultsBody.appendChild(row);
@@ -1337,424 +1032,6 @@ function simplifyAddress(address) {
             });
             summary.innerHTML = `<p>Total files processed: ${fileResults.length}</p><p>Valid trips: ${validCount}</p><p>Invalid trips: ${invalidCount}</p><p>Total LKR sum (valid trips): ${totalSum.toFixed(2)} LKR</p>`;
         }
-
-
-    
-            // --- LÓGICA PARA EL GRÁFICO DE VIAJES ---
-
-const viewChartBtn = document.getElementById('viewChartBtn');
-const chartModal = document.getElementById('chartModal');
-const closeChartBtn = document.getElementById('closeChartBtn');
-let tripChart = null; // Variable para guardar la instancia del gráfico
-
-viewChartBtn.addEventListener('click', () => {
-    chartModal.style.display = 'block';
-    updateTripChart();
-});
-
-closeChartBtn.onclick = () => chartModal.style.display = 'none';
-window.onclick = (event) => { if (event.target == chartModal) chartModal.style.display = 'none'; };
-
-/**
- * --- FUNCIÓN PRINCIPAL: Actualiza y dibuja el gráfico ---
- */
-/**
- * --- VERSIÓN ACTUALIZADA: Gráfico de Barras Apiladas con Fechas Ordenadas ---
- */
-/**
- * --- VERSIÓN DEFINITIVA Y CORREGIDA: Actualiza el Gráfico de Viajes ---
- */
-function updateTripChart() {
-    // 1. Filtrar solo los PDFs válidos
-    const validPdfTrips = fileResults.filter(result => result.type === 'pdf' && result.isValid);
-
-    // 2. Contar los viajes por día y por dirección
-    const tripsPerDay = {};
-    validPdfTrips.forEach(trip => {
-        const day = trip.tripDate;
-        if (!tripsPerDay[day]) {
-            tripsPerDay[day] = { "home-to-office": 0, "office-to-home": 0 };
-        }
-        if (trip.direction) {
-            tripsPerDay[day][trip.direction]++;
-        }
-    });
-
-    // 3. Ordenar los días cronológicamente
-    function parseDayMonth(dayMonthStr) {
-        const parts = dayMonthStr.split(' ');
-        const day = parseInt(parts[0], 10);
-        const monthMap = { 'jan': 0, 'feb': 1, 'mar': 2, 'apr': 3, 'may': 4, 'jun': 5, 'jul': 6, 'aug': 7, 'sep': 8, 'oct': 9, 'nov': 10, 'dec': 11 };
-        const month = monthMap[parts[1].toLowerCase().substring(0, 3)];
-        return new Date(2024, month, day);
-    }
-    const sortedDays = Object.keys(tripsPerDay).sort((a, b) => parseDayMonth(a) - parseDayMonth(b));
-    const chartLabels = sortedDays;
-    const homeToOfficeData = sortedDays.map(day => tripsPerDay[day]["home-to-office"]);
-    const officeToHomeData = sortedDays.map(day => tripsPerDay[day]["office-to-home"]);
-
-    // 4. --- VERIFICACIÓN DE SEGURIDAD ANTES DE USAR CHART.JS ---
-    const canvasElement = document.getElementById('tripChartCanvas');
-    if (!canvasElement) {
-        console.error("🚨 Error Crítico: No se encontró el elemento <canvas> con id 'tripChartCanvas'. Abortando creación del gráfico.");
-        return; // Salir de la función
-    }
-    const ctx = canvasElement.getContext('2d');
-    if (!ctx) {
-        console.error("🚨 Error Crítico: No se pudo obtener el contexto 2D del canvas. Abortando creación del gráfico.");
-        return; // Salir de la función
-    }
-
-    // 5. --- LÓGICA DE DESTRUCCIÓN Y CREACIÓN MÁS SEGURA ---
-    // Destruir el gráfico anterior si existe y es una instancia válida
-    if (tripChart && typeof tripChart.destroy === 'function') {
-        try {
-            tripChart.destroy();
-        } catch (e) {
-            console.error("Error al destruir el gráfico anterior:", e);
-        }
-    }
-    // Siempre establecer a null antes de crear uno nuevo
-    tripChart = null;
-
-    // 6. Crear el nuevo gráfico dentro de un try...catch
-    try {
-        tripChart = new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: chartLabels,
-                datasets: [
-                    {
-                        label: 'Home -> Office',
-                        data: homeToOfficeData,
-                        backgroundColor: 'rgba(54, 162, 235, 0.6)',
-                        borderColor: 'rgba(54, 162, 235, 1)',
-                        borderWidth: 1
-                    },
-                    {
-                        label: 'Office -> Home',
-                        data: officeToHomeData,
-                        backgroundColor: 'rgba(40, 167, 69, 0.6)',
-                        borderColor: 'rgba(40, 167, 69, 1)',
-                        borderWidth: 1
-                    }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    x: { stacked: true },
-                    y: {
-                        stacked: true,
-                        beginAtZero: true,
-                        ticks: { stepSize: 1 }
-                    }
-                },
-                plugins: {
-                    title: {
-                        display: true,
-                        text: 'Valid Trips per Day (PDFs only)',
-                        font: { size: 16 }
-                    },
-                    tooltip: {
-                        mode: 'index',
-                        intersect: false
-                    }
-                }
-            }
-        });
-        console.log("✅ Gráfico de barras apiladas creado con éxito.");
-    } catch (error) {
-        console.error("🚨 Error al crear el gráfico de Chart.js:", error);
-        // En caso de error, asegúrate de que tripChart sea null para evitar fallos posteriores
-        tripChart = null;
-    }
-}
-
-/**
- * --- FUNCIÓN PARA MOSTRAR UN VIAJE ESPECÍFICO EN EL MAPA ---
- * Añade la ruta a una lista y la muestra en el mapa.
- */
-function displaySpecificTripOnMap(tripData) {
-    mapContainer.style.display = 'block';
-    let mapTitle = document.querySelector('.map-title');
-    if (!mapTitle) {
-        mapTitle = document.createElement('div');
-        mapTitle.className = 'map-title';
-        mapContainer.prepend(mapTitle);
-    }
-    mapTitle.textContent = `Trip Map: ${tripData.name}`;
-
-    // Inicializa el mapa si no existe
-    if (!map) {
-        map = L.map('map-container').setView([6.9, 79.86], 13);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        }).addTo(map);
-    }
-
-    // Obtenemos las coordenadas usando nuestra lógica híbrida
-    geocodeAddress(tripData.origin)
-        .then(originCoords => {
-            if (!originCoords) {
-                // Fallback a coordenadas estáticas si la geocodificación falla
-                originCoords = (tripData.direction === 'office-to-home') ? staticLocations.office : staticLocations.home;
-            }
-            geocodeAddress(tripData.destination)
-                .then(destCoords => {
-                    if (!destCoords) {
-                        destCoords = (tripData.direction === 'home-to-office') ? staticLocations.office : staticLocations.home;
-                    }
-                    // Una vez tenemos ambas coordenadas, dibujamos la ruta
-                    drawRouteOnMap(originCoords, destCoords, tripData.direction);
-                })
-                .catch(error => {
-                    console.error('Error geocodificando el destino:', error);
-                    const fallbackDest = (tripData.direction === 'home-to-office') ? staticLocations.office : staticLocations.home;
-                    drawRouteOnMap(originCoords, fallbackDest, tripData.direction);
-                });
-        })
-        .catch(error => {
-            console.error('Error geocodificando el origen:', error);
-            const fallbackOrigin = (tripData.direction === 'office-to-home') ? staticLocations.office : staticLocations.home;
-            geocodeAddress(tripData.destination)
-                .then(destCoords => {
-                    if (!destCoords) {
-                        const fallbackDest = (tripData.direction === 'home-to-office') ? staticLocations.office : staticLocations.home;
-                        drawRouteOnMap(fallbackOrigin, fallbackDest, tripData.direction);
-                    } else {
-                        drawRouteOnMap(fallbackOrigin, destCoords, tripData.direction);
-                    }
-                })
-                .catch(error => {
-                    console.error('Error geocodificando el destino (fallback):', error);
-                    const fallbackDest = (tripData.direction === 'home-to-office') ? staticLocations.office : staticLocations.home;
-                    drawRouteOnMap(fallbackOrigin, fallbackDest, tripData.direction);
-                });
-        });
-}
-
-/**
- * --- FUNCIÓN AUXILIAR PARA DIBUJAR LA RUTA ---
- * Limpia el mapa y dibuja la nueva ruta.
- */
-/**
- * --- VERSIÓN CORREGIDA: Función para Dibujar la Ruta ---
- * Añade una comprobación de seguridad para evitar errores con coordenadas nulas.
- */
-function drawRouteOnMap(originCoords, destCoords, direction) {
-    // --- COMPROBACIÓN DE SEGURIDAD ---
-    if (!originCoords || !destCoords) {
-        console.error("🚨 Error: No se pueden dibujar la ruta. Faltan coordenadas de origen o destino.");
-        mapContainer.style.display = 'none'; // Ocultar el mapa si no hay datos
-        return; // Salir de la función para evitar el error
-    }
-
-    // ... el resto del código de la función se queda igual ...
-    map.eachLayer(layer => {
-        if (layer instanceof L.Marker || layer instanceof L.Polyline) {
-            map.removeLayer(layer);
-        }
-    });
-
-    L.marker(originCoords).addTo(map).bindPopup('Origin').openPopup();
-    L.marker(destCoords).addTo(map).bindPopup('Destination');
-
-    const lineColor = (direction === 'home-to-office') ? 'blue' : 'green';
-    const route = L.polyline([originCoords, destCoords], {
-        color: lineColor,
-        weight: 5,
-        opacity: 0.7
-    }).addTo(map);
-
-    const group = new L.featureGroup([L.marker(originCoords), L.marker(destCoords)]);
-    map.fitBounds(group.getBounds().pad(0.1));
-    setTimeout(() => {
-        map.invalidateSize();
-    }, 0);
-}
-
-
-// --- LÓGICA PARA LA TABLA RESUMEN INTERACTIVA ---
-
-const viewSummaryBtn = document.getElementById('viewSummaryBtn');
-const summaryModal = document.getElementById('summaryModal');
-const closeSummaryBtn = document.getElementById('closeSummaryBtn');
-
-viewSummaryBtn.addEventListener('click', () => {
-    summaryModal.style.display = 'block';
-    updateSummaryTable();
-});
-
-closeSummaryBtn.onclick = () => summaryModal.style.display = 'none';
-window.onclick = (event) => { if (event.target == summaryModal) summaryModal.style.display = 'none'; };
-
-/**
- * --- FUNCIÓN PRINCIPAL: Agrupa los datos y renderiza la tabla ---
- */
-function updateSummaryTable() {
-    // 1. Filtrar solo los PDFs válidos
-    const validPdfTrips = fileResults.filter(result => result.type === 'pdf' && result.isValid);
-
-    // 2. Agrupar los viajes por día
-    const tripsByDay = {};
-    validPdfTrips.forEach(trip => {
-        const day = trip.tripDate;
-        if (!tripsByDay[day]) {
-            tripsByDay[day] = [];
-        }
-        tripsByDay[day].push(trip);
-    });
-
-    // 3. Ordenar los días cronológicamente
-    const sortedDays = Object.keys(tripsByDay).sort((a, b) => {
-        const dateA = parseDayMonth(a);
-        const dateB = parseDayMonth(b);
-        return dateA - dateB;
-    });
-
-    // 4. Renderizar la tabla en el contenedor
-    const container = document.getElementById('summaryTableContainer');
-    container.innerHTML = ''; // Limpiar contenido anterior
-
-    if (sortedDays.length === 0) {
-        container.innerHTML = '<p>No valid PDF trips found to summarize.</p>';
-        return;
-    }
-
-    let tableHTML = `
-        <table class="summary-table">
-            <thead>
-                <tr>
-                    <th>Date</th>
-                    <th>Total Trips</th>
-                    <th>Total LKR</th>
-                    <th>Trips</th>
-                </tr>
-            </thead>
-            <tbody>
-    `;
-
-    let grandTotalTrips = 0;
-    let grandTotalLKR = 0;
-
-    sortedDays.forEach(day => {
-        const trips = tripsByDay[day];
-        const totalTrips = trips.length;
-        const totalLKR = trips.reduce((sum, trip) => sum + parseFloat(trip.total.replace(',', '.')), 0).toFixed(2);
-
-        grandTotalTrips += totalTrips;
-        grandTotalLKR += parseFloat(totalLKR);
-
-        tableHTML += `
-            <tr>
-                <td>${day}</td>
-                <td>${totalTrips}</td>
-                <td>${totalLKR} LKR</td>
-                <td><a href="#" class="details-link" data-day="${day}">View Details (${totalTrips})</a></td>
-            </tr>
-        `;
-    });
-
-    tableHTML += `
-            </tbody>
-        </table>
-        <div class="summary" style="text-align: left; margin-top: 20px;">
-            <p><strong>Total Days Processed:</strong> ${sortedDays.length}</p>
-            <p><strong>Total Trips:</strong> ${grandTotalTrips}</p>
-            <p><strong>Total LKR Sum:</strong> ${grandTotalLKR.toFixed(2)} LKR</p>
-        </div>
-    `;
-
-    container.innerHTML = tableHTML;
-
-    // 5. Añadir los event listeners para el "drill-down"
-    container.querySelectorAll('.details-link').forEach(link => {
-        link.addEventListener('click', (event) => {
-            event.preventDefault();
-            const day = event.target.getAttribute('data-day');
-            showTripDetails(day, tripsByDay[day]);
-        });
-    });
-}
-
-/**
- * --- FUNCIÓN AUXILIAR: Muestra los detalles de un día específico ---
- */
-function showTripDetails(day, trips) {
-    // Crear la tabla de detalles
-    let detailsHTML = `
-        <h4>Details for ${day}</h4>
-        <table class="trip-details-table">
-            <thead>
-                <tr>
-                    <th>Origin</th>
-                    <th>Destination</th>
-                    <th>Total LKR</th>
-                </tr>
-            </thead>
-            <tbody>
-    `;
-
-    trips.forEach(trip => {
-        detailsHTML += `
-            <tr>
-                <td>${trip.origin.substring(0, 40)}${trip.origin.length > 40 ? '...' : ''}</td>
-                <td>${trip.destination.substring(0, 40)}${trip.destination.length > 40 ? '...' : ''}</td>
-                <td>${trip.total} LKR</td>
-            </tr>
-        `;
-    });
-
-    detailsHTML += `</tbody></table>`;
-
-    // Encontrar la fila del día en la tabla principal y añadir la subtabla debajo
-    const allRows = document.querySelectorAll('#summaryTableContainer .summary-table tbody tr');
-    for (const row of allRows) {
-        if (row.cells[0].textContent === day) {
-            // Si ya hay una subtabla visible, la quitamos
-            const existingDetails = row.parentNode.querySelector('.trip-details-table');
-            if (existingDetails) {
-                existingDetails.remove();
-            } else {
-                // Si no, añadimos la nueva
-                const detailsCell = document.createElement('td');
-                detailsCell.colSpan = 4; // Ocupa las 4 columnas
-                detailsCell.innerHTML = detailsHTML;
-                row.parentNode.insertBefore(detailsCell, row.nextSibling);
-            }
-            break;
-        }
-    }
-}
-
-/**
- * --- FUNCIÓN AUXILIAR: Función de ordenamiento de fechas (reutilizada) ---
- */
-function parseDayMonth(dayMonthStr) {
-    const parts = dayMonthStr.split(' ');
-    const day = parseInt(parts[0], 10);
-    const monthMap = { 'jan': 0, 'feb': 1, 'mar': 2, 'apr': 3, 'may': 4, 'jun': 5, 'jul': 6, 'aug': 7, 'sep': 8, 'oct': 9, 'nov': 10, 'dec': 11 };
-    const month = monthMap[parts[1].toLowerCase().substring(0, 3)];
-    return new Date(2024, month, day);
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     </script>
 </body>
 </html>
