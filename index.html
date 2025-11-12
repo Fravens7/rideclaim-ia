@@ -445,7 +445,10 @@
         const closeBtn = document.getElementsByClassName('close')[0];
         const apiStatus = document.getElementById('apiStatus');
         
-        let fileResults = []; let map = null; let processedPdfNames = new Set(); 
+        let fileResults = [];
+        let map = null;
+        let processedPdfNames = new Set(); //memory for pdf
+        let processedImageNames = new Set(); //memory for png or images
 
         pdfTab.addEventListener('click', () => { pdfTab.classList.add('active'); imageTab.classList.remove('active'); pdfContent.classList.add('active'); imageContent.classList.remove('active'); });
         imageTab.addEventListener('click', () => { imageTab.classList.add('active'); pdfTab.classList.remove('active'); imageContent.classList.add('active'); pdfContent.classList.remove('active'); });
@@ -567,7 +570,40 @@ function createDuplicateFileItem(file, type) {
         //supuestamente falta esto
         function handlePdfFileSelect(e) { if (e.target.files.length) handlePdfFiles(e.target.files); }
 
-        function handleImageFiles(files) { const imageFilesArr = Array.from(files).filter(file => /image\/(png|jpeg|jpg)/.test(file.type)); if (imageFilesArr.length === 0) { alert('Please select at least one valid image file (PNG, JPG).'); return; } imageFileList.style.display = 'block'; imageFileList.innerHTML = ''; imageFilesArr.forEach(file => { const fileItem = createFileItem(file, 'image'); imageFileList.appendChild(fileItem); processImageFile(file, fileItem); }); }
+        //function handleImageFiles(files) { const imageFilesArr = Array.from(files).filter(file => /image\/(png|jpeg|jpg)/.test(file.type)); if (imageFilesArr.length === 0) { alert('Please select at least one valid image file (PNG, JPG).'); return; } imageFileList.style.display = 'block'; imageFileList.innerHTML = ''; imageFilesArr.forEach(file => { const fileItem = createFileItem(file, 'image'); imageFileList.appendChild(fileItem); processImageFile(file, fileItem); }); }
+        function handleImageFiles(files) {
+    const imageFilesArr = Array.from(files).filter(file => /image\/(png|jpeg|jpg)/.test(file.type));
+    if (imageFilesArr.length === 0) {
+        alert('Please select at least one valid image file (PNG, JPG).');
+        return;
+    }
+    imageFileList.style.display = 'block';
+    imageFileList.innerHTML = '';
+    
+    imageFilesArr.forEach(file => {
+        // --- INICIO DEL LIMPIADOR DE DUPLICADOS ---
+        if (processedImageNames.has(file.name)) {
+            // Si la imagen ya fue procesada, la ignora y muestra un aviso
+            const duplicateItem = createDuplicateFileItem(file, 'image');
+            imageFileList.appendChild(duplicateItem);
+            return; // Detiene el procesamiento para este archivo
+        }
+        
+        // --- CAMBIO CLAVE: AÑADIMOS EL NOMBRE A LA MEMORIA ---
+        processedImageNames.add(file.name);
+        // --- FIN DEL CAMBIO ---
+
+        const fileItem = createFileItem(file, 'image');
+        imageFileList.appendChild(fileItem);
+        processImageFile(file, fileItem);
+    });
+}
+
+
+
+
+
+
         function processImageFile(file, fileItem) {
             const fileReader = new FileReader();
             fileReader.onload = function(e) {
