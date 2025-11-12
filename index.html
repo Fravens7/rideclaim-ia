@@ -1043,10 +1043,6 @@ function validateTrip(tripInfo, type) {
     return { isValid: false, details: 'Invalid: Unknown file type or status from AI.', direction: null };
 }
         
-/**
- * --- VERSIÓN DE PRUEBA: Mapa Dinámico con Geocodificación ---
- * Intenta usar direcciones reales, pero vuelve a estáticas si falla.
- */
 async function displayMap(fileName, direction, originAddress, destinationAddress) {
     mapContainer.style.display = 'block';
     let mapTitle = document.querySelector('.map-title');
@@ -1060,29 +1056,42 @@ async function displayMap(fileName, direction, originAddress, destinationAddress
     let originCoords, destCoords;
 
     try {
-        // --- INTENTO 1: Geocodificar las direcciones reales ---
-        const cleanOrigin = cleanAddressForGeocoding(originAddress);
-        const cleanDestination = cleanAddressForGeocoding(destinationAddress);       
-        
-        
-        console.log(`📍 Geocodificando: Origen="${originAddress}", Destino="${destinationAddress}"`);
+        // --- INTENTO 1: Geocodificar las direcciones completas ---
+        console.log(`📍 Geocodificando (intento 1): Origen="${originAddress}", Destino="${destinationAddress}"`);
         const [origin, destination] = await Promise.all([
-            geocodeAddress(originAddress),
-            geocodeAddress(destinationAddress)
+            geocodeAddress(cleanAddressForGeocoding(originAddress)),
+            geocodeAddress(cleanAddressForGeocoding(destinationAddress))
         ]);
         originCoords = origin;
         destCoords = destination;
-        console.log(`✅ Geocodificación exitosa: Origen=${JSON.stringify(origin)}, Destino=${JSON.stringify(destination)}`);
+        console.log(`✅ Geocodificación (intento 1) exitosa: Origen=${JSON.stringify(origin)}, Destino=${JSON.stringify(destination)}`);
 
     } catch (error) {
-        console.warn(`⚠️ Falló la geocodificación. Usando coordenadas estáticas. Error: ${error.message}`);
-        // --- FALLBACK: Usar coordenadas estáticas si la geocodificación falla ---
-        if (direction === 'home-to-office') {
-            originCoords = staticLocations.home;
-            destCoords = staticLocations.office;
-        } else {
-            originCoords = staticLocations.office;
-            destCoords = staticLocations.home;
+        console.warn(`⚠️ Falló la geocodificación (intento 1). Intentando con dirección simplificada... Error: ${error.message}`);
+        
+        try {
+            // --- INTENTO 2: Geocodificar solo el corazón de la dirección ---
+            const simpleOrigin = simplifyAddress(originAddress);
+            const simpleDestination = simplifyAddress(destinationAddress);
+            console.log(`📍 Geocodificando (intento 2): Origen="${simpleOrigin}", Destino="${simpleDestination}"`);
+            const [origin, destination] = await Promise.all([
+                geocodeAddress(cleanAddressForGeocoding(simpleOrigin)),
+                geocodeAddress(cleanAddressForGeocoding(simpleDestination))
+            ]);
+            originCoords = origin;
+            destCoords = destination;
+            console.log(`✅ Geocodificación (intento 2) exitosa: Origen=${JSON.stringify(origin)}, Destino=${JSON.stringify(destination)}`);
+
+        } catch (fallbackError) {
+            console.warn(`⚠️ Falló la geocodificación (intento 2). Usando coordenadas estáticas. Error: ${fallbackError.message}`);
+            // --- FALLBACK FINAL: Usar coordenadas estáticas ---
+            if (direction === 'home-to-office') {
+                originCoords = staticLocations.home;
+                destCoords = staticLocations.office;
+            } else {
+                originCoords = staticLocations.office;
+                destCoords = staticLocations.home;
+            }
         }
     }
 
@@ -1115,6 +1124,24 @@ async function displayMap(fileName, direction, originAddress, destinationAddress
     setTimeout(() => {
         map.invalidateSize();
     }, 0);
+}
+
+/**
+ * --- FUNCIÓN AUXILIAR: Simplifica una dirección para un segundo intento ---
+ */
+function simplifyAddress(address) {
+    if (!address) return '';
+    // Extrae las palabras clave conocidas
+    const keywords = ['mireka', 'havelock', '43b', '43d', 'lauries'];
+    const parts = address.toLowerCase().split(',');
+    
+    // Devuelve la primera parte que contenga una palabra clave
+    for (const part of parts) {
+        if (keywords.some(keyword => part.includes(keyword))) {
+            return part.trim();
+        }
+    }
+    return address; // Devuelve la original si no encuentra nada
 }
 
 
