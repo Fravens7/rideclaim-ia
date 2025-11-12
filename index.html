@@ -347,7 +347,7 @@
     
     <div class="main-content">
         <div class="container">
-            <h1>Rideclaim - AI-Powered</h1>
+            <h1>Rideclaim - M1 division</h1>
             
             <div class="tabs">
                 <div class="tab" id="pdf-tab">PDF</div>
@@ -413,6 +413,26 @@
         const staticLocations = {
             home: { lat: 6.89535, lng: 79.85766 }, office: { lat: 6.91379, lng: 79.86533 }
         };
+
+        const zoneKeywords = {
+            home: ['43b', '43d', 'lauries'],
+            office: ['mireka', 'havelock', '324']
+        };
+
+        function findZone(addressText) {
+    if (!addressText) return null;
+    const lowerCaseText = addressText.toLowerCase();
+
+    for (const zoneName in zoneKeywords) {
+        const keywords = zoneKeywords[zoneName];
+        const isThisZone = keywords.some(keyword => lowerCaseText.includes(keyword));
+        if (isThisZone) {
+            return zoneName; // Devuelve 'home' o 'office'
+        }
+    }
+
+    return null; // No se encontró ninguna zona coincidente
+}
         
         const pdfTab = document.getElementById('pdf-tab'); const imageTab = document.getElementById('image-tab');
         const pdfContent = document.getElementById('pdf-content'); const imageContent = document.getElementById('image-content');
@@ -848,51 +868,37 @@ Text:
  * --- VERSIÓN REFACTORIZADA: Lógica Separada para PDF e Imagen ---
  * Dos caminos completamente independientes desde el principio.
  */
+/**
+ * --- VERSIÓN 2: LÓGICA DE VALIDACIÓN CON SEGUNDA OPORTUNIDAD ---
+ * Mantiene la lógica estricta y añade una flexible como respaldo.
+ */
 function validateTrip(tripInfo, type) {
-    // --- CAMINO 1: LÓGICA PARA IMÁGENES ---
+    // --- CAMINO 1: LÓGICA PARA IMÁGENES (sin cambios) ---
     if (type === 'image') {
-        // Primero, revisamos el estado que nos dio la IA.
         if (tripInfo.status === 'invalid') {
             return { isValid: false, details: 'Invalid: Classified as Food/Delivery by AI.', direction: null };
         }
-
         if (tripInfo.status === 'incomplete') {
             return { isValid: false, details: 'Incomplete receipt: Missing price or other data.', direction: null };
         }
-
         if (tripInfo.status === 'valid') {
             const destinationText = (tripInfo.destination || '').toLowerCase().trim();
-
-            // --- REGLA 1: PATRONES PARA DESTINOS VÁLIDOS ---
-            const validPatterns = [
-                /^43b/, // Empieza con "43b"
-                /^43d/, // Empieza con "43d"
-                /^mireka/ // Empieza con "mireka"
-            ];
+            const validPatterns = [ /^43b/, /^43d/, /^mireka/ ];
             const isDestinationValidByPattern = validPatterns.some(pattern => pattern.test(destinationText));
-
             if (isDestinationValidByPattern) {
                 return { isValid: true, details: 'Valid (matches a valid destination pattern)', direction: null };
             }
-
-            // --- REGLA 2: LISTA ESTÁTICA (PARA CASOS ESPECIALES) ---
-            const staticValidDestinations = [ 
-                'colombo 00400'
-            ];
+            const staticValidDestinations = [ 'colombo 00400' ];
             const isDestinationValidByList = staticValidDestinations.some(validDest => destinationText.includes(validDest));
-            
             if (isDestinationValidByList) {
                 return { isValid: true, details: 'Valid (found in static list)', direction: null };
             }
-
-            // --- SI NADA COINCIDE, ES INVÁLIDO ---
             return { isValid: false, details: 'Invalid (Destination does not match any known pattern or list)', direction: null };
         }
     }
 
-    // --- CAMINO 2: LÓGICA PARA PDFs (COMPLETAMENTE SEPARADA) ---
+    // --- CAMINO 2: LÓGICA PARA PDFs (CON SEGUNDA OPORTUNIDAD) ---
     if (type === 'pdf') {
-        // Para PDFs, esperamos que tripInfo tenga 'origin' y 'destination'
         if (!tripInfo.origin || !tripInfo.destination) {
             return { isValid: false, details: 'Could not extract addresses from PDF.', direction: null };
         }
@@ -900,7 +906,7 @@ function validateTrip(tripInfo, type) {
         const originText = tripInfo.origin.trim();
         const destinationText = tripInfo.destination.trim().toLowerCase();
 
-        // Reglas para identificar "Home" y "Office"
+        // --- PRIMERA VALIDACIÓN (Lógica Estricta Actual) ---
         const isHome = (address) => address.startsWith('43');
         const isOffice = (address) => {
             const addr = address.toLowerCase();
@@ -915,15 +921,26 @@ function validateTrip(tripInfo, type) {
         if (isOriginHome && isDestinationOffice) {
             return { isValid: true, details: 'Valid: Home -> Office route.', direction: 'home-to-office' };
         }
-
         if (isOriginOffice && isDestinationHome) {
             return { isValid: true, details: 'Valid: Office -> Home route.', direction: 'office-to-home' };
         }
 
-        return { isValid: false, details: 'Invalid: Addresses do not meet rules.', direction: null };
+        // --- SEGUNDA VALIDACIÓN (Lógica Flexible por Palabras Clave) ---
+        // Solo se ejecuta si la primera validación falló.
+        const originZone = findZone(tripInfo.origin);
+        const destinationZone = findZone(tripInfo.destination);
+
+        if (originZone === 'home' && destinationZone === 'office') {
+            return { isValid: true, details: 'Valid (by keyword match): Home -> Office route.', direction: 'home-to-office' };
+        }
+        if (originZone === 'office' && destinationZone === 'home') {
+            return { isValid: true, details: 'Valid (by keyword match): Office -> Home route.', direction: 'office-to-home' };
+        }
+
+        // --- SI NADA FUNCIONA, ES INVÁLIDO ---
+        return { isValid: false, details: 'Invalid: Addresses do not meet rules after multiple checks.', direction: null };
     }
 
-    // --- CASO POR DEFECTO: Si el tipo no es ni 'image' ni 'pdf' ---
     return { isValid: false, details: 'Invalid: Unknown file type or status from AI.', direction: null };
 }
         
