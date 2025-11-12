@@ -845,7 +845,7 @@ Text:
             const totalMatch = text.match(/Total\s+([\d,.]+)\s+LKR/i);
             // --- INTENTO 2: Respaldo para formatos inusuales (solo si el primero falla) --
             if(!totalMatch){
-                totalMatch = text.match(/Total.*?LKR\s*([\d,.]+)/i);
+                totalMatch = text.match(/Total\s+LKR\s*([\d,.]+)/i);
             }
             const total = totalMatch ? totalMatch[1] : null;
             const validationResult = validateTrip(tripInfo, type);
