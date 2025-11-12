@@ -463,13 +463,12 @@ clearBtn.addEventListener('click', () => {
 
         
         
+              
         
         
         
         
-        
-        
-        function handlePdfFiles(files) {
+function handlePdfFiles(files) {
     const pdfFilesArr = Array.from(files).filter(file => file.type === 'application/pdf');
     if (pdfFilesArr.length === 0) {
         alert('Please select at least one valid PDF file.');
@@ -479,15 +478,18 @@ clearBtn.addEventListener('click', () => {
     pdfFileList.innerHTML = '';
     
     pdfFilesArr.forEach(file => {
-        // --- INICIO DEL LIMPIADOR DE DUPLICADOS ---
+        // --- PASO 1: Revisar si ya fue procesado ---
         if (processedPdfNames.has(file.name)) {
-            // Si el archivo ya fue procesado, lo ignora y muestra un aviso
             const duplicateItem = createDuplicateFileItem(file, 'pdf');
             pdfFileList.appendChild(duplicateItem);
-            return; // Detiene el procesamiento para este archivo
+            return; // Detener el procesamiento para este archivo
         }
-        // --- FIN DEL LIMPIADOR ---
         
+        // --- PASO 2: ¡AÑADIR EL NOMBRE A LA MEMORIA! ---
+        // Esta es la línea clave que probablemente te falta o está en el lugar equivocado.
+        processedPdfNames.add(file.name);
+
+        // --- PASO 3: Procesar el archivo como nuevo ---
         const fileItem = createFileItem(file, 'pdf');
         pdfFileList.appendChild(fileItem);
         processPdfFile(file, fileItem);
