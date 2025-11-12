@@ -13,6 +13,29 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
     <!-- Tesseract.js para OCR -->
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+
+    <!--chart.js para graficos-->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+
+
+    <!--Modal para el grafico-->
+
+    <div id="detailsModal" class="modal">...</div>
+
+<!-- NUEVA MODAL PARA EL GRÁFICO -->
+<div id="chartModal" class="modal">
+    <div class="modal-content" style="max-width: 800px;">
+        <span class="close" id="closeChartBtn">&times;</span>
+        <h2>Daily Trip Analysis</h2>
+        <div style="position: relative; height: 400px; width: 100%;">
+            <canvas id="tripChartCanvas"></canvas>
+        </div>
+    </div>
+</div>
+
+
+
     
     <style>
         body {
@@ -393,6 +416,9 @@
                 </table>
                 <div class="summary" id="summary"></div>
                 <button class="clear-btn" id="clearBtn">Clear results</button>
+                <button class="clear-btn" id="viewChartBtn" style="background-color: #17a2b8; margin-left: 10px;">View Trip Chart</button>
+
+
             </div>
         </div>
     </div>
@@ -894,22 +920,41 @@ Text:
                 if (validationResult.isValid) { fileItem.className = 'file-item success'; fileStatus.className = 'file-status status-success'; fileStatus.textContent = 'Valid'; if (type === 'pdf' && validationResult.direction) displayMap(file.name, validationResult.direction); } 
                 else { fileItem.className = 'file-item invalid'; fileStatus.className = 'file-status status-invalid'; fileStatus.textContent = 'Invalid'; mapContainer.style.display = 'none'; }
             } else { fileItem.className = 'file-item error'; fileStatus.className = 'file-status status-error'; fileStatus.textContent = 'Error: Total not found'; mapContainer.style.display = 'none'; }
+            
+            
+            
+            // ... dentro de processExtractedText ...
+
+// --- NUEVO: Extraer la fecha del viaje ---
+const dateMatch = text.match(/\b(\d{1,2}\s+\w{3})\b/i); // Busca "1 oct", "2 nov", etc.
+const tripDate = dateMatch ? dateMatch[1] : 'Unknown Date';
+
+fileResults.push({ 
+    name: file.name, 
+    type: type, 
+    total: total, 
+    origin: tripInfo.origin || 'Not specified', 
+    destination: tripInfo.destination || 'Not specified', 
+    isValid: validationResult.isValid, 
+    validationDetails: validationResult.details, 
+    text: text,
+    tripDate: tripDate // <-- AÑADE LA FECHA AL OBJETO
+});
+
+updateResultsTable();
+            
+// ... al final de la función updateResultsTable() ...
+summary.innerHTML = `<p>Total files processed: ${fileResults.length}</p><p>Valid trips: ${validCount}</p><p>Invalid trips: ${invalidCount}</p><p>Total LKR sum (valid trips): ${totalSum.toFixed(2)} LKR</p>`;
+
+updateTripChart(); // <-- AÑADE ESTA LÍNEA
+
+
+            
             fileResults.push({ name: file.name, type: type, total: total, origin: tripInfo.origin || 'Not specified', destination: tripInfo.destination || 'Not specified', isValid: validationResult.isValid, validationDetails: validationResult.details, text: text });
             updateResultsTable();
         }
         
-        /**
-         * --- SIMPLIFICADO: La validación ahora es mucho más simple ---
-         * El LLM ya hizo el trabajo duro.
-         */
-/**
- * --- VERSIÓN ACTUALIZADA: La validación ahora maneja el estado "incomplete" ---
- */
-/**
-/**
- * --- VERSIÓN REFACTORIZADA: Lógica Separada para PDF e Imagen ---
- * Dos caminos completamente independientes desde el principio.
- */
+
 /**
  * --- VERSIÓN 2: LÓGICA DE VALIDACIÓN CON SEGUNDA OPORTUNIDAD ---
  * Mantiene la lógica estricta y añade una flexible como respaldo.
@@ -1066,6 +1111,90 @@ function validateTrip(tripInfo, type) {
             });
             summary.innerHTML = `<p>Total files processed: ${fileResults.length}</p><p>Valid trips: ${validCount}</p><p>Invalid trips: ${invalidCount}</p><p>Total LKR sum (valid trips): ${totalSum.toFixed(2)} LKR</p>`;
         }
+
+
+    
+            // --- LÓGICA PARA EL GRÁFICO DE VIAJES ---
+
+const viewChartBtn = document.getElementById('viewChartBtn');
+const chartModal = document.getElementById('chartModal');
+const closeChartBtn = document.getElementById('closeChartBtn');
+let tripChart = null; // Variable para guardar la instancia del gráfico
+
+viewChartBtn.addEventListener('click', () => {
+    chartModal.style.display = 'block';
+    updateTripChart();
+});
+
+closeChartBtn.onclick = () => chartModal.style.display = 'none';
+window.onclick = (event) => { if (event.target == chartModal) chartModal.style.display = 'none'; };
+
+/**
+ * --- FUNCIÓN PRINCIPAL: Actualiza y dibuja el gráfico ---
+ */
+function updateTripChart() {
+    // 1. Filtrar solo los PDFs válidos
+    const validPdfTrips = fileResults.filter(result => result.type === 'pdf' && result.isValid);
+
+    // 2. Contar los viajes por día
+    const tripsPerDay = {};
+    validPdfTrips.forEach(trip => {
+        const day = trip.tripDate;
+        tripsPerDay[day] = (tripsPerDay[day] || 0) + 1;
+    });
+
+    // 3. Preparar los datos para Chart.js
+    const chartLabels = Object.keys(tripsPerDay).sort(); // Días en el eje X
+    const chartData = chartLabels.map(label => tripsPerDay[label]); // Número de viajes en el eje Y
+
+    // 4. Obtener el contexto del canvas
+    const ctx = document.getElementById('tripChartCanvas').getContext('2d');
+
+    // 5. Destruir el gráfico anterior si existe (para actualizarlo)
+    if (tripChart) {
+        tripChart.destroy();
+    }
+
+    // 6. Crear el nuevo gráfico
+    tripChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: chartLabels,
+            datasets: [{
+                label: 'Number of Trips',
+                data: chartData,
+                backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                borderColor: 'rgba(54, 162, 235, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        stepSize: 1 // Asegura que el eje Y muestre números enteros
+                    }
+                }
+            },
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'Valid Trips per Day (PDFs only)',
+                    font: {
+                        size: 16
+                    }
+                }
+            }
+        }
+    });
+}
+
+
+
+
     </script>
 </body>
 </html>
