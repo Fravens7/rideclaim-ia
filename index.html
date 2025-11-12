@@ -481,7 +481,8 @@ clearBtn.addEventListener('click', () => {
     }
     
     apiStatus.style.display = 'none';      
-    processedPdfNames.clear();            
+    processedPdfNames.clear();      //clean pdf memory
+    processedImageNames.clear();   //clean image or png memory           
 }); // <-- AHORA ESTA LLAVE CIERRA CORRECTAMENTE LA FUNCIÓN DEL `addEventListener`
 
         
