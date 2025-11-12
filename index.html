@@ -215,7 +215,6 @@
         }
         .results-container {
             margin-top: 30px;
-            display: none;
         }
         .results-table {
             width: 100%;
@@ -572,7 +571,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let processedPdfNames = new Set();
     let processedImageNames = new Set();
 
-    
+
 
     pdfTab.addEventListener('click', () => { pdfTab.classList.add('active'); imageTab.classList.remove('active'); pdfContent.classList.add('active'); imageContent.classList.remove('active'); });
     imageTab.addEventListener('click', () => { imageTab.classList.add('active'); pdfTab.classList.remove('active'); imageContent.classList.add('active'); pdfContent.classList.remove('active'); });
@@ -606,7 +605,19 @@ document.addEventListener('DOMContentLoaded', () => {
         apiStatus.style.display = 'none';      
         processedPdfNames.clear();            
         processedImageNames.clear();
+
+
+  // --- AÑADE ESTA LÍNEA PARA DEBUGGING ---
+        console.log("🔧 Botón 'Clear Results' presionado. Estado limpio:");
+        console.log("fileResults:", fileResults);
+        console.log("processedPdfNames:", processedPdfNames);
+        console.log("processedImageNames:", processedImageNames);
+
+
     });
+
+
+
 
     // --- INICIALIZAR VENTANAS MODALES Y BOTONES ADICIONALES ---
     const chartModal = document.getElementById('chartModal');
