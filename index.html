@@ -542,40 +542,106 @@
         let processedPdfNames = new Set(); //memory for pdf
         let processedImageNames = new Set(); //memory for png or images
 
-        pdfTab.addEventListener('click', () => { pdfTab.classList.add('active'); imageTab.classList.remove('active'); pdfContent.classList.add('active'); imageContent.classList.remove('active'); });
-        imageTab.addEventListener('click', () => { imageTab.classList.add('active'); pdfTab.classList.remove('active'); imageContent.classList.add('active'); pdfContent.classList.remove('active'); });
-        
-        pdfFiles.addEventListener('change', handlePdfFileSelect);
-        pdfUploadArea.addEventListener('dragover', (e) => { e.preventDefault(); pdfUploadArea.classList.add('dragover'); });
-        pdfUploadArea.addEventListener('dragleave', () => { pdfUploadArea.classList.remove('dragover'); });
-        pdfUploadArea.addEventListener('drop', (e) => { e.preventDefault(); pdfUploadArea.classList.remove('dragover'); if (e.dataTransfer.files.length) handlePdfFiles(e.dataTransfer.files); });
+// --- ESPERAR A QUE EL DOCUMENTO ESTÉ COMPLETAMENTE CARGADO ---
+document.addEventListener('DOMContentLoaded', () => {
+    console.log("✅ DOM Cargado. Inicializando event listeners...");
 
-        imageFiles.addEventListener('change', handleImageFileSelect);
-        imageUploadArea.addEventListener('dragover', (e) => { e.preventDefault(); imageUploadArea.classList.add('dragover'); });
-        imageUploadArea.addEventListener('dragleave', () => { imageUploadArea.classList.remove('dragover'); });
-        imageUploadArea.addEventListener('drop', (e) => { e.preventDefault(); imageUploadArea.classList.remove('dragover'); if (e.dataTransfer.files.length) handleImageFiles(e.dataTransfer.files); });
-        
-        closeBtn.onclick = () => modal.style.display = 'none';
-        window.onclick = (event) => { if (event.target == modal) modal.style.display = 'none'; };
-clearBtn.addEventListener('click', () => {
-    fileResults = [];
-    pdfFileList.innerHTML = ''; 
-    pdfFileList.style.display = 'none';
-    imageFileList.innerHTML = ''; 
-    imageFileList.style.display = 'none';
-    resultsContainer.style.display = 'none'; 
-    resultsBody.innerHTML = ''; 
-    summary.innerHTML = '';
-    mapContainer.innerHTML = ''; 
-    if (map) { 
-      map.remove(); 
-      map = null; 
+    // --- LÓGICA DE PESTAÑAS ---
+    const pdfTab = document.getElementById('pdf-tab');
+    const imageTab = document.getElementById('image-tab');
+    const pdfContent = document.getElementById('pdf-content');
+    const imageContent = document.getElementById('image-content');
+    const pdfUploadArea = document.getElementById('pdfUploadArea');
+    const imageUploadArea = document.getElementById('imageUploadArea');
+    const pdfFiles = document.getElementById('pdfFiles');
+    const imageFiles = document.getElementById('imageFiles');
+    const pdfFileList = document.getElementById('pdfFileList');
+    const imageFileList = document.getElementById('imageFileList');
+    const resultsContainer = document.getElementById('resultsContainer');
+    const resultsBody = document.getElementById('resultsBody');
+    const summary = document.getElementById('summary');
+    const clearBtn = document.getElementById('clearBtn');
+    const mapContainer = document.getElementById('map-container');
+    const modal = document.getElementById('detailsModal');
+    const modalExtractedText = document.getElementById('modalExtractedText');
+    const closeBtn = document.getElementsByClassName('close')[0];
+    const apiStatus = document.getElementById('apiStatus');
+    
+    let fileResults = []; 
+    let map = null; 
+    let processedPdfNames = new Set();
+    let processedImageNames = new Set();
+
+    
+
+    pdfTab.addEventListener('click', () => { pdfTab.classList.add('active'); imageTab.classList.remove('active'); pdfContent.classList.add('active'); imageContent.classList.remove('active'); });
+    imageTab.addEventListener('click', () => { imageTab.classList.add('active'); pdfTab.classList.remove('active'); imageContent.classList.add('active'); pdfContent.classList.remove('active'); });
+    
+    pdfFiles.addEventListener('change', handlePdfFileSelect);
+    pdfUploadArea.addEventListener('dragover', (e) => { e.preventDefault(); pdfUploadArea.classList.add('dragover'); });
+    pdfUploadArea.addEventListener('dragleave', () => { pdfUploadArea.classList.remove('dragover'); });
+    pdfUploadArea.addEventListener('drop', (e) => { e.preventDefault(); pdfUploadArea.classList.remove('dragover'); if (e.dataTransfer.files.length) handlePdfFiles(e.dataTransfer.files); });
+
+    imageFiles.addEventListener('change', handleImageFileSelect);
+    imageUploadArea.addEventListener('dragover', (e) => { e.preventDefault(); imageUploadArea.classList.add('dragover'); });
+    imageUploadArea.addEventListener('dragleave', () => { imageUploadArea.classList.remove('dragover'); });
+    imageUploadArea.addEventListener('drop', (e) => { e.preventDefault(); imageUploadArea.classList.remove('dragover'); if (e.dataTransfer.files.length) handleImageFiles(e.dataTransfer.files); });
+    
+    closeBtn.onclick = () => modal.style.display = 'none';
+    window.onclick = (event) => { if (event.target == modal) modal.style.display = 'none'; };
+    clearBtn.addEventListener('click', () => {
+        fileResults = [];
+        pdfFileList.innerHTML = ''; 
+        pdfFileList.style.display = 'none';
+        imageFileList.innerHTML = ''; 
+        imageFileList.style.display = 'none';
+        resultsContainer.style.display = 'none'; 
+        resultsBody.innerHTML = ''; 
+        summary.innerHTML = '';
+        mapContainer.innerHTML = ''; 
+        if (map) { 
+            map.remove(); 
+            map = null; 
+        }
+        apiStatus.style.display = 'none';      
+        processedPdfNames.clear();            
+        processedImageNames.clear();
+    });
+
+    // --- INICIALIZAR VENTANAS MODALES Y BOTONES ADICIONALES ---
+    const chartModal = document.getElementById('chartModal');
+    const closeChartBtn = document.getElementById('closeChartBtn');
+    const summaryModal = document.getElementById('summaryModal');
+    const closeSummaryBtn = document.getElementById('closeSummaryBtn');
+    let tripChart = null;
+
+    if (chartModal) {
+        closeChartBtn.onclick = () => chartModal.style.display = 'none';
+        window.onclick = (event) => { if (event.target == chartModal) chartModal.style.display = 'none'; };
+    }
+
+    if (summaryModal) {
+        closeSummaryBtn.onclick = () => summaryModal.style.display = 'none';
+        window.onclick = (event) => { if (event.target == summaryModal) summaryModal.style.display = 'none'; };
     }
     
-    apiStatus.style.display = 'none';      
-    processedPdfNames.clear();      //clean pdf memory
-    processedImageNames.clear();   //clean image or png memory           
-}); // <-- AHORA ESTA LLAVE CIERRA CORRECTAMENTE LA FUNCIÓN DEL `addEventListener`
+    const viewChartBtn = document.getElementById('viewChartBtn');
+    const viewSummaryBtn = document.getElementById('viewSummaryBtn');
+
+    if (viewChartBtn) {
+        viewChartBtn.addEventListener('click', () => {
+            chartModal.style.display = 'block';
+            updateTripChart();
+        });
+    }
+
+    if (viewSummaryBtn) {
+        viewSummaryBtn.addEventListener('click', () => {
+            summaryModal.style.display = 'block';
+            updateSummaryTable();
+        });
+    }
+}); // <-- ESTE ES EL COMENTARIO CORRECTO
 
         
         
