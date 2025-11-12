@@ -900,71 +900,72 @@ Text:
             return fileItem; 
         }
         
-        async function processExtractedText(file, fileItem, text, type, tripInfo) {
-            // --- INTENTO 1: Lógica principal para el formato común ---
-            let totalMatch = text.match(/Total\s+([\d,.]+)\s+LKR/i);
-            // --- INTENTO 2: Respaldo para formatos inusuales (solo si el primero falla) --
-            if(!totalMatch){
-                totalMatch = text.match(/Total\s+LKR\s*([\d,.]+)/i);
+/**
+ * --- VERSIÓN LIMPIA Y ORDENADA: Procesa el texto extraído ---
+ */
+async function processExtractedText(file, fileItem, text, type, tripInfo) {
+    // --- PASO 1: Extraer el Total (con respaldo) ---
+    let totalMatch = text.match(/Total\s+([\d,.]+)\s+LKR/i);
+    if (!totalMatch) {
+        totalMatch = text.match(/Total.*?LKR\s*([\d,.]+)/i);
+    }
+    const total = totalMatch ? totalMatch[1] : null;
+
+    // --- PASO 2: Validar el Viaje ---
+    const validationResult = validateTrip(tripInfo, type);
+    const fileStatus = fileItem.querySelector('.file-status');
+    const progressBar = fileItem.querySelector('.progress-bar');
+    if (progressBar) progressBar.style.display = 'none';
+
+    // --- PASO 3: Actualizar la Interfaz del Archivo ---
+    if (total) {
+        const fileTotal = document.createElement('div');
+        fileTotal.className = 'file-total';
+        fileTotal.textContent = `${total} LKR`;
+        fileItem.appendChild(fileTotal);
+
+        if (validationResult.isValid) {
+            fileItem.className = 'file-item success';
+            fileStatus.className = 'file-status status-success';
+            fileStatus.textContent = 'Valid';
+            if (type === 'pdf' && validationResult.direction) {
+                await displayMap(file.name, validationResult.direction, tripInfo.origin, tripInfo.destination);
             }
-            const total = totalMatch ? totalMatch[1] : null;
-            const validationResult = validateTrip(tripInfo, type);
-            const fileStatus = fileItem.querySelector('.file-status');
-            const progressBar = fileItem.querySelector('.progress-bar');
-            if (progressBar) progressBar.style.display = 'none';
-            if (total) {
-                const fileTotal = document.createElement('div'); fileTotal.className = 'file-total'; fileTotal.textContent = `${total} LKR`; fileItem.appendChild(fileTotal);
-                
-                
-                if (validationResult.isValid) {
-                    fileItem.className = 'file-item success';
-                    fileStatus.className = 'file-status status-success';
-                    fileStatus.textContent = 'Valid';
-                    if (type === 'pdf' && validationResult.direction) {
-                        // --- PASAMOS LAS DIRECCIONES REALES AL MAPA ---
-                        await displayMap(file.name, validationResult.direction, tripInfo.origin, tripInfo.destination);
-                    }
-                }
-                
-                
-                
-                else { fileItem.className = 'file-item invalid'; fileStatus.className = 'file-status status-invalid'; fileStatus.textContent = 'Invalid'; mapContainer.style.display = 'none'; }
-            } else { fileItem.className = 'file-item error'; fileStatus.className = 'file-status status-error'; fileStatus.textContent = 'Error: Total not found'; mapContainer.style.display = 'none'; }
-            
-            
-            
-            // ... dentro de processExtractedText ...
-
-// --- NUEVO: Extraer la fecha del viaje ---
-const dateMatch = text.match(/\b(\d{1,2}\s+\w{3})\b/i); // Busca "1 oct", "2 nov", etc.
-const tripDate = dateMatch ? dateMatch[1] : 'Unknown Date';
-
-fileResults.push({ 
-    name: file.name, 
-    type: type, 
-    total: total, 
-    origin: tripInfo.origin || 'Not specified', 
-    destination: tripInfo.destination || 'Not specified', 
-    isValid: validationResult.isValid, 
-    validationDetails: validationResult.details, 
-    text: text,
-    tripDate: tripDate,
-    direction: validationResult.direction // <-- AÑADE LA FECHA AL OBJETO
-});
-
-updateResultsTable();
-            
-// ... al final de la función updateResultsTable() ...
-summary.innerHTML = `<p>Total files processed: ${fileResults.length}</p><p>Valid trips: ${validCount}</p><p>Invalid trips: ${invalidCount}</p><p>Total LKR sum (valid trips): ${totalSum.toFixed(2)} LKR</p>`;
-
-updateTripChart(); // <-- AÑADE ESTA LÍNEA
-
-
-            
-            fileResults.push({ name: file.name, type: type, total: total, origin: tripInfo.origin || 'Not specified', destination: tripInfo.destination || 'Not specified', isValid: validationResult.isValid, validationDetails: validationResult.details, text: text });
-            updateResultsTable();
+        } else {
+            fileItem.className = 'file-item invalid';
+            fileStatus.className = 'file-status status-invalid';
+            fileStatus.textContent = 'Invalid';
+            mapContainer.style.display = 'none';
         }
-        
+    } else {
+        fileItem.className = 'file-item error';
+        fileStatus.className = 'file-status status-error';
+        fileStatus.textContent = 'Error: Total not found';
+        mapContainer.style.display = 'none';
+    }
+
+    // --- PASO 4: Extraer la Fecha del Viaje ---
+    const dateMatch = text.match(/\b(\d{1,2}\s+\w{3})\b/i); // Busca "1 oct", "2 nov", etc.
+    const tripDate = dateMatch ? dateMatch[1] : 'Unknown Date';
+
+    // --- PASO 5: Añadir el Resultado al Array Global ---
+    fileResults.push({
+        name: file.name,
+        type: type,
+        total: total,
+        origin: tripInfo.origin || 'Not specified',
+        destination: tripInfo.destination || 'Not specified',
+        isValid: validationResult.isValid,
+        validationDetails: validationResult.details,
+        text: text,
+        tripDate: tripDate,
+        direction: validationResult.direction
+    });
+
+    // --- PASO 6: Actualizar la Tabla y el Gráfico ---
+    updateResultsTable();
+    updateTripChart();
+}   
 
 /**
  * --- VERSIÓN 2: LÓGICA DE VALIDACIÓN CON SEGUNDA OPORTUNIDAD ---
@@ -1129,12 +1130,10 @@ function cleanAddressForGeocoding(address) {
     if (!address) return '';
     return address
         .replace(/Sri Lanka/gi, '') // Quita el país
-        .replace(/\d{5}/g, '') // Quita códigos postales (ej: 00400)
-        .replace(/Colombo/gi, '') // Quita la ciudad si es redundante
+        .replace(/\b\d{5}\b/g, '') // Quita códigos postales (ej: 00400) solo si son palabras completas
         .replace(/\s+/g, ' ') // Convierte múltiples espacios en uno solo
         .trim();
 }
-
 
 
 
