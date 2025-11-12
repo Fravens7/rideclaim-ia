@@ -199,11 +199,13 @@
             transition: width 0.3s;
         }
         .map-container {
-            height: 400px;
+            width: 425px;
+            height: 702px;
             margin-top: 20px;
             border-radius: 10px;
             border: 1px solid #ddd;
             display: none;
+            z-index:1000;
         }
         .map-title {
             font-size: 1.2em;
@@ -247,7 +249,7 @@
         .modal {
             display: none;
             position: fixed;
-            z-index: 1;
+            z-index: 999;
             left: 0;
             top: 0;
             width: 100%;
@@ -933,8 +935,16 @@ function processExtractedText(file, fileItem, text, type, tripInfo) {
             fileStatus.className = 'file-status status-success';
             fileStatus.textContent = 'Valid';
             if (type === 'pdf' && validationResult.direction) {
-                displayMap(file.name, validationResult.direction, tripInfo.origin, tripInfo.destination);
-            }
+
+            const validPdfTrips = fileResults.filter(r => r.type === 'pdf' && r.isValid);
+        if (validPdfTrips.length === 1) {
+            displayMap(file.name, validationResult.direction, tripInfo.origin, tripInfo.destination);
+        } else {
+            mapContainer.style.display = 'none'; // Ocultar si hay múltiples PDFs
+        }
+
+
+
         } else {
             fileItem.className = 'file-item invalid';
             fileStatus.className = 'file-status status-invalid';
@@ -1044,7 +1054,7 @@ function validateTrip(tripInfo, type) {
  * --- VERSIÓN FINAL Y LIMPIA: Mapa Dinámico Híbrido ---
  * La lógica de fallback ahora está dentro de geocodeAddress.
  */
-async function displayMap(fileName, direction, originAddress, destinationAddress) {
+function displayMap(fileName, direction, originAddress, destinationAddress) {
     mapContainer.style.display = 'block';
     let mapTitle = document.querySelector('.map-title');
     if (!mapTitle) {
@@ -1053,56 +1063,39 @@ async function displayMap(fileName, direction, originAddress, destinationAddress
         mapContainer.prepend(mapTitle);
     }
     mapTitle.textContent = `Trip Map: ${fileName}`;
-
+    
     let originCoords, destCoords;
-
-    try {
-        // --- UN ÚNICO INTENTO: geocodeAddress ahora maneja la lógica híbrida ---
-        console.log(`📍 Obteniendo coordenadas para el viaje...`);
-        const [origin, destination] = await Promise.all([
-            geocodeAddress(originAddress),
-            geocodeAddress(destinationAddress)
-        ]);
-        originCoords = origin;
-        destCoords = destination;
-        console.log(`✅ Coordenadas finales: Origen=${JSON.stringify(origin)}, Destino=${JSON.stringify(destination)}`);
-
-    } catch (error) {
-        console.warn(`⚠️ Falló la geocodificación completa. Usando coordenadas estáticas. Error: ${error.message}`);
-        // --- FALLBACK FINAL: Usar coordenadas estáticas ---
-        if (direction === 'home-to-office') {
-            originCoords = staticLocations.home;
-            destCoords = staticLocations.office;
-        } else {
-            originCoords = staticLocations.office;
-            destCoords = staticLocations.home;
-        }
+    if (direction === 'home-to-office') {
+        originCoords = staticLocations.home;
+        destCoords = staticLocations.office;
+    } else {
+        originCoords = staticLocations.office;
+        destCoords = staticLocations.home;
     }
-
-    // --- DIBUJAR EL MAPA (con las coordenadas obtenidas) ---
+    
     if (!map) {
         map = L.map('map-container').setView([6.9, 79.86], 13);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         }).addTo(map);
     }
-
+    
     map.eachLayer(layer => {
         if (layer instanceof L.Marker || layer instanceof L.Polyline) {
             map.removeLayer(layer);
         }
     });
-
+    
     L.marker(originCoords).addTo(map).bindPopup('Origin').openPopup();
     L.marker(destCoords).addTo(map).bindPopup('Destination');
-
+    
     const lineColor = (direction === 'home-to-office') ? 'blue' : 'green';
     const route = L.polyline([originCoords, destCoords], {
         color: lineColor,
         weight: 5,
         opacity: 0.7
     }).addTo(map);
-
+    
     const group = new L.featureGroup([L.marker(originCoords), L.marker(destCoords)]);
     map.fitBounds(group.getBounds().pad(0.1));
     setTimeout(() => {
@@ -1129,181 +1122,6 @@ function simplifyAddress(address) {
         }
     }
     return address; // Devuelve la original si no encuentra nada
-}
-
-
-
-
-
-
-/**
- * --- FUNCIÓN LIMPIADORA DE DIRECCIONES ---
- * Prepara la dirección para la API de geocodificación.
- */
-function cleanAddressForGeocoding(address) {
-    if (!address) return '';
-    return address
-        .replace(/Sri Lanka/gi, '') // Quita el país
-        .replace(/\b\d{5}\b/g, '') // Quita códigos postales (ej: 00400) solo si son palabras completas
-        .replace(/\s+/g, ' ') // Convierte múltiples espacios en uno solo
-        .trim();
-}
-
-
-
-/**
- * --- NUEVO: Traductor de Direcciones con IA ---
- * Usa la LLM para convertir una dirección compleja en una consulta de búsqueda simple.
- */
-/**
- * --- VERSIÓN CON PAUSA INTELIGENTE: Traductor de Direcciones con IA ---
- * Añade una pausa solo si el error es de límite de velocidad.
- */
-async function translateAddressWithLLM(dirtyAddress) {
-    const prompt = `
-You are a search query optimizer for addresses in Colombo, Sri Lanka.
-Your only job is to take a complex address and simplify it into a clean search string that a geocoding service like Nominatim will understand.
-...
-`;
-
-    try {
-        const response = await fetch('/api/chat-pdf', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prompt })
-        });
-
-        if (!response.ok) {
-            // --- SI EL ERROR ES 429, PAUSA. SINO, LANZA EL ERROR ---
-            if (response.status === 429) {
-                console.log("🛑 Error 429 detectado. Activando pausa inteligente...");
-                await new Promise(resolve => setTimeout(resolve, 1500)); // Pausa de 1.5s
-            } else {
-                throw new Error(`LLM API request failed with status ${response.status}`);
-            }
-        }
-
-        const data = await response.json();
-        if (data.error) {
-            throw new Error(data.error);
-        }
-
-        const translatedQuery = data.message.trim();
-        console.log(`✅ IA tradujo la dirección a: "${translatedQuery}"`);
-        return translatedQuery;
-
-    } catch (error) {
-        console.error(`Error en la traducción con IA: ${error.message}`);
-        throw error;
-    }
-}
-
-
-
-/**
- * --- CEREBRO ESTÁTICO PARA GEOCODIFICACIÓN ---
- * Intenta resolver la dirección usando reglas y palabras clave conocidas.
- * Devuelve una cadena de búsqueda limpia o null si no puede resolverla.
- */
-function parseAddressWithStaticBrain(dirtyAddress) {
-    if (!dirtyAddress) return null;
-
-    const lowerAddress = dirtyAddress.toLowerCase().trim();
-    
-    // Regla 1: Mapeo directo de puntos de interés conocidos
-    const knownLocations = {
-        'mireka tower': 'Mireka Tower, Colombo',
-        'havelock': 'Havelock Rd, Colombo',
-        '43b lauries rd': '43b Lauries Rd, Colombo',
-        '43d lauries rd': '43d Lauries Rd, Colombo',
-        '324 havelock rd': '324 Havelock Rd, Colombo'
-    };
-
-    for (const keyword in knownLocations) {
-        if (lowerAddress.includes(keyword)) {
-            console.log(`✅ Cerebro Estático encontró: "${knownLocations[keyword]}"`);
-            return knownLocations[keyword];
-        }
-    }
-
-    // Regla 2: Si no hay coincidencia directa, intenta extraer palabras clave
-    const parts = lowerAddress.split(',');
-    let searchQuery = '';
-    for (const part of parts) {
-        const cleanedPart = part.trim();
-        if (cleanedPart.includes('mireka') || cleanedPart.includes('havelock') || cleanedPart.includes('lauries')) {
-            searchQuery += cleanedPart + ', ';
-        }
-    }
-    
-    if (searchQuery) {
-        const finalQuery = searchQuery.replace(/sri lanka/gi, '').trim() + ', Colombo';
-        console.log(`✅ Cerebro Estático construyó: "${finalQuery}"`);
-        return finalQuery;
-    }
-
-    console.log(`⚠️ Cerebro Estático no pudo resolver la dirección.`);
-    return null; // Falló, necesita la IA
-}
-
-
-
-
-
-
-
-
-
-
-
-/**
- * --- FUNCIÓN AUXILIAR: Llama a la API de Geocodificación ---
- */
-/**
- * --- VERSIÓN HÍBRIDA: Geocodificación con Traductor IA como Fallback ---
- */
-/**
- * --- VERSIÓN FINAL: Geocodificación con Cerebro Estático y Fallback a IA ---
- */
-async function geocodeAddress(address) {
-    if (!address) return null;
-
-    // --- INTENTO 1: USAR EL CEREBRO ESTÁTICO ---
-    const staticQuery = parseAddressWithStaticBrain(address);
-    if (staticQuery) {
-        try {
-            console.log(`📍 Geocodificando (Cerebro Estático): "${staticQuery}"`);
-            const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(staticQuery)}`);
-            if (!response.ok) throw new Error('Network response was not ok');
-            const data = await response.json();
-            if (data && data.length > 0) {
-                const { lat, lon } = data[0];
-                return { lat, lng: lon };
-            }
-        } catch (error) {
-            console.warn(`⚠️ Falló la geocodificación con Cerebro Estático. Error: ${error.message}`);
-        }
-    }
-
-    // --- INTENTO 2: FALLBACK A LA IA (SOLO SI EL ESTÁTICO FALLÓ) ---
-    console.log(`⚠️ El Cerebro Estático falló. Activando Fallback a la IA...`);
-    try {
-        const translatedQuery = await translateAddressWithLLM(address); // Usamos la función de traducción que ya tienes
-        console.log(`📍 Geocodificando (Fallback IA): "${translatedQuery}"`);
-        const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(translatedQuery)}`);
-        if (!response.ok) throw new Error('Network response was not ok');
-        const data = await response.json();
-        if (data && data.length > 0) {
-            const { lat, lon } = data[0];
-            return { lat, lng: lon };
-        }
-    } catch (error) {
-        console.warn(`⚠️ Falló la geocodificación con Fallback IA. Error: ${error.message}`);
-    }
-    
-    // --- SI TODO FALLA, DEVUELVE NULL PARA QUE SE USEN COORDENADAS ESTÁTICAS ---
-    console.warn(`🚨 Todos los intentos de geocodificación fallaron. Se usarán coordenadas estáticas.`);
-    return null;
 }
 
 
@@ -1356,26 +1174,8 @@ async function geocodeAddress(address) {
                     modalExtractedText.textContent = result.text; 
                     modal.style.display = 'block'; 
                 }; 
-                
-                const viewMapBtn = document.createElement('button');
-                viewMapBtn.className = 'view-details-btn';
-                viewMapBtn.style.marginLeft = '5px'; // Un pequeño espacio
-                viewMapBtn.textContent = 'View on Map';
-                // Solo mostrar el botón si es un PDF válido con dirección
-                if (result.type === 'pdf' && result.isValid && result.origin && result.destination) {
-                     viewMapBtn.onclick = function() {
-                        // Llama a una nueva función que manejará la visualización
-                        displaySpecificTripOnMap(result);
-                    };
-                } else {
-                    viewMapBtn.style.display = 'none'; // Ocultar el botón si no aplica
-                }
-
-
-
-
                 actionsCell.appendChild(viewBtn);
-                actionsCell.appendChild(viewMapBtn);
+                
 
                 row.appendChild(nameCell); row.appendChild(typeCell); row.appendChild(originCell); row.appendChild(destCell); 
                 row.appendChild(totalCell); row.appendChild(validationCell); row.appendChild(actionsCell); 
