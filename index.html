@@ -841,7 +841,7 @@ Text:
         }
         
         function processExtractedText(file, fileItem, text, type, tripInfo) {
-            const totalMatch = text.match(/Total.*?LKR\s*([\d,.]+)/i);
+            const totalMatch = text.match(/Total\s+([\d,.]+)\s+LKR/i);
             const total = totalMatch ? totalMatch[1] : null;
             const validationResult = validateTrip(tripInfo, type);
             const fileStatus = fileItem.querySelector('.file-status');
