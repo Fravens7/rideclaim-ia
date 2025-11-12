@@ -1361,6 +1361,9 @@ window.onclick = (event) => { if (event.target == chartModal) chartModal.style.d
 /**
  * --- VERSIÓN ACTUALIZADA: Gráfico de Barras Apiladas con Fechas Ordenadas ---
  */
+/**
+ * --- VERSIÓN DEFINITIVA Y CORREGIDA: Actualiza el Gráfico de Viajes ---
+ */
 function updateTripChart() {
     // 1. Filtrar solo los PDFs válidos
     const validPdfTrips = fileResults.filter(result => result.type === 'pdf' && result.isValid);
@@ -1377,83 +1380,97 @@ function updateTripChart() {
         }
     });
 
-    // 3. Función auxiliar para ordenar las fechas cronológicamente
+    // 3. Ordenar los días cronológicamente
     function parseDayMonth(dayMonthStr) {
         const parts = dayMonthStr.split(' ');
         const day = parseInt(parts[0], 10);
         const monthMap = { 'jan': 0, 'feb': 1, 'mar': 2, 'apr': 3, 'may': 4, 'jun': 5, 'jul': 6, 'aug': 7, 'sep': 8, 'oct': 9, 'nov': 10, 'dec': 11 };
         const month = monthMap[parts[1].toLowerCase().substring(0, 3)];
-        return new Date(2024, month, day); // El año no importa para el orden
+        return new Date(2024, month, day);
     }
-
-    // 4. Ordenar los días cronológicamente
     const sortedDays = Object.keys(tripsPerDay).sort((a, b) => parseDayMonth(a) - parseDayMonth(b));
     const chartLabels = sortedDays;
     const homeToOfficeData = sortedDays.map(day => tripsPerDay[day]["home-to-office"]);
     const officeToHomeData = sortedDays.map(day => tripsPerDay[day]["office-to-home"]);
 
-    // 5. Destruir el gráfico anterior si existe
-    if (tripChart) {
-        tripChart.destroy();
+    // 4. --- VERIFICACIÓN DE SEGURIDAD ANTES DE USAR CHART.JS ---
+    const canvasElement = document.getElementById('tripChartCanvas');
+    if (!canvasElement) {
+        console.error("🚨 Error Crítico: No se encontró el elemento <canvas> con id 'tripChartCanvas'. Abortando creación del gráfico.");
+        return; // Salir de la función
+    }
+    const ctx = canvasElement.getContext('2d');
+    if (!ctx) {
+        console.error("🚨 Error Crítico: No se pudo obtener el contexto 2D del canvas. Abortando creación del gráfico.");
+        return; // Salir de la función
     }
 
-    // 6. Crear el nuevo gráfico de barras apiladas
-    const ctx = document.getElementById('tripChartCanvas').getContext('2d');
-    tripChart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: chartLabels,
-            datasets: [
-                {
-                    label: 'Home -> Office',
-                    data: homeToOfficeData,
-                    backgroundColor: 'rgba(54, 162, 235, 0.6)', // Azul
-                    borderColor: 'rgba(54, 162, 235, 1)',
-                    borderWidth: 1
-                },
-                {
-                    label: 'Office -> Home',
-                    data: officeToHomeData,
-                    backgroundColor: 'rgba(40, 167, 69, 0.6)', // Verde
-                    borderColor: 'rgba(40, 167, 69, 1)',
-                    borderWidth: 1
-                }
-            ]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-                x: {
-                    stacked: true, // Clave para apilar las barras
-                },
-                y: {
-                    stacked: true, // Clave para apilar las barras
-                    beginAtZero: true,
-                    ticks: {
-                        stepSize: 1 // El eje Y muestra números enteros
+    // 5. --- LÓGICA DE DESTRUCCIÓN Y CREACIÓN MÁS SEGURA ---
+    // Destruir el gráfico anterior si existe y es una instancia válida
+    if (tripChart && typeof tripChart.destroy === 'function') {
+        try {
+            tripChart.destroy();
+        } catch (e) {
+            console.error("Error al destruir el gráfico anterior:", e);
+        }
+    }
+    // Siempre establecer a null antes de crear uno nuevo
+    tripChart = null;
+
+    // 6. Crear el nuevo gráfico dentro de un try...catch
+    try {
+        tripChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: chartLabels,
+                datasets: [
+                    {
+                        label: 'Home -> Office',
+                        data: homeToOfficeData,
+                        backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                        borderColor: 'rgba(54, 162, 235, 1)',
+                        borderWidth: 1
                     },
+                    {
+                        label: 'Office -> Home',
+                        data: officeToHomeData,
+                        backgroundColor: 'rgba(40, 167, 69, 0.6)',
+                        borderColor: 'rgba(40, 167, 69, 1)',
+                        borderWidth: 1
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: { stacked: true },
+                    y: {
+                        stacked: true,
+                        beginAtZero: true,
+                        ticks: { stepSize: 1 }
+                    }
+                },
+                plugins: {
                     title: {
                         display: true,
-                        text: 'Number of Trips'
+                        text: 'Valid Trips per Day (PDFs only)',
+                        font: { size: 16 }
+                    },
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false
                     }
                 }
-            },
-            plugins: {
-                title: {
-                    display: true,
-                    text: 'Daily Trip Pattern (PDFs only)',
-                    font: { size: 16 }
-                },
-                tooltip: {
-                    mode: 'index', // Muestra el tooltip para todo el día
-                    intersect: false
-                }
             }
-        }
-    });
+        });
+        console.log("✅ Gráfico de barras apiladas creado con éxito.");
+    } catch (error) {
+        console.error("🚨 Error al crear el gráfico de Chart.js:", error);
+        // En caso de error, asegúrate de que tripChart sea null para evitar fallos posteriores
+        tripChart = null;
+    }
 }
-
 
 /**
  * --- FUNCIÓN PARA MOSTRAR UN VIAJE ESPECÍFICO EN EL MAPA ---
