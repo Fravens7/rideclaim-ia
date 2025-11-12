@@ -1158,27 +1158,15 @@ function cleanAddressForGeocoding(address) {
  * --- NUEVO: Traductor de Direcciones con IA ---
  * Usa la LLM para convertir una dirección compleja en una consulta de búsqueda simple.
  */
+/**
+ * --- VERSIÓN CON PAUSA INTELIGENTE: Traductor de Direcciones con IA ---
+ * Añade una pausa solo si el error es de límite de velocidad.
+ */
 async function translateAddressWithLLM(dirtyAddress) {
     const prompt = `
 You are a search query optimizer for addresses in Colombo, Sri Lanka.
 Your only job is to take a complex address and simplify it into a clean search string that a geocoding service like Nominatim will understand.
-
-Rules:
-1.  Focus on the most important landmark (e.g., "Mireka Tower", "43d Lauries Rd", "324 Havelock Rd").
-2.  Remove floor numbers, postal codes, and the country "Sri Lanka".
-3.  Keep it short and precise.
-
-Examples:
-- Input: "31st Floor, Mireka Tower, Havelock City Havelock Rd, Colombo 00500, Sri Lanka"
-  Output: "Mireka Tower, Colombo"
-- Input: "43d Lauries Rd, Colombo 00400, Sri Lanka"
-  Output: "43d Lauries Rd, Colombo"
-- Input: "PM 324 Havelock Rd, Colombo 00600, Sri Lanka"
-  Output: "324 Havelock Rd, Colombo"
-
-Now, process this address:
-Input: "${dirtyAddress}"
-Output:
+...
 `;
 
     try {
@@ -1189,7 +1177,13 @@ Output:
         });
 
         if (!response.ok) {
-            throw new Error(`LLM API request failed with status ${response.status}`);
+            // --- SI EL ERROR ES 429, PAUSA. SINO, LANZA EL ERROR ---
+            if (response.status === 429) {
+                console.log("🛑 Error 429 detectado. Activando pausa inteligente...");
+                await new Promise(resolve => setTimeout(resolve, 1500)); // Pausa de 1.5s
+            } else {
+                throw new Error(`LLM API request failed with status ${response.status}`);
+            }
         }
 
         const data = await response.json();
@@ -1197,7 +1191,6 @@ Output:
             throw new Error(data.error);
         }
 
-        // La IA debería devolver solo la consulta limpia
         const translatedQuery = data.message.trim();
         console.log(`✅ IA tradujo la dirección a: "${translatedQuery}"`);
         return translatedQuery;
@@ -1366,8 +1359,27 @@ async function geocodeAddress(address) {
                     modalExtractedText.textContent = result.text; 
                     modal.style.display = 'block'; 
                 }; 
-                actionsCell.appendChild(viewBtn);
                 
+                const viewMapBtn = document.createElement('button');
+                viewMapBtn.className = 'view-details-btn';
+                viewMapBtn.style.marginLeft = '5px'; // Un pequeño espacio
+                viewMapBtn.textContent = 'View on Map';
+                // Solo mostrar el botón si es un PDF válido con dirección
+                if (result.type === 'pdf' && result.isValid && result.origin && result.destination) {
+                     viewMapBtn.onclick = function() {
+                        // Llama a una nueva función que manejará la visualización
+                        displaySpecificTripOnMap(result);
+                    };
+                } else {
+                    viewMapBtn.style.display = 'none'; // Ocultar el botón si no aplica
+                }
+
+
+
+
+                actionsCell.appendChild(viewBtn);
+                actionsCell.appendChild(viewMapBtn);
+
                 row.appendChild(nameCell); row.appendChild(typeCell); row.appendChild(originCell); row.appendChild(destCell); 
                 row.appendChild(totalCell); row.appendChild(validationCell); row.appendChild(actionsCell); 
                 resultsBody.appendChild(row);
@@ -1500,6 +1512,114 @@ function updateTripChart() {
         }
     });
 }
+
+
+/**
+ * --- FUNCIÓN PARA MOSTRAR UN VIAJE ESPECÍFICO EN EL MAPA ---
+ * Añade la ruta a una lista y la muestra en el mapa.
+ */
+function displaySpecificTripOnMap(tripData) {
+    mapContainer.style.display = 'block';
+    let mapTitle = document.querySelector('.map-title');
+    if (!mapTitle) {
+        mapTitle = document.createElement('div');
+        mapTitle.className = 'map-title';
+        mapContainer.prepend(mapTitle);
+    }
+    mapTitle.textContent = `Trip Map: ${tripData.name}`;
+
+    // Inicializa el mapa si no existe
+    if (!map) {
+        map = L.map('map-container').setView([6.9, 79.86], 13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+    }
+
+    // Obtenemos las coordenadas usando nuestra lógica híbrida
+    geocodeAddress(tripData.origin)
+        .then(originCoords => {
+            if (!originCoords) {
+                // Fallback a coordenadas estáticas si la geocodificación falla
+                originCoords = (tripData.direction === 'office-to-home') ? staticLocations.office : staticLocations.home;
+            }
+            geocodeAddress(tripData.destination)
+                .then(destCoords => {
+                    if (!destCoords) {
+                        destCoords = (tripData.direction === 'home-to-office') ? staticLocations.office : staticLocations.home;
+                    }
+                    // Una vez tenemos ambas coordenadas, dibujamos la ruta
+                    drawRouteOnMap(originCoords, destCoords, tripData.direction);
+                })
+                .catch(error => {
+                    console.error('Error geocodificando el destino:', error);
+                    const fallbackDest = (tripData.direction === 'home-to-office') ? staticLocations.office : staticLocations.home;
+                    drawRouteOnMap(originCoords, fallbackDest, tripData.direction);
+                });
+        })
+        .catch(error => {
+            console.error('Error geocodificando el origen:', error);
+            const fallbackOrigin = (tripData.direction === 'office-to-home') ? staticLocations.office : staticLocations.home;
+            geocodeAddress(tripData.destination)
+                .then(destCoords => {
+                    if (!destCoords) {
+                        const fallbackDest = (tripData.direction === 'home-to-office') ? staticLocations.office : staticLocations.home;
+                        drawRouteOnMap(fallbackOrigin, fallbackDest, tripData.direction);
+                    } else {
+                        drawRouteOnMap(fallbackOrigin, destCoords, tripData.direction);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error geocodificando el destino (fallback):', error);
+                    const fallbackDest = (tripData.direction === 'home-to-office') ? staticLocations.office : staticLocations.home;
+                    drawRouteOnMap(fallbackOrigin, fallbackDest, tripData.direction);
+                });
+        });
+}
+
+/**
+ * --- FUNCIÓN AUXILIAR PARA DIBUJAR LA RUTA ---
+ * Limpia el mapa y dibuja la nueva ruta.
+ */
+function drawRouteOnMap(originCoords, destCoords, direction) {
+    // Limpiar capas anteriores
+    map.eachLayer(layer => {
+        if (layer instanceof L.Marker || layer instanceof L.Polyline) {
+            map.removeLayer(layer);
+        }
+    });
+
+    // Añadir marcadores
+    L.marker(originCoords).addTo(map).bindPopup('Origin').openPopup();
+    L.marker(destCoords).addTo(map).bindPopup('Destination');
+
+    // Añadir la línea de ruta
+    const lineColor = (direction === 'home-to-office') ? 'blue' : 'green';
+    const route = L.polyline([originCoords, destCoords], {
+        color: lineColor,
+        weight: 5,
+        opacity: 0.7
+    }).addTo(map);
+
+    // Ajustar la vista del mapa
+    const group = new L.featureGroup([L.marker(originCoords), L.marker(destCoords)]);
+    map.fitBounds(group.getBounds().pad(0.1));
+    setTimeout(() => {
+        map.invalidateSize();
+    }, 0);
+}
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
