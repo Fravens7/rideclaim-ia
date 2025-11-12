@@ -29,7 +29,7 @@ const response = await fetch("https://api.groq.com/openai/v1/chat/completions", 
     "Authorization": `Bearer ${process.env.GROQ_API_KEY_PDFS}`,
   },
   body: JSON.stringify({
-    model: "gpt-oss-120b",
+    model: "llama-3.1-8b-instant",
     messages: [{ role: "user", content: prompt }]
   }),
 });
