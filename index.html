@@ -900,7 +900,7 @@ Text:
             return fileItem; 
         }
         
-        function processExtractedText(file, fileItem, text, type, tripInfo) {
+        async function processExtractedText(file, fileItem, text, type, tripInfo) {
             // --- INTENTO 1: Lógica principal para el formato común ---
             let totalMatch = text.match(/Total\s+([\d,.]+)\s+LKR/i);
             // --- INTENTO 2: Respaldo para formatos inusuales (solo si el primero falla) --
@@ -922,7 +922,7 @@ Text:
                     fileStatus.textContent = 'Valid';
                     if (type === 'pdf' && validationResult.direction) {
                         // --- PASAMOS LAS DIRECCIONES REALES AL MAPA ---
-                        displayMap(file.name, validationResult.direction, tripInfo.origin, tripInfo.destination);
+                        await displayMap(file.name, validationResult.direction, tripInfo.origin, tripInfo.destination);
                     }
                 }
                 
@@ -1060,6 +1060,10 @@ async function displayMap(fileName, direction, originAddress, destinationAddress
 
     try {
         // --- INTENTO 1: Geocodificar las direcciones reales ---
+        const cleanOrigin = cleanAddressForGeocoding(originAddress);
+        const cleanDestination = cleanAddressForGeocoding(destinationAddress);       
+        
+        
         console.log(`📍 Geocodificando: Origen="${originAddress}", Destino="${destinationAddress}"`);
         const [origin, destination] = await Promise.all([
             geocodeAddress(originAddress),
@@ -1111,6 +1115,28 @@ async function displayMap(fileName, direction, originAddress, destinationAddress
         map.invalidateSize();
     }, 0);
 }
+
+
+
+
+
+
+/**
+ * --- FUNCIÓN LIMPIADORA DE DIRECCIONES ---
+ * Prepara la dirección para la API de geocodificación.
+ */
+function cleanAddressForGeocoding(address) {
+    if (!address) return '';
+    return address
+        .replace(/Sri Lanka/gi, '') // Quita el país
+        .replace(/\d{5}/g, '') // Quita códigos postales (ej: 00400)
+        .replace(/Colombo/gi, '') // Quita la ciudad si es redundante
+        .replace(/\s+/g, ' ') // Convierte múltiples espacios en uno solo
+        .trim();
+}
+
+
+
 
 /**
  * --- FUNCIÓN AUXILIAR: Llama a la API de Geocodificación ---
