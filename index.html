@@ -437,7 +437,8 @@
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
         
         const staticLocations = {
-            home: { lat: 6.89535, lng: 79.85766 }, office: { lat: 6.91379, lng: 79.86533 }
+            home: { lat: 6.89535, lng: 79.85766 },
+            office: {  lat: 6.882986650923001, lng: 79.86809890134177 }
         };
 
         const zoneKeywords = {
@@ -705,11 +706,7 @@ function createDuplicateFileItem(file, type) {
             return canvas.toDataURL();
         }
         
-        /**
- * --- VERSIÓN MEJORADA: Función para llamar a la API de Groq ---
- * Esta versión es más robusta y añade mensajes de depuración.
- */
-/**
+
 /**
  * --- VERSIÓN HÍBRIDA DEFINITIVA: Parser JS + LLM Fallback ---
  * Primero usa lógica dura y determinista. La IA es solo un respaldo.
