@@ -17,24 +17,34 @@
     <!--chart.js para graficos-->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-
-
     <!--Modal para el grafico-->
 
     <div id="detailsModal" class="modal">...</div>
 
 <!-- NUEVA MODAL PARA EL GRÁFICO -->
 <div id="chartModal" class="modal">
-    <div class="modal-content" style="max-width: 800px;">
+    <div class="modal-content" style="max-width: 900px;">
         <span class="close" id="closeChartBtn">&times;</span>
-        <h2>Daily Trip Analysis</h2>
-        <div style="position: relative; height: 400px; width: 100%;">
-            <canvas id="tripChartCanvas"></canvas>
+        <h2>M1 Calendar Analysis</h2>
+        <div style="position: relative; width: 100%; overflow-x: auto;">
+            <div id="tripCalendar"></div>
+        </div>
+        <div id="calendarLegend" style="display: flex; justify-content: center; margin-top: 15px;">
+            <div style="display: flex; align-items: center; margin-right: 20px;">
+                <div style="width: 20px; height: 20px; background-color: #28a745; margin-right: 8px;"></div>
+                <span>Home to Office</span>
+            </div>
+            <div style="display: flex; align-items: center; margin-right: 20px;">
+                <div style="width: 20px; height: 20px; background-color: #007bff; margin-right: 8px;"></div>
+                <span>Office to Home</span>
+            </div>
+            <div style="display: flex; align-items: center;">
+                <div style="width: 20px; height: 20px; background-color: #f8f9fa; border: 1px solid #ddd; margin-right: 8px;"></div>
+                <span>No Trip</span>
+            </div>
         </div>
     </div>
 </div>
-
-
 
     
     <style>
@@ -361,6 +371,75 @@
             background-color: #cce5ff;
             color: #004085;
         }
+        
+        /* Estilos para el calendario */
+        .calendar-table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-top: 20px;
+        }
+        .calendar-table th, .calendar-table td {
+            border: 1px solid #ddd;
+            text-align: center;
+            padding: 8px;
+            width: 14.28%; /* 7 columnas */
+        }
+        .calendar-table th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+        }
+        .calendar-table .day-number {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .trip-indicator {
+            width: 14px; /* Tamaño ajustado */
+            height: 14px; /* Tamaño ajustado */
+            display: inline-block;
+            margin: 2px;
+            border-radius: 2px;
+            cursor: pointer;
+        }
+        .home-to-office {
+            background-color: #28a745;
+        }
+        .office-to-home {
+            background-color: #007bff;
+        }
+        .no-trip {
+            background-color: #f8f9fa;
+            border: 1px solid #ddd;
+        }
+        .calendar-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .calendar-nav {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        .calendar-nav:hover {
+            background-color: #0056b3;
+        }
+        
+        /* Estilos para el tooltip */
+        .tooltip {
+            position: absolute;
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            pointer-events: none;
+            z-index: 1000;
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -417,8 +496,6 @@
                 <div class="summary" id="summary"></div>
                 <button class="clear-btn" id="clearBtn">Clear results</button>
                 <button class="clear-btn" id="viewChartBtn" style="background-color: #17a2b8; margin-left: 10px;">View Trip Chart</button>
-
-
             </div>
         </div>
     </div>
@@ -430,6 +507,9 @@
             <div class="extracted-text" id="modalExtractedText"></div>
         </div>
     </div>
+
+    <!-- Tooltip para mostrar la hora del viaje -->
+    <div id="tooltip" class="tooltip"></div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 
@@ -470,6 +550,7 @@
         const modal = document.getElementById('detailsModal'); const modalExtractedText = document.getElementById('modalExtractedText');
         const closeBtn = document.getElementsByClassName('close')[0];
         const apiStatus = document.getElementById('apiStatus');
+        const tooltip = document.getElementById('tooltip');
         
         let fileResults = [];
         let map = null;
@@ -589,7 +670,35 @@ function createDuplicateFileItem(file, type) {
         
         
         
-        function extractTripInfoFromPdf(text) { let origin = null; let destination = null; const timePattern = /(\d{1,2}:\d{2})\s+([a-zA-Z0-9\s,]+Sri Lanka)/g; let match; const addresses = []; while ((match = timePattern.exec(text)) !== null) { addresses.push({ time: match[1], address: match[2].trim() }); } if (addresses.length >= 2) { origin = addresses[0].address; destination = addresses[1].address; } else { const addressPattern = /([a-zA-Z0-9\s,]+Sri Lanka)/g; const allAddresses = []; while ((match = addressPattern.exec(text)) !== null) { allAddresses.push(match[1].trim()); } if (allAddresses.length >= 2) { origin = allAddresses[0]; destination = allAddresses[1]; } } return { origin, destination }; }
+        function extractTripInfoFromPdf(text) { 
+            let origin = null; 
+            let destination = null; 
+            let tripTime = null;
+            
+            const timePattern = /(\d{1,2}:\d{2})\s+([a-zA-Z0-9\s,]+Sri Lanka)/g; 
+            let match; 
+            const addresses = []; 
+            while ((match = timePattern.exec(text)) !== null) { 
+                addresses.push({ time: match[1], address: match[2].trim() }); 
+            } 
+            
+            if (addresses.length >= 2) { 
+                origin = addresses[0].address; 
+                destination = addresses[1].address; 
+                tripTime = addresses[0].time;
+            } else { 
+                const addressPattern = /([a-zA-Z0-9\s,]+Sri Lanka)/g; 
+                const allAddresses = []; 
+                while ((match = addressPattern.exec(text)) !== null) { 
+                    allAddresses.push(match[1].trim()); 
+                } 
+                if (allAddresses.length >= 2) { 
+                    origin = allAddresses[0]; 
+                    destination = allAddresses[1]; 
+                } 
+            } 
+            return { origin, destination, tripTime }; 
+        }
 
         // --- LÓGICA IMAGEN (MODIFICADA) ---
         function handleImageFileSelect(e) { if (e.target.files.length) handleImageFiles(e.target.files); }
@@ -661,7 +770,18 @@ function createDuplicateFileItem(file, type) {
                                 trips.forEach(trip => {
                                     const validationResult = validateTrip(trip, 'image');
                                     if (validationResult.isValid) validTripsFound++;
-                                    fileResults.push({ name: file.name, type: 'image', total: trip.total_lkr, origin: trip.origin || 'Not specified', destination: trip.destination, isValid: validationResult.isValid, validationDetails: validationResult.details, text: text });
+                                    fileResults.push({ 
+                                        name: file.name, 
+                                        type: 'image', 
+                                        total: trip.total_lkr, 
+                                        origin: trip.origin || 'Not specified', 
+                                        destination: trip.destination, 
+                                        isValid: validationResult.isValid, 
+                                        validationDetails: validationResult.details, 
+                                        text: text,
+                                        tripTime: trip.trip_time || null
+                                        // NO se añade tripDate para imágenes
+                                    });
                                 });
                                 fileItem.className = validTripsFound > 0 ? 'file-item success' : 'file-item invalid';
                                 fileStatus.className = `file-status ${validTripsFound > 0 ? 'status-success' : 'status-invalid'}`;
@@ -769,14 +889,11 @@ function cleanDestinationName(rawDestination) {
  * --- FUNCIÓN AUXILIAR: El parser de JavaScript ---
  * Usa regex para encontrar precios y luego lee hacia atrás para encontrar el destino.
  */
-/**
- * --- FUNCIÓN AUXILIAR: El parser de JavaScript (MODIFICADO) ---
- * Ahora usa el cleaner para asegurar que los destinos sean correctos.
- */
 function parseTripsWithJS(text) {
     const trips = [];
     const lines = text.split('\n');
     const priceRegex = /LKR\s*([0-9QOA.]+)/i;
+    const timeRegex = /(\d{1,2}:\d{2}\s*(?:am|pm)?)/i;
 
     const priceLineIndices = [];
     lines.forEach((line, index) => {
@@ -802,6 +919,19 @@ function parseTripsWithJS(text) {
         }
 
         let destination = '';
+        let tripTime = null;
+        
+        // Extraer la hora del viaje
+        for (let j = priceLineIndex - 5; j <= priceLineIndex + 5; j++) {
+            if (j >= 0 && j < lines.length) {
+                const timeMatch = lines[j].match(timeRegex);
+                if (timeMatch) {
+                    tripTime = timeMatch[1];
+                    break;
+                }
+            }
+        }
+        
         for (let j = priceLineIndex - 1; j >= 0; j--) {
             const lineAbove = lines[j].trim();
             if (priceRegex.test(lineAbove) || lineAbove.toLowerCase().includes('activity')) {
@@ -817,7 +947,7 @@ function parseTripsWithJS(text) {
         const cleanDestination = cleanDestinationName(destination);
         
         if (cleanDestination) {
-            trips.push({ destination: cleanDestination, total_lkr, status });
+            trips.push({ destination: cleanDestination, total_lkr, status, trip_time: tripTime });
         }
     }
     
@@ -826,14 +956,14 @@ function parseTripsWithJS(text) {
 
 /**
  * --- FUNCIÓN AUXILIAR: El fallback a la IA (simplificado) ---
- * Solo se llama si el parser JS falla.
+ * Solo se llama si el parser JS falló.
  */
 async function parseTripsWithLLM(ocrText) {
     // Usamos el prompt "few-shot" que ya funcionaba bien
     const prompt = `
-Extract trip data from the following text. Return a JSON array of strings, each in format: "destination|total_lkr|status".
+Extract trip data from the following text. Return a JSON array of strings, each in format: "destination|total_lkr|status|trip_time".
 Max 8 trips.
-Example: ["Mireka Tower|250.00|valid"]
+Example: ["Mireka Tower|250.00|valid|10:30am"]
 
 Text:
 """
@@ -867,11 +997,12 @@ Text:
             if (Array.isArray(stringArray)) {
                 for (const tripString of stringArray) {
                     const parts = tripString.split('|');
-                    if (parts.length === 3) {
+                    if (parts.length >= 3) {
                         tripsData.push({
                             destination: parts[0].trim(),
                             total_lkr: parts[1].trim(),
-                            status: parts[2].trim()
+                            status: parts[2].trim(),
+                            trip_time: parts[3] ? parts[3].trim() : null
                         });
                     }
                 }
@@ -939,7 +1070,8 @@ fileResults.push({
     validationDetails: validationResult.details, 
     text: text,
     tripDate: tripDate,
-    direction: validationResult.direction // <-- AÑADE LA FECHA AL OBJETO
+    direction: validationResult.direction, // <-- AÑADE LA FECHA AL OBJETO
+    tripTime: tripInfo.tripTime // <-- AÑADE LA HORA AL OBJETO
 });
 
 updateResultsTable();
@@ -974,7 +1106,14 @@ function validateTrip(tripInfo, type) {
             const validPatterns = [ /^43b/, /^43d/, /^mireka/ ];
             const isDestinationValidByPattern = validPatterns.some(pattern => pattern.test(destinationText));
             if (isDestinationValidByPattern) {
-                return { isValid: true, details: 'Valid (matches a valid destination pattern)', direction: null };
+                // Determinar la dirección basada en el destino
+                let direction = null;
+                if (destinationText.includes('43b') || destinationText.includes('43d') || destinationText.includes('lauries')) {
+                    direction = 'office-to-home'; // Si va a casa, es oficina a casa
+                } else if (destinationText.includes('mireka') || destinationText.includes('havelock') || destinationText.includes('324')) {
+                    direction = 'home-to-office'; // Si va a la oficina, es casa a oficina
+                }
+                return { isValid: true, details: 'Valid (matches a valid destination pattern)', direction: direction };
             }
             const staticValidDestinations = [ 'colombo 00400' ];
             const isDestinationValidByList = staticValidDestinations.some(validDest => destinationText.includes(validDest));
@@ -1120,118 +1259,201 @@ function validateTrip(tripInfo, type) {
 const viewChartBtn = document.getElementById('viewChartBtn');
 const chartModal = document.getElementById('chartModal');
 const closeChartBtn = document.getElementById('closeChartBtn');
-let tripChart = null; // Variable para guardar la instancia del gráfico
+let currentMonth = new Date().getMonth();
+let currentYear = new Date().getFullYear();
 
 viewChartBtn.addEventListener('click', () => {
     chartModal.style.display = 'block';
-    updateTripChart();
+    updateTripCalendar();
 });
 
 closeChartBtn.onclick = () => chartModal.style.display = 'none';
 window.onclick = (event) => { if (event.target == chartModal) chartModal.style.display = 'none'; };
 
 /**
- * --- FUNCIÓN PRINCIPAL: Actualiza y dibuja el gráfico ---
+ * --- FUNCIÓN PRINCIPAL: Actualiza y dibuja el calendario de viajes ---
  */
-/**
- * --- VERSIÓN ACTUALIZADA: Gráfico de Barras Apiladas con Fechas Ordenadas ---
- */
-function updateTripChart() {
+function updateTripCalendar() {
     // 1. Filtrar solo los PDFs válidos
     const validPdfTrips = fileResults.filter(result => result.type === 'pdf' && result.isValid);
-
-    // 2. Contar los viajes por día y por dirección
-    const tripsPerDay = {};
+    
+    // 2. Agrupar los viajes por día
+    const tripsByDay = {};
     validPdfTrips.forEach(trip => {
         const day = trip.tripDate;
-        if (!tripsPerDay[day]) {
-            tripsPerDay[day] = { "home-to-office": 0, "office-to-home": 0 };
+        if (!tripsByDay[day]) {
+            tripsByDay[day] = [];
         }
-        if (trip.direction) {
-            tripsPerDay[day][trip.direction]++;
-        }
+        tripsByDay[day].push({
+            direction: trip.direction,
+            time: trip.tripTime
+        });
     });
-
-    // 3. Función auxiliar para ordenar las fechas cronológicamente
-    function parseDayMonth(dayMonthStr) {
-        const parts = dayMonthStr.split(' ');
-        const day = parseInt(parts[0], 10);
-        const monthMap = { 'jan': 0, 'feb': 1, 'mar': 2, 'apr': 3, 'may': 4, 'jun': 5, 'jul': 6, 'aug': 7, 'sep': 8, 'oct': 9, 'nov': 10, 'dec': 11 };
-        const month = monthMap[parts[1].toLowerCase().substring(0, 3)];
-        return new Date(2024, month, day); // El año no importa para el orden
-    }
-
-    // 4. Ordenar los días cronológicamente
-    const sortedDays = Object.keys(tripsPerDay).sort((a, b) => parseDayMonth(a) - parseDayMonth(b));
-    const chartLabels = sortedDays;
-    const homeToOfficeData = sortedDays.map(day => tripsPerDay[day]["home-to-office"]);
-    const officeToHomeData = sortedDays.map(day => tripsPerDay[day]["office-to-home"]);
-
-    // 5. Destruir el gráfico anterior si existe
-    if (tripChart) {
-        tripChart.destroy();
-    }
-
-    // 6. Crear el nuevo gráfico de barras apiladas
-    const ctx = document.getElementById('tripChartCanvas').getContext('2d');
-    tripChart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: chartLabels,
-            datasets: [
-                {
-                    label: 'Home -> Office',
-                    data: homeToOfficeData,
-                    backgroundColor: 'rgba(54, 162, 235, 0.6)', // Azul
-                    borderColor: 'rgba(54, 162, 235, 1)',
-                    borderWidth: 1
-                },
-                {
-                    label: 'Office -> Home',
-                    data: officeToHomeData,
-                    backgroundColor: 'rgba(40, 167, 69, 0.6)', // Verde
-                    borderColor: 'rgba(40, 167, 69, 1)',
-                    borderWidth: 1
+    
+    // 3. Generar el calendario HTML
+    const calendarContainer = document.getElementById('tripCalendar');
+    const monthNames = ["January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"];
+    
+    // 4. Crear el encabezado del calendario
+    const calendarHeader = document.createElement('div');
+    calendarHeader.className = 'calendar-header';
+    
+    const prevMonthBtn = document.createElement('button');
+    prevMonthBtn.className = 'calendar-nav';
+    prevMonthBtn.textContent = 'Previous';
+    prevMonthBtn.onclick = () => {
+        currentMonth--;
+        if (currentMonth < 0) {
+            currentMonth = 11;
+            currentYear--;
+        }
+        updateTripCalendar();
+    };
+    
+    const monthYearLabel = document.createElement('h3');
+    monthYearLabel.textContent = `${monthNames[currentMonth]} ${currentYear}`;
+    monthYearLabel.style.textAlign = 'center';
+    monthYearLabel.style.margin = '0';
+    
+    const nextMonthBtn = document.createElement('button');
+    nextMonthBtn.className = 'calendar-nav';
+    nextMonthBtn.textContent = 'Next';
+    nextMonthBtn.onclick = () => {
+        currentMonth++;
+        if (currentMonth > 11) {
+            currentMonth = 0;
+            currentYear++;
+        }
+        updateTripCalendar();
+    };
+    
+    calendarHeader.appendChild(prevMonthBtn);
+    calendarHeader.appendChild(monthYearLabel);
+    calendarHeader.appendChild(nextMonthBtn);
+    
+    // 5. Crear la tabla del calendario
+    const calendarTable = document.createElement('table');
+    calendarTable.className = 'calendar-table';
+    
+    // 6. Crear el encabezado de la tabla (días de la semana)
+    const tableHeader = document.createElement('thead');
+    const headerRow = document.createElement('tr');
+    const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    
+    weekDays.forEach(day => {
+        const th = document.createElement('th');
+        th.textContent = day;
+        headerRow.appendChild(th);
+    });
+    
+    tableHeader.appendChild(headerRow);
+    calendarTable.appendChild(tableHeader);
+    
+    // 7. Crear el cuerpo de la tabla
+    const tableBody = document.createElement('tbody');
+    
+    // 8. Obtener el primer día del mes y el número de días en el mes
+    const firstDay = new Date(currentYear, currentMonth, 1).getDay();
+    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+    
+    // 9. Crear las filas del calendario
+    let date = 1;
+    for (let i = 0; i < 6; i++) {
+        const row = document.createElement('tr');
+        
+        for (let j = 0; j < 7; j++) {
+            const cell = document.createElement('td');
+            
+            if (i === 0 && j < firstDay) {
+                // Celdas vacías antes del primer día del mes
+                cell.textContent = '';
+            } else if (date > daysInMonth) {
+                // Celdas vacías después del último día del mes
+                cell.textContent = '';
+            } else {
+                // Celdas con fechas
+                const dayNumber = document.createElement('div');
+                dayNumber.className = 'day-number';
+                dayNumber.textContent = date;
+                cell.appendChild(dayNumber);
+                
+                // Obtener la fecha en formato "d mes" (ej. "1 nov")
+                const monthAbbrev = monthNames[currentMonth].substring(0, 3).toLowerCase();
+                const dayKey = `${date} ${monthAbbrev}`;
+                
+                // Verificar si hay viajes para este día
+                if (tripsByDay[dayKey]) {
+                    const trips = tripsByDay[dayKey];
+                    
+                    // Crear indicadores para cada dirección
+                    trips.forEach(trip => {
+                        const indicator = document.createElement('div');
+                        indicator.className = 'trip-indicator';
+                        
+                        if (trip.direction === 'home-to-office') {
+                            indicator.classList.add('home-to-office');
+                        } else if (trip.direction === 'office-to-home') {
+                            indicator.classList.add('office-to-home');
+                        }
+                        
+                        // Añadir tooltip con la hora del viaje
+                        if (trip.time) {
+                            indicator.addEventListener('mouseenter', (e) => {
+                                let formattedTime = trip.time;
+                                // Asegurarse de que la hora tenga formato am/pm si no lo tiene
+                                if (!formattedTime.toLowerCase().includes('am') && !formattedTime.toLowerCase().includes('pm')) {
+                                    // Si no tiene am/pm, asumimos que es formato 24h y lo convertimos
+                                    const timeParts = formattedTime.split(':');
+                                    if (timeParts.length === 2) {
+                                        const hour = parseInt(timeParts[0]);
+                                        const minute = timeParts[1];
+                                        const period = hour >= 12 ? 'pm' : 'am';
+                                        const displayHour = hour > 12 ? hour - 12 : (hour === 0 ? 12 : hour);
+                                        formattedTime = `${displayHour}:${minute}${period}`;
+                                    }
+                                }
+                                tooltip.textContent = formattedTime;
+                                tooltip.style.display = 'block';
+                                tooltip.style.left = e.pageX + 10 + 'px';
+                                tooltip.style.top = e.pageY - 30 + 'px';
+                            });
+                            
+                            indicator.addEventListener('mouseleave', () => {
+                                tooltip.style.display = 'none';
+                            });
+                        }
+                        
+                        cell.appendChild(indicator);
+                    });
+                } else {
+                    // No hay viajes para este día
+                    const indicator = document.createElement('div');
+                    indicator.className = 'trip-indicator no-trip';
+                    cell.appendChild(indicator);
                 }
-            ]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-                x: {
-                    stacked: true, // Clave para apilar las barras
-                },
-                y: {
-                    stacked: true, // Clave para apilar las barras
-                    beginAtZero: true,
-                    ticks: {
-                        stepSize: 1 // El eje Y muestra números enteros
-                    },
-                    title: {
-                        display: true,
-                        text: 'Number of Trips'
-                    }
-                }
-            },
-            plugins: {
-                title: {
-                    display: true,
-                    text: 'Daily Trip Pattern (PDFs only)',
-                    font: { size: 16 }
-                },
-                tooltip: {
-                    mode: 'index', // Muestra el tooltip para todo el día
-                    intersect: false
-                }
+                
+                date++;
             }
+            
+            row.appendChild(cell);
         }
-    });
+        
+        tableBody.appendChild(row);
+        
+        // Si ya hemos mostrado todos los días del mes, no necesitamos más filas
+        if (date > daysInMonth) {
+            break;
+        }
+    }
+    
+    calendarTable.appendChild(tableBody);
+    
+    // 10. Limpiar y actualizar el contenedor del calendario
+    calendarContainer.innerHTML = '';
+    calendarContainer.appendChild(calendarHeader);
+    calendarContainer.appendChild(calendarTable);
 }
-
-
-
-
     </script>
 </body>
 </html>
