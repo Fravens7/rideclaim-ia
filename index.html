@@ -548,8 +548,7 @@
         const resultsContainer = document.getElementById('resultsContainer'); const resultsBody = document.getElementById('resultsBody');
         const summary = document.getElementById('summary'); const clearBtn = document.getElementById('clearBtn'); const mapContainer = document.getElementById('map-container');
         const modal = document.getElementById('detailsModal'); const modalExtractedText = document.getElementById('modalExtractedText');
-        const closeDetailsBtn = document.getElementById('closeDetailsBtn');//modificando de "close" a "closeDetailsBtn"1
-        
+        const closeBtn = document.getElementsByClassName('close')[0];
         const apiStatus = document.getElementById('apiStatus');
         const tooltip = document.getElementById('tooltip');
         
@@ -571,9 +570,7 @@
         imageUploadArea.addEventListener('dragleave', () => { imageUploadArea.classList.remove('dragover'); });
         imageUploadArea.addEventListener('drop', (e) => { e.preventDefault(); imageUploadArea.classList.remove('dragover'); if (e.dataTransfer.files.length) handleImageFiles(e.dataTransfer.files); });
         
-        // closeBtn.onclick = () => modal.style.display = 'none';
-        closeDetailsBtn.onclick = () => modal.style.display = 'none';//modificando close 2.
-        
+        closeBtn.onclick = () => modal.style.display = 'none';
         window.onclick = (event) => { if (event.target == modal) modal.style.display = 'none'; };
 clearBtn.addEventListener('click', () => {
     fileResults = [];
