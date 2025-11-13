@@ -779,7 +779,9 @@ function createDuplicateFileItem(file, type) {
                                         isValid: validationResult.isValid, 
                                         validationDetails: validationResult.details, 
                                         text: text,
-                                        tripTime: trip.trip_time || null
+                                        tripTime: trip.trip_time || null,
+                                        tripDate: trip.trip_date || null, // NUEVO: Añadimos la fecha
+                                        direction: validationResult.direction
                                         // NO se añade tripDate para imágenes
                                     });
                                 });
@@ -894,6 +896,8 @@ function parseTripsWithJS(text) {
     const lines = text.split('\n');
     const priceRegex = /LKR\s*([0-9QOA.]+)/i;
     const timeRegex = /(\d{1,2}:\d{2}\s*(?:am|pm)?)/i;
+    // NUEVO: Regex para encontrar la fecha
+    const dateRegex = /\b(\d{1,2}\s+\w{3})\b/i; // Ej: "3 oct"
 
     const priceLineIndices = [];
     lines.forEach((line, index) => {
@@ -920,7 +924,19 @@ function parseTripsWithJS(text) {
 
         let destination = '';
         let tripTime = null;
+        let tripDate = null; // NUEVO: Variable para la fecha
         
+        // Extraer la fecha del viaje
+        for (let j = priceLineIndex - 5; j <= priceLineIndex + 5; j++) {
+            if (j >= 0 && j < lines.length) {
+                const dateMatch = lines[j].match(dateRegex);
+                if (dateMatch) {
+                    tripDate = dateMatch[1];
+                    break;
+                }
+            }
+        }
+
         // Extraer la hora del viaje
         for (let j = priceLineIndex - 5; j <= priceLineIndex + 5; j++) {
             if (j >= 0 && j < lines.length) {
@@ -947,7 +963,7 @@ function parseTripsWithJS(text) {
         const cleanDestination = cleanDestinationName(destination);
         
         if (cleanDestination) {
-            trips.push({ destination: cleanDestination, total_lkr, status, trip_time: tripTime });
+            trips.push({ destination: cleanDestination, total_lkr, status, trip_time: tripTime, trip_date: tripDate }); // NUEVO: Añadimos la fecha
         }
     }
     
@@ -961,9 +977,9 @@ function parseTripsWithJS(text) {
 async function parseTripsWithLLM(ocrText) {
     // Usamos el prompt "few-shot" que ya funcionaba bien
     const prompt = `
-Extract trip data from the following text. Return a JSON array of strings, each in format: "destination|total_lkr|status|trip_time".
+Extract trip data from the following text. Return a JSON array of strings, each in format: "destination|total_lkr|status|trip_time|trip_date".
 Max 8 trips.
-Example: ["Mireka Tower|250.00|valid|10:30am"]
+Example: ["Mireka Tower|250.00|valid|10:30am|3 oct"]
 
 Text:
 """
@@ -1002,7 +1018,8 @@ Text:
                             destination: parts[0].trim(),
                             total_lkr: parts[1].trim(),
                             status: parts[2].trim(),
-                            trip_time: parts[3] ? parts[3].trim() : null
+                            trip_time: parts[3] ? parts[3].trim() : null,
+                            trip_date: parts[4] ? parts[4].trim() : null // NUEVO: Extraer fecha del LLM
                         });
                     }
                 }
@@ -1076,28 +1093,8 @@ fileResults.push({
 
 updateResultsTable();
             
-// // ... al final de la función updateResultsTable() ...
-// summary.innerHTML = `<p>Total files processed: 
-//     ${fileResults.length}</p><p>Valid trips: 
-//     ${validCount}</p><p>Invalid trips:
-//     ${invalidCount}</p><p>Total LKR sum (valid trips):
-//     ${totalSum.toFixed(2)} LKR</p>`;
-
-// updateTripChart(); // <-- AÑADE ESTA LÍNEA
-
-
             
-            // fileResults.push({
-            //     name: file.name,
-            //     type: type, total:
-            //     total, origin:
-            //     tripInfo.origin || 'Not specified',
-            //     destination: tripInfo.destination ||'Not specified',
-            //     isValid: validationResult.isValid,
-            //     validationDetails: validationResult.details,
-            //     text: text });
-            // updateResultsTable();
-}
+        }
         
 
 /**
@@ -1265,6 +1262,8 @@ function validateTrip(tripInfo, type) {
         
             updateTripCalendar();//estamos actualizando esto, antes "updateTripChart();"
 
+            // NUEVO: Llamar a la función de inferencia de horario
+            logInferredSchedule();
 
         }
 
@@ -1471,6 +1470,108 @@ function updateTripCalendar() {
     calendarContainer.appendChild(calendarTable);
 }
 
+
+// ====================================================================
+// NUEVA FUNCIÓN PARA INTUIR EL HORARIO E IMPRIMIR EN CONSOLA
+// ====================================================================
+
+/**
+ * Funciones auxiliares para manejar el tiempo
+ */
+function timeToMinutes(timeStr) {
+    if (!timeStr) return null;
+    const time = timeStr.trim().toLowerCase();
+    const isPM = time.includes('pm');
+    const [hourStr, minuteStr] = time.replace(/\s*(am|pm)/i, '').split(':');
+    let hours = parseInt(hourStr, 10);
+    const minutes = parseInt(minuteStr, 10);
+    if (isPM && hours !== 12) hours += 12;
+    if (!isPM && hours === 12) hours = 0; // Medianoche
+    return hours * 60 + minutes;
+}
+
+function minutesToTime(minutes) {
+    if (minutes === null || isNaN(minutes)) return 'N/A';
+    const totalMinutes = Math.round(minutes);
+    const hours = Math.floor(totalMinutes / 60);
+    const mins = totalMinutes % 60;
+    const period = hours >= 12 ? 'pm' : 'am';
+    const displayHour = hours > 12 ? hours - 12 : (hours === 0 ? 12 : hours);
+    return `${displayHour}:${mins.toString().padStart(2, '0')}${period}`;
+}
+
+/**
+ * Función principal que analiza los resultados y muestra el horario inferido en la consola.
+ */
+function logInferredSchedule() {
+    console.clear(); // Limpiamos la consola para una mejor visualización
+
+    // 1. Filtrar solo los viajes válidos de tipo imagen
+    const validTrips = fileResults.filter(trip => trip.isValid && trip.type === 'image');
+    
+    if (validTrips.length < 2) {
+        console.log("🔍 Schedule Inference: Not enough valid trips to infer a schedule.");
+        return;
+    }
+
+    // 2. Agrupar viajes por día
+    const tripsByDay = {};
+    validTrips.forEach(trip => {
+        // Usamos la fecha si está disponible, si no, agrupamos en 'Unknown'
+        const day = trip.tripDate || 'Unknown';
+        if (!tripsByDay[day]) {
+            tripsByDay[day] = [];
+        }
+        tripsByDay[day].push({
+            direction: trip.direction,
+            time: trip.tripTime
+        });
+    });
+
+    const startTimesInMinutes = [];
+    const endTimesInMinutes = [];
+    let pairedDaysCount = 0;
+    let unpairedTripsCount = 0;
+
+    // 3. Encontrar pares de viajes por día
+    for (const day in tripsByDay) {
+        const dayTrips = tripsByDay[day];
+        const startTrip = dayTrips.find(t => t.direction === 'home-to-office');
+        const endTrip = dayTrips.find(t => t.direction === 'office-to-home');
+
+        if (startTrip && endTrip) {
+            const startMinutes = timeToMinutes(startTrip.time);
+            const endMinutes = timeToMinutes(endTrip.time);
+            if (startMinutes !== null && endMinutes !== null) {
+                startTimesInMinutes.push(startMinutes);
+                endTimesInMinutes.push(endMinutes);
+                pairedDaysCount++;
+            }
+        } else {
+            unpairedTripsCount += dayTrips.length;
+        }
+    }
+
+    // 4. Calcular el horario promedio si hay pares
+    if (startTimesInMinutes.length > 0) {
+        const avgStart = startTimesInMinutes.reduce((a, b) => a + b, 0) / startTimesInMinutes.length;
+        const avgEnd = endTimesInMinutes.reduce((a, b) => a + b, 0) / endTimesInMinutes.length;
+        
+        const schedule = `${minutesToTime(avgStart)}-${minutesToTime(avgEnd)}`;
+
+        // 5. Imprimir el log en la consola
+        console.log("--- Schedule Inference Log ---");
+        console.log(`Total files processed: ${fileResults.length}`);
+        console.log(`Valid trips: ${validTrips.length}`);
+        console.log(`Invalid trips: ${fileResults.length - validTrips.length}`);
+        console.log(`Paired trips found: ${pairedDaysCount}`);
+        console.log(`Unpaired trips found: ${unpairedTripsCount}`);
+        console.log(`Inferred Schedule: ${schedule}`);
+        console.log("----------------------------");
+    } else {
+        console.log("🔍 Schedule Inference: No complete day pairs (home-to-office and office-to-home) found to infer a schedule.");
+    }
+}
 
 
     </script>
