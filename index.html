@@ -1010,6 +1010,87 @@ function cleanDestinationName(rawDestination) {
     return rawDestination.trim();
 }
 
+
+
+
+
+
+/**
+ * --- NUEVA FUNCIÓN DE RESCATE: Parser de Fecha/Hora Flexible (Fuzzy) ---
+ * Intenta extraer fecha y hora usando regex más permisivas para manejar errores del OCR.
+ * @param {string[]} lines - El array de líneas del texto OCR.
+ * @param {number} centerIndex - El índice de la línea "Rebook" o "LKR" desde la cual buscar.
+ * @returns {object} - Un objeto con { trip_date, trip_time }.
+ */
+function extractDateTimeFuzzy(lines, centerIndex) {
+    console.log(`🔬 [FUZZY PARSER] Iniciando búsqueda flexible de fecha/hora alrededor de la línea ${centerIndex}.`);
+
+    // Regex más permisivas para la fecha (busca "Nov6", "7Nov", etc.)
+    const fuzzyDateRegex = /(\d{1,2}\s*\w{3}|\w{3}\s*\d{1,2})/i; 
+    // Regex más permisivas para la hora (busca "410PM", "7-410PM", etc.)
+    const fuzzyTimeRegex = /(\d{1,2}[-:]?\d{2})\s*(am|pm)?/i;
+
+    let tripDate = null;
+    let tripTime = null;
+
+    // Buscar en un rango de líneas alrededor del índice central
+    const searchRange = 5; 
+    for (let i = centerIndex - searchRange; i <= centerIndex + searchRange; i++) {
+        if (i < 0 || i >= lines.length) continue;
+
+        const line = lines[i].trim();
+        
+        // Extraer fecha si aún no se ha encontrado
+        if (!tripDate) {
+            const dateMatch = line.match(fuzzyDateRegex);
+            if (dateMatch) {
+                tripDate = dateMatch[1].replace(/\s+/g, ' ').trim(); // Limpia espacios
+                console.log(`🔬 [FUZZY PARSER] Posible fecha encontrada: "${tripDate}" en la línea ${i}`);
+            }
+        }
+
+        // Extraer hora si aún no se ha encontrado
+        if (!tripTime) {
+            const timeMatch = line.match(fuzzyTimeRegex);
+            if (timeMatch) {
+                let timePart = timeMatch[1];
+                const period = timeMatch[2] || ''; // am/pm si existe
+                
+                // Intentar formatear la hora para que sea consistente (ej. "410PM" -> "4:10PM")
+                if (!timePart.includes(':')) {
+                    const timeDigits = timePart.replace(/[^0-9]/g, '');
+                    if (timeDigits.length === 3) {
+                        timePart = `${timeDigits[0]}:${timeDigits.substring(1)}`;
+                    } else if (timeDigits.length === 4) {
+                        timePart = `${timeDigits.substring(0, 2)}:${timeDigits.substring(2)}`;
+                    }
+                }
+                tripTime = `${timePart}${period}`.trim();
+                console.log(`🔬 [FUZZY PARSER] Posible hora encontrada: "${tripTime}" en la línea ${i}`);
+            }
+        }
+
+        // Si ya encontramos ambas, no hay que seguir buscando
+        if (tripDate && tripTime) {
+            break;
+        }
+    }
+
+    console.log(`🔬 [FUZZY PARSER] Resultado -> Fecha: "${tripDate}", Hora: "${tripTime}"`);
+    return { trip_date: tripDate, trip_time: tripTime };
+}
+
+
+
+
+
+
+
+
+
+
+
+
 /**
  * --- FUNCIÓN AUXILIAR: El parser de JavaScript ---
  * Usa regex para encontrar precios y luego lee hacia atrás para encontrar el destino.
@@ -1056,6 +1137,21 @@ function parseTripsWithJS(text) {
                 }
             }
         }
+        //anadiendo bloques nuevos para parsetripswithjs
+        // --- NUEVO: INTENTO DE RESCATE SI FALLÓ EL PARSEO ESTRICTO ---
+        if (!tripDate || !tripTime) {
+            console.warn(`⚠️ [PARSER] Fallo en extracción estricta para fecha/hora. Activando parser de rescate.`);
+            const fuzzyResult = extractDateTimeFuzzy(lines, priceLineIndex);
+            if (!tripDate) tripDate = fuzzyResult.trip_date;
+            if (!tripTime) tripTime = fuzzyResult.trip_time;
+        }
+
+
+
+
+
+
+
         
         for (let j = priceLineIndex - 1; j >= 0; j--) {
             const lineAbove = lines[j].trim();
