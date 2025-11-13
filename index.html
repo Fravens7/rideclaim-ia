@@ -889,19 +889,11 @@ function cleanDestinationName(rawDestination) {
  * --- FUNCIÓN AUXILIAR: El parser de JavaScript ---
  * Usa regex para encontrar precios y luego lee hacia atrás para encontrar el destino.
  */
-/**
-/**
- * --- FUNCIÓN AUXILIAR: El parser de JavaScript (Versión 2.1 Corregida) ---
- * Busca destinos tanto hacia atrás como hacia adelante de una línea de precio.
- * Mantiene la lógica para detectar recibos incompletos.
- */
 function parseTripsWithJS(text) {
     const trips = [];
     const lines = text.split('\n');
     const priceRegex = /LKR\s*([0-9QOA.]+)/i;
     const timeRegex = /(\d{1,2}:\d{2}\s*(?:am|pm)?)/i;
-    const dateRegex = /\b(\d{1,2}\s+\w{3})\b/i; // Ej: "3 oct"
-    const rebookRegex = /rebook/i;
 
     const priceLineIndices = [];
     lines.forEach((line, index) => {
@@ -912,7 +904,6 @@ function parseTripsWithJS(text) {
 
     const relevantPriceLines = priceLineIndices.slice(0, 8);
 
-    // --- PRIMER PASO: Procesar todos los viajes COMPLETOS ---
     for (let i = 0; i < relevantPriceLines.length; i++) {
         const priceLineIndex = relevantPriceLines[i];
         const priceLine = lines[priceLineIndex];
@@ -929,19 +920,7 @@ function parseTripsWithJS(text) {
 
         let destination = '';
         let tripTime = null;
-        let tripDate = null;
         
-        // Extraer la fecha del viaje
-        for (let j = priceLineIndex - 5; j <= priceLineIndex + 5; j++) {
-            if (j >= 0 && j < lines.length) {
-                const dateMatch = lines[j].match(dateRegex);
-                if (dateMatch) {
-                    tripDate = dateMatch[1];
-                    break;
-                }
-            }
-        }
-
         // Extraer la hora del viaje
         for (let j = priceLineIndex - 5; j <= priceLineIndex + 5; j++) {
             if (j >= 0 && j < lines.length) {
@@ -953,8 +932,6 @@ function parseTripsWithJS(text) {
             }
         }
         
-        // --- LÓGICA MEJORADA PARA ENCONTRAR EL DESTINO ---
-        // 1. Buscar hacia atrás (lógica original)
         for (let j = priceLineIndex - 1; j >= 0; j--) {
             const lineAbove = lines[j].trim();
             if (priceRegex.test(lineAbove) || lineAbove.toLowerCase().includes('activity')) {
@@ -966,77 +943,16 @@ function parseTripsWithJS(text) {
             destination = lineAbove + ' ' + destination;
         }
         
-        // 2. SI NO SE ENCONTRÓ HACIA ATRÁS, BUSCAR HACIA ADELANTE (NUEVO)
-        if (!destination) {
-            for (let j = priceLineIndex + 1; j < lines.length; j++) {
-                const lineBelow = lines[j].trim();
-                // Detenerse si encontramos otro precio, "activity" o "rebook"
-                if (priceRegex.test(lineBelow) || lineBelow.toLowerCase().includes('activity') || rebookRegex.test(lineBelow)) {
-                    break;
-                }
-                const cleaned = cleanDestinationName(lineBelow);
-                if (cleaned) {
-                    destination = cleaned;
-                    break;
-                }
-            }
-        }
-        
+        // --- CAMBIO CLAVE: AQUÍ USAMOS EL LIMPIADOR ---
         const cleanDestination = cleanDestinationName(destination);
         
         if (cleanDestination) {
-            trips.push({ destination: cleanDestination, total_lkr, status, trip_time: tripTime, trip_date: tripDate });
+            trips.push({ destination: cleanDestination, total_lkr, status, trip_time: tripTime });
         }
     }
-
-    // --- SEGUNDO PASO para RECIBOS INCOMPLETOS (lógica anterior) ---
-    const processedRanges = priceLineIndices.map(index => ({ start: index - 5, end: index + 5 }));
-
-    for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (!rebookRegex.test(line)) continue;
-
-        const isAlreadyProcessed = processedRanges.some(range => i >= range.start && i <= range.end);
-        if (isAlreadyProcessed) continue;
-
-        let destination = '';
-        let tripTime = null;
-        let tripDate = null;
-
-        for (let j = i - 1; j >= 0; j--) {
-            const lineAbove = lines[j].trim();
-            if (rebookRegex.test(lineAbove) || lineAbove.toLowerCase().includes('activity')) break;
-            if (/\d{1,2}:\d{2}|^[~©¢&]/.test(lineAbove) || lineAbove.length < 2) continue;
-            destination = lineAbove + ' ' + destination;
-        }
-
-        for (let j = i - 5; j <= i + 5; j++) {
-            if (j >= 0 && j < lines.length) {
-                const dateMatch = lines[j].match(dateRegex);
-                if (dateMatch) { tripDate = dateMatch[1]; break; }
-            }
-        }
-        for (let j = i - 5; j <= i + 5; j++) {
-            if (j >= 0 && j < lines.length) {
-                const timeMatch = lines[j].match(timeRegex);
-                if (timeMatch) { tripTime = timeMatch[1]; break; }
-            }
-        }
-
-        const cleanDestination = cleanDestinationName(destination);
-        if (cleanDestination) {
-            trips.push({ destination: cleanDestination, total_lkr: null, status: 'incomplete', trip_time: tripTime, trip_date: tripDate });
-        }
-    }
-
+    
     return trips;
 }
-
-
-
-
-
-
 
 /**
  * --- FUNCIÓN AUXILIAR: El fallback a la IA (simplificado) ---
