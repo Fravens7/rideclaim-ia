@@ -825,20 +825,84 @@ function createDuplicateFileItem(file, type) {
             return canvas.toDataURL();
         }
         
+
+
+
+// ====================================================================
+// NUEVAS FUNCIONES DE SUPERVISIÓN (NO INVASIVAS)
+// ====================================================================
+
+/**
+ * Cuenta cuántas veces aparece la palabra "Rebook" en el texto.
+ * @param {string} text - El texto crudo del OCR.
+ * @returns {number} - El número de "Rebooks" encontrados.
+ */
+function superviseParsing(text) {
+    const rebookRegex = /rebook/gi;
+    const matches = text.match(rebookRegex);
+    return matches ? matches.length : 0;
+}
+
+/**
+ * Imprime en la consola todas las líneas que contienen "Rebook" y su contexto.
+ * Esto ayuda a identificar visualmente los recibos incompletos.
+ * @param {string} text - El texto crudo del OCR.
+ */
+function logAllRebooksWithContext(text) {
+    const lines = text.split('\n');
+    console.log("⚠️ [SUPERVISIÓN] Posibles recibos incompletos detectados. Revisa las siguientes líneas:");
+    
+    lines.forEach((line, index) => {
+        if (line.toLowerCase().includes('rebook')) {
+            console.log(`--------------------------------------------------`);
+            console.log(`Línea ${index - 1}: ${lines[index - 1] || 'N/A'}`);
+            console.log(`Línea ${index}   : ${line.trim()}`); // La línea con "Rebook"
+            console.log(`Línea ${index + 1}: ${lines[index + 1] || 'N/A'}`);
+            console.log(`--------------------------------------------------`);
+        }
+    });
+}
+
+
+
+
+
+
+
         /**
  * --- VERSIÓN MEJORADA: Función para llamar a la API de Groq ---
  * Esta versión es más robusta y añade mensajes de depuración.
  */
 /**
 /**
+ * 
+ * 
+ * 
  * --- VERSIÓN HÍBRIDA DEFINITIVA: Parser JS + LLM Fallback ---
  * Primero usa lógica dura y determinista. La IA es solo un respaldo.
  */
+/**
+ * --- VERSIÓN HÍBRIDA DEFINITIVA: Parser JS + LLM Fallback + Supervisión ---
+ * Primero usa lógica dura y determinista. La IA es solo un respaldo.
+ * AÑADIDO: Una capa de supervisión para detectar recibos incompletos.
+ */
 async function extractTripsWithLLM(ocrText) {
-    console.log("🚀 Iniciando Parser Híbrido...");
+    console.log("🚀 Iniciando Parser Híbrido con Supervisión...");
+
+    // --- NUEVO: PASO DE SUPERVISIÓN ---
+    const rebookCount = superviseParsing(ocrText);
+    console.log(`🔍 [SUPERVISIÓN] Se encontraron ${rebookCount} palabras "Rebook" en el texto.`);
 
     // --- PASO 1: PARSER DETERMINISTA DE JAVASCRIPT ---
     const jsTrips = parseTripsWithJS(ocrText);
+
+    // --- NUEVO: COMPARACIÓN DE SUPERVISIÓN ---
+    if (rebookCount > jsTrips.length) {
+        console.warn(`⚠️ [SUPERVISIÓN] ¡Inconsistencia detectada! Se esperaban ${rebookCount} viajes, pero el parser solo extrajo ${jsTrips.length}.`);
+        console.warn(`⚠️ [SUPERVISIÓN] Esto indica que hay ${rebookCount - jsTrips.length} recibo(s) incompleto(s) sin precio LKR.`);
+        // Llama a la función que imprime el contexto en la consola
+        logAllRebooksWithContext(ocrText);
+    }
 
     if (jsTrips.length > 0) {
         console.log(`✅ Parser JS encontró ${jsTrips.length} viajes. No se necesita la IA.`);
@@ -849,6 +913,15 @@ async function extractTripsWithLLM(ocrText) {
     console.log("⚠️ El parser JS no encontró viajes. Activando fallback a la IA...");
     return await parseTripsWithLLM(ocrText);
 }
+
+
+
+
+
+
+
+
+
 
 /**
  * --- NUEVA FUNCIÓN: LIMPIADOR DE NOMBRES DE DESTINO ---
