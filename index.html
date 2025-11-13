@@ -1500,6 +1500,35 @@ function minutesToTime(minutes) {
     return `${displayHour}:${mins.toString().padStart(2, '0')}${period}`;
 }
 
+// ====================================================================
+// VERSIÓN DE DEPURACIÓN: Función para intuir el horario e imprimir en consola
+// ====================================================================
+
+/**
+ * Funciones auxiliares para manejar el tiempo
+ */
+function timeToMinutes(timeStr) {
+    if (!timeStr) return null;
+    const time = timeStr.trim().toLowerCase();
+    const isPM = time.includes('pm');
+    const [hourStr, minuteStr] = time.replace(/\s*(am|pm)/i, '').split(':');
+    let hours = parseInt(hourStr, 10);
+    const minutes = parseInt(minuteStr, 10);
+    if (isPM && hours !== 12) hours += 12;
+    if (!isPM && hours === 12) hours = 0; // Medianoche
+    return hours * 60 + minutes;
+}
+
+function minutesToTime(minutes) {
+    if (minutes === null || isNaN(minutes)) return 'N/A';
+    const totalMinutes = Math.round(minutes);
+    const hours = Math.floor(totalMinutes / 60);
+    const mins = totalMinutes % 60;
+    const period = hours >= 12 ? 'pm' : 'am';
+    const displayHour = hours > 12 ? hours - 12 : (hours === 0 ? 12 : hours);
+    return `${displayHour}:${mins.toString().padStart(2, '0')}${period}`;
+}
+
 /**
  * Función principal que analiza los resultados y muestra el horario inferido en la consola.
  */
@@ -1509,6 +1538,11 @@ function logInferredSchedule() {
     // 1. Filtrar solo los viajes válidos de tipo imagen
     const validTrips = fileResults.filter(trip => trip.isValid && trip.type === 'image');
     
+    // --- INICIO DE LOS LOGS DE DEPURACIÓN ---
+    console.log("🐞 [DEBUG] Total de viajes válidos (imágenes) encontrados:", validTrips.length);
+    console.log("🐞 [DEBUG] Contenido de 'validTrips':", validTrips);
+    // --- FIN DE LOS LOGS DE DEPURACIÓN ---
+
     if (validTrips.length < 2) {
         console.log("🔍 Schedule Inference: Not enough valid trips to infer a schedule.");
         return;
@@ -1518,7 +1552,7 @@ function logInferredSchedule() {
     const tripsByDay = {};
     validTrips.forEach(trip => {
         // Usamos la fecha si está disponible, si no, agrupamos en 'Unknown'
-        const day = trip.tripDate || 'Unknown';
+        const day = trip.tripDate || 'Unknown Date';
         if (!tripsByDay[day]) {
             tripsByDay[day] = [];
         }
@@ -1527,6 +1561,11 @@ function logInferredSchedule() {
             time: trip.tripTime
         });
     });
+
+    // --- INICIO DE LOS LOGS DE DEPURACIÓN ---
+    console.log("🐞 [DEBUG] Viajes agrupados por día (tripsByDay):", tripsByDay);
+    // --- FIN DE LOS LOGS DE DEPURACIÓN ---
+
 
     const startTimesInMinutes = [];
     const endTimesInMinutes = [];
@@ -1539,6 +1578,13 @@ function logInferredSchedule() {
         const startTrip = dayTrips.find(t => t.direction === 'home-to-office');
         const endTrip = dayTrips.find(t => t.direction === 'office-to-home');
 
+        // --- INICIO DE LOS LOGS DE DEPURACIÓN ---
+        console.log(`🐞 [DEBUG] Analizando día: '${day}'`);
+        console.log(`🐞 [DEBUG]   - Viajes de este día:`, dayTrips);
+        console.log(`🐞 [DEBUG]   - Viaje de ida encontrado:`, startTrip);
+        console.log(`🐞 [DEBUG]   - Viaje de vuelta encontrado:`, endTrip);
+        // --- FIN DE LOS LOGS DE DEPURACIÓN ---
+
         if (startTrip && endTrip) {
             const startMinutes = timeToMinutes(startTrip.time);
             const endMinutes = timeToMinutes(endTrip.time);
@@ -1546,9 +1592,11 @@ function logInferredSchedule() {
                 startTimesInMinutes.push(startMinutes);
                 endTimesInMinutes.push(endMinutes);
                 pairedDaysCount++;
+                console.log(`✅ [DEBUG] ¡Par encontrado para el día '${day}'!`);
             }
         } else {
             unpairedTripsCount += dayTrips.length;
+            console.log(`❌ [DEBUG] No se encontró un par completo para el día '${day}'.`);
         }
     }
 
