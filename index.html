@@ -1077,15 +1077,15 @@ fileResults.push({
 updateResultsTable();
             
 // ... al final de la función updateResultsTable() ...
-summary.innerHTML = `<p>Total files processed: ${fileResults.length}</p><p>Valid trips: ${validCount}</p><p>Invalid trips: ${invalidCount}</p><p>Total LKR sum (valid trips): ${totalSum.toFixed(2)} LKR</p>`;
+//summary.innerHTML = `<p>Total files processed: ${fileResults.length}</p><p>Valid trips: ${validCount}</p><p>Invalid trips: ${invalidCount}</p><p>Total LKR sum (valid trips): ${totalSum.toFixed(2)} LKR</p>`;
 
-updateTripChart(); // <-- AÑADE ESTA LÍNEA
+//updateTripChart(); // <-- AÑADE ESTA LÍNEA
 
 
             
-            fileResults.push({ name: file.name, type: type, total: total, origin: tripInfo.origin || 'Not specified', destination: tripInfo.destination || 'Not specified', isValid: validationResult.isValid, validationDetails: validationResult.details, text: text });
-            updateResultsTable();
-        }
+            //fileResults.push({ name: file.name, type: type, total: total, origin: tripInfo.origin || 'Not specified', destination: tripInfo.destination || 'Not specified', isValid: validationResult.isValid, validationDetails: validationResult.details, text: text });
+            //updateResultsTable();
+        //}
         
 
 /**
