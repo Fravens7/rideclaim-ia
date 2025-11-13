@@ -761,11 +761,23 @@ function createDuplicateFileItem(file, type) {
                         extractTripsWithLLM(text)
                             .then(trips => {
                                 console.log("Structured Data from LLM:", trips);
+                                // NUEVO: Log para diagnosticar la extracción de fecha y hora
+                                console.log("🕒 [DIAGNÓSTICO] Fecha y Hora de todos los viajes extraídos:");
+                                trips.forEach((trip, index) => {
+                                    console.log(`  - Viaje ${index + 1}: Destino="${trip.destination}", Fecha="${trip.trip_date}", Hora="${trip.trip_time}"`);
+                                });                                
+
+
+
                                 
                                 // Ocultar estado de procesamiento
                                 apiStatus.style.display = 'none';
                                 
-                                const fileDetails = document.createElement('div'); fileDetails.className = 'file-details'; fileDetails.textContent = `${trips.length} trip(s) found.`; fileItem.appendChild(fileDetails);
+                                const fileDetails = document.createElement('div');
+                                fileDetails.className = 'file-details';
+                                fileDetails.textContent = `${trips.length} trip(s) found.`;
+                                fileItem.appendChild(fileDetails);
+
                                 let validTripsFound = 0;
                                 trips.forEach(trip => {
                                     const validationResult = validateTrip(trip, 'image');
