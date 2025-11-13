@@ -889,11 +889,18 @@ function cleanDestinationName(rawDestination) {
  * --- FUNCIÓN AUXILIAR: El parser de JavaScript ---
  * Usa regex para encontrar precios y luego lee hacia atrás para encontrar el destino.
  */
+/**
+ * --- FUNCIÓN AUXILIAR: El parser de JavaScript (Versión 2.0 con Detección de Incompletos) ---
+ * Usa regex para encontrar precios y luego lee hacia atrás para encontrar el destino.
+ * AÑADIDO: Un segundo pase para encontrar recibos incompletos que tienen "Rebook" pero no precio.
+ */
 function parseTripsWithJS(text) {
     const trips = [];
     const lines = text.split('\n');
     const priceRegex = /LKR\s*([0-9QOA.]+)/i;
     const timeRegex = /(\d{1,2}:\d{2}\s*(?:am|pm)?)/i;
+    const dateRegex = /\b(\d{1,2}\s+\w{3})\b/i; // Ej: "3 oct"
+    const rebookRegex = /rebook/i; // NUEVO: Regex para encontrar "Rebook"
 
     const priceLineIndices = [];
     lines.forEach((line, index) => {
@@ -904,6 +911,7 @@ function parseTripsWithJS(text) {
 
     const relevantPriceLines = priceLineIndices.slice(0, 8);
 
+    // --- PRIMER PASO: Procesar todos los viajes COMPLETOS (lógica original) ---
     for (let i = 0; i < relevantPriceLines.length; i++) {
         const priceLineIndex = relevantPriceLines[i];
         const priceLine = lines[priceLineIndex];
@@ -913,14 +921,26 @@ function parseTripsWithJS(text) {
 
         let status = 'valid';
         if (priceLine.toLowerCase().includes('canceled')) {
-            status = 'valid';
+            status = 'valid'; // O 'canceled' si prefieres
         } else if (priceLine.toLowerCase().includes('view store')) {
             status = 'invalid';
         }
 
         let destination = '';
         let tripTime = null;
+        let tripDate = null;
         
+        // Extraer la fecha del viaje
+        for (let j = priceLineIndex - 5; j <= priceLineIndex + 5; j++) {
+            if (j >= 0 && j < lines.length) {
+                const dateMatch = lines[j].match(dateRegex);
+                if (dateMatch) {
+                    tripDate = dateMatch[1];
+                    break;
+                }
+            }
+        }
+
         // Extraer la hora del viaje
         for (let j = priceLineIndex - 5; j <= priceLineIndex + 5; j++) {
             if (j >= 0 && j < lines.length) {
@@ -943,16 +963,97 @@ function parseTripsWithJS(text) {
             destination = lineAbove + ' ' + destination;
         }
         
-        // --- CAMBIO CLAVE: AQUÍ USAMOS EL LIMPIADOR ---
         const cleanDestination = cleanDestinationName(destination);
         
         if (cleanDestination) {
-            trips.push({ destination: cleanDestination, total_lkr, status, trip_time: tripTime });
+            trips.push({ destination: cleanDestination, total_lkr, status, trip_time: tripTime, trip_date: tripDate });
         }
     }
+
+    // --- NUEVO: SEGUNDO PASO para RECIBOS INCOMPLETOS ---
+    // Ahora buscamos líneas con "Rebook" que no estén cerca de un precio.
     
+    // Guardamos los rangos de líneas ya procesadas para no repetir
+    const processedRanges = priceLineIndices.map(index => ({ start: index - 5, end: index + 5 }));
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+
+        // Si la línea no contiene "Rebook", la ignoramos
+        if (!rebookRegex.test(line)) {
+            continue;
+        }
+
+        // Si esta línea "Rebook" ya está cerca de una línea de precio que procesamos, la ignoramos
+        const isAlreadyProcessed = processedRanges.some(range => i >= range.start && i <= range.end);
+        if (isAlreadyProcessed) {
+            continue;
+        }
+
+        // Si llegamos aquí, encontramos un "Rebook" incompleto. Intentamos extraer sus datos.
+        console.log(`🔍 [INCOMPLETE] Encontrado posible recibo incompleto en la línea ${i}: "${line}"`);
+
+        let destination = '';
+        let tripTime = null;
+        let tripDate = null;
+
+        // Extraer destino (buscando hacia atrás desde "Rebook")
+        for (let j = i - 1; j >= 0; j--) {
+            const lineAbove = lines[j].trim();
+            if (rebookRegex.test(lineAbove) || lineAbove.toLowerCase().includes('activity')) {
+                break;
+            }
+            if (/\d{1,2}:\d{2}|^[~©¢&]/.test(lineAbove) || lineAbove.length < 2) {
+                continue;
+            }
+            destination = lineAbove + ' ' + destination;
+        }
+
+        // Extraer fecha (buscando alrededor de "Rebook")
+        for (let j = i - 5; j <= i + 5; j++) {
+            if (j >= 0 && j < lines.length) {
+                const dateMatch = lines[j].match(dateRegex);
+                if (dateMatch) {
+                    tripDate = dateMatch[1];
+                    break;
+                }
+            }
+        }
+
+        // Extraer hora (buscando alrededor de "Rebook")
+        for (let j = i - 5; j <= i + 5; j++) {
+            if (j >= 0 && j < lines.length) {
+                const timeMatch = lines[j].match(timeRegex);
+                if (timeMatch) {
+                    tripTime = timeMatch[1];
+                    break;
+                }
+            }
+        }
+
+        const cleanDestination = cleanDestinationName(destination);
+
+        if (cleanDestination) {
+            // Creamos el objeto del viaje con estado 'incomplete'
+            trips.push({ 
+                destination: cleanDestination, 
+                total_lkr: null, // Sin precio
+                status: 'incomplete', // NUEVO ESTADO
+                trip_time: tripTime, 
+                trip_date: tripDate 
+            });
+        }
+    }
+
     return trips;
 }
+
+
+
+
+
+
+
 
 /**
  * --- FUNCIÓN AUXILIAR: El fallback a la IA (simplificado) ---
