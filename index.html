@@ -745,7 +745,7 @@ function createDuplicateFileItem(file, type) {
             fileReader.onload = function(e) {
                 const img = new Image();
                 img.onload = function() {
-                    const processedImgSrc = preprocessImage(img);
+                    const processedImgSrc = preprocessImageAggressive(img);
                     
                     const progressBar = fileItem.querySelector('.progress'); const fileStatus = fileItem.querySelector('.file-status');
                     Tesseract.recognize(processedImgSrc, 'eng', { logger: m => { if (m.status === 'recognizing text') { const progress = Math.round(m.progress * 100); progressBar.style.width = `${progress}%`; fileStatus.textContent = `Processing... ${progress}%`; } } })
@@ -825,6 +825,90 @@ function createDuplicateFileItem(file, type) {
             return canvas.toDataURL();
         }
         
+
+
+
+        /**
+ * --- NUEVA FUNCIÓN: Limpieza de Imagen Agresiva ---
+ * Aplica un umbral más estricto y un filtro de enfoque para mejorar el OCR.
+ */
+function preprocessImageAggressive(img) {
+    // --- PASO 1: BINARIZACIÓN AGRESIVA (Blanco y Negro más estricto) ---
+    const canvas1 = document.createElement('canvas');
+    const ctx1 = canvas1.getContext('2d');
+    canvas1.width = img.width;
+    canvas1.height = img.height;
+    ctx1.drawImage(img, 0, 0);
+    const imageData1 = ctx1.getImageData(0, 0, canvas1.width, canvas1.height);
+    const data1 = imageData1.data;
+
+    // Usamos un umbral más alto para hacer el contraste más fuerte
+    const aggressiveThreshold = 180; // El original era 150
+    for (let i = 0; i < data1.length; i += 4) {
+        const gray = data1[i] * 0.299 + data1[i + 1] * 0.587 + data1[i + 2] * 0.114;
+        const value = gray > aggressiveThreshold ? 255 : 0;
+        data1[i] = value;
+        data1[i + 1] = value;
+        data1[i + 2] = value;
+    }
+    ctx1.putImageData(imageData1, 0, 0);
+
+    // --- PASO 2: FILTRO DE ENFOQUE (Sharpen) ---
+    const canvas2 = document.createElement('canvas');
+    const ctx2 = canvas2.getContext('2d');
+    canvas2.width = img.width;
+    canvas2.height = img.height;
+    
+    // Dibujamos la imagen ya binarizada en el segundo canvas
+    ctx2.drawImage(canvas1, 0, 0);
+    const imageData2 = ctx2.getImageData(0, 0, canvas2.width, canvas2.height);
+    const data2 = imageData2.data;
+
+    // Kernel de enfoque simple
+    const weights = [
+        0, -1, 0,
+        -1, 5, -1,
+        0, -1, 0
+    ];
+    const side = Math.round(Math.sqrt(weights.length));
+    const halfSide = Math.floor(side / 2);
+    const src = data2;
+    const sw = canvas2.width;
+    const sh = canvas2.height;
+    const w = sw;
+    const h = sh;
+    const output = ctx2.createImageData(w, h);
+    const dst = output.data;
+
+    for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+            const sy = y;
+            const sx = x;
+            const dstOff = (y * w + x) * 4;
+            let r = 0, g = 0, b = 0;
+            for (let cy = 0; cy < side; cy++) {
+                for (let cx = 0; cx < side; cx++) {
+                    const scy = sy + cy - halfSide;
+                    const scx = sx + cx - halfSide;
+                    if (scy >= 0 && scy < sh && scx >= 0 && scx < sw) {
+                        const srcOff = (scy * sw + scx) * 4;
+                        const wt = weights[cy * side + cx];
+                        r += src[srcOff] * wt;
+                        g += src[srcOff + 1] * wt;
+                        b += src[srcOff + 2] * wt;
+                    }
+                }
+            }
+            dst[dstOff] = r;
+            dst[dstOff + 1] = g;
+            dst[dstOff + 2] = b;
+            dst[dstOff + 3] = 255;
+        }
+    }
+    ctx2.putImageData(output, 0, 0);
+    
+    return canvas2.toDataURL();
+}
 
 
 
