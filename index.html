@@ -1263,7 +1263,7 @@ function validateTrip(tripInfo, type) {
             });
             summary.innerHTML = `<p>Total files processed: ${fileResults.length}</p><p>Valid trips: ${validCount}</p><p>Invalid trips: ${invalidCount}</p><p>Total LKR sum (valid trips): ${totalSum.toFixed(2)} LKR</p>`;
         
-            updateTripChart();
+            updateTripCalendar();//estamos actualizando esto, antes "updateTripChart();"
 
 
         }
@@ -1470,6 +1470,9 @@ function updateTripCalendar() {
     calendarContainer.appendChild(calendarHeader);
     calendarContainer.appendChild(calendarTable);
 }
+
+
+
     </script>
 </body>
 </html>
