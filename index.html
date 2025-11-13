@@ -848,20 +848,20 @@ function superviseParsing(text) {
  * Esto ayuda a identificar visualmente los recibos incompletos.
  * @param {string} text - El texto crudo del OCR.
  */
-function logAllRebooksWithContext(text) {
-    const lines = text.split('\n');
-    console.log("⚠️ [SUPERVISIÓN] Posibles recibos incompletos detectados. Revisa las siguientes líneas:");
+// function logAllRebooksWithContext(text) {
+//     const lines = text.split('\n');
+//     console.log("⚠️ [SUPERVISIÓN] Posibles recibos incompletos detectados. Revisa las siguientes líneas:");
     
-    lines.forEach((line, index) => {
-        if (line.toLowerCase().includes('rebook')) {
-            console.log(`--------------------------------------------------`);
-            console.log(`Línea ${index - 1}: ${lines[index - 1] || 'N/A'}`);
-            console.log(`Línea ${index}   : ${line.trim()}`); // La línea con "Rebook"
-            console.log(`Línea ${index + 1}: ${lines[index + 1] || 'N/A'}`);
-            console.log(`--------------------------------------------------`);
-        }
-    });
-}
+//     lines.forEach((line, index) => {
+//         if (line.toLowerCase().includes('rebook')) {
+//             console.log(`--------------------------------------------------`);
+//             console.log(`Línea ${index - 1}: ${lines[index - 1] || 'N/A'}`);
+//             console.log(`Línea ${index}   : ${line.trim()}`); // La línea con "Rebook"
+//             console.log(`Línea ${index + 1}: ${lines[index + 1] || 'N/A'}`);
+//             console.log(`--------------------------------------------------`);
+//         }
+//     });
+// }
 
 
 
@@ -869,43 +869,34 @@ function logAllRebooksWithContext(text) {
 
 
 
-        /**
- * --- VERSIÓN MEJORADA: Función para llamar a la API de Groq ---
- * Esta versión es más robusta y añade mensajes de depuración.
- */
 /**
-/**
- * 
- * 
- * 
- * --- VERSIÓN HÍBRIDA DEFINITIVA: Parser JS + LLM Fallback ---
+ * --- VERSIÓN HÍBRIDA DEFINITIVA: Parser JS + LLM Fallback + Extracción de Incompletos ---
  * Primero usa lógica dura y determinista. La IA es solo un respaldo.
- */
-/**
- * --- VERSIÓN HÍBRIDA DEFINITIVA: Parser JS + LLM Fallback + Supervisión ---
- * Primero usa lógica dura y determinista. La IA es solo un respaldo.
- * AÑADIDO: Una capa de supervisión para detectar recibos incompletos.
+ * AÑADIDO: Si hay inconsistencia, extrae el recibo incompleto y lo añade a los resultados.
  */
 async function extractTripsWithLLM(ocrText) {
     console.log("🚀 Iniciando Parser Híbrido con Supervisión...");
 
-    // --- NUEVO: PASO DE SUPERVISIÓN ---
+    // --- PASO DE SUPERVISIÓN ---
     const rebookCount = superviseParsing(ocrText);
     console.log(`🔍 [SUPERVISIÓN] Se encontraron ${rebookCount} palabras "Rebook" en el texto.`);
 
     // --- PASO 1: PARSER DETERMINISTA DE JAVASCRIPT ---
     const jsTrips = parseTripsWithJS(ocrText);
 
-    // --- NUEVO: COMPARACIÓN DE SUPERVISIÓN ---
+    // --- NUEVO: LÓGICA PARA EXTRAER Y AÑADIR EL INCOMPLETO ---
     if (rebookCount > jsTrips.length) {
         console.warn(`⚠️ [SUPERVISIÓN] ¡Inconsistencia detectada! Se esperaban ${rebookCount} viajes, pero el parser solo extrajo ${jsTrips.length}.`);
-        console.warn(`⚠️ [SUPERVISIÓN] Esto indica que hay ${rebookCount - jsTrips.length} recibo(s) incompleto(s) sin precio LKR.`);
-        // Llama a la función que imprime el contexto en la consola
-        logAllRebooksWithContext(ocrText);
+        
+        const incompleteTrip = extractIncompleteTrip(ocrText);
+        if (incompleteTrip) {
+            jsTrips.push(incompleteTrip); // <-- ¡Añadimos el viaje incompleto al array!
+            console.log(`✅ [SUPERVISIÓN] Recibo incompleto procesado y añadido a los resultados.`);
+        }
     }
 
     if (jsTrips.length > 0) {
-        console.log(`✅ Parser JS encontró ${jsTrips.length} viajes. No se necesita la IA.`);
+        console.log(`✅ Parser JS encontró ${jsTrips.length} viajes (incluyendo posibles incompletos). No se necesita la IA.`);
         return jsTrips;
     }
 
@@ -914,6 +905,67 @@ async function extractTripsWithLLM(ocrText) {
     return await parseTripsWithLLM(ocrText);
 }
 
+/**
+ * --- NUEVA FUNCIÓN: Extrae un recibo incompleto del texto ---
+ * Busca el último "Rebook" que no tenga un precio LKR asociado debajo.
+ */
+function extractIncompleteTrip(ocrText) {
+    const lines = ocrText.split('\n');
+    const priceRegex = /LKR\s*([0-9QOA.]+)/i;
+    const timeRegex = /(\d{1,2}:\d{2}\s*(?:am|pm)?)/i;
+    const dateRegex = /\b(\d{1,2}\s+\w{3})\b/i;
+    const rebookRegex = /rebook/i;
+
+    // Encontrar todos los índices de las líneas que contienen "Rebook"
+    const rebookIndices = [];
+    lines.forEach((line, index) => {
+        if (rebookRegex.test(line)) {
+            rebookIndices.push(index);
+        }
+    });
+
+    // Iterar hacia atrás para encontrar el último "Rebook" incompleto
+    for (let i = rebookIndices.length - 1; i >= 0; i--) {
+        const rebookLineIndex = rebookIndices[i];
+        
+        // Comprobar si hay un precio en las siguientes 3 líneas
+        let hasPriceNearby = false;
+        for (let j = rebookLineIndex + 1; j <= rebookLineIndex + 3 && j < lines.length; j++) {
+            if (priceRegex.test(lines[j])) {
+                hasPriceNearby = true;
+                break;
+            }
+        }
+
+        // Si no hay precio, este es nuestro candidato
+        if (!hasPriceNearby) {
+            const rebookLine = lines[rebookLineIndex].trim();
+            const destinationLine = lines[rebookLineIndex - 1] ? lines[rebookLineIndex - 1].trim() : '';
+
+            // Extraer datos
+            const timeMatch = rebookLine.match(timeRegex);
+            const dateMatch = rebookLine.match(dateRegex);
+            const cleanDestination = cleanDestinationName(destinationLine);
+
+            if (cleanDestination) {
+                const incompleteTrip = {
+                    destination: cleanDestination,
+                    total_lkr: null,
+                    status: 'incomplete',
+                    trip_time: timeMatch ? timeMatch[1] : null,
+                    trip_date: dateMatch ? dateMatch[1] : null
+                };
+                
+                // Log simple y limpio
+                console.log(`⚠️ [RECIBO INCOMPLETO] Destino: "${incompleteTrip.destination}", Hora: "${incompleteTrip.trip_time}"`);
+                
+                return incompleteTrip;
+            }
+        }
+    }
+
+    return null; // No se encontró ningún recibo incompleto
+}
 
 
 
