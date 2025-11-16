@@ -720,6 +720,24 @@ function processExtractedText(file, fileItem, text, type, tripInfo) {
             fileItem.className = 'file-item success';
             fileStatus.className = 'file-status status-success';
             fileStatus.textContent = 'Valid';
+
+
+            // NUEVO: Extraer información detallada del viaje solo para PDFs válidos
+            if (type === 'pdf') {
+                const tripDetails = extractTripDetails(text);
+                console.log(`=== DETALLES DEL VIAJE [${file.name}] ===`);
+                console.log(`Fecha del viaje: ${tripDetails.tripDate}`);
+                console.log(`Hora de inicio: ${tripDetails.startTime}`);
+                console.log(`Hora de fin: ${tripDetails.endTime}`);
+                console.log(`Origen: ${tripDetails.origin}`);
+                console.log(`Destino: ${tripDetails.destination}`);
+                console.log(`=======================================`);
+            }
+
+
+
+
+
             if (type === 'pdf' && validationResult.direction) displayMap(file.name, validationResult.direction);
         } else {
             fileItem.className = 'file-item invalid';
@@ -733,6 +751,7 @@ function processExtractedText(file, fileItem, text, type, tripInfo) {
         fileStatus.textContent = 'Error: Total not found';
         mapContainer.style.display = 'none';
     }
+
 
     // --- NUEVO: Extraer la fecha del viaje ---
     const dateMatch = text.match(/\b(\d{1,2}\s+\w{3})\b/i); // Busca "1 oct", "2 nov", etc.
@@ -754,6 +773,85 @@ function processExtractedText(file, fileItem, text, type, tripInfo) {
 
     updateResultsTable();
 }
+
+
+// NUEVA FUNCIÓN: Extraer detalles específicos del viaje
+function extractTripDetails(text) {
+    const tripDetails = {
+        tripDate: 'No encontrada',
+        startTime: 'No encontrada',
+        endTime: 'No encontrada',
+        origin: 'No encontrado',
+        destination: 'No encontrado'
+    };
+
+    // Extraer fecha del viaje (formato "Nov 16, 2025" o "11/16/25")
+    const datePatterns = [
+        /(\w{3}\s+\d{1,2},\s+\d{4})/,  // Nov 16, 2025
+        /(\d{1,2}\/\d{1,2}\/\d{2,4})/    // 11/16/25
+    ];
+    
+    for (const pattern of datePatterns) {
+        const match = text.match(pattern);
+        if (match) {
+            tripDetails.tripDate = match[1];
+            break;
+        }
+    }
+
+    // Extraer horas de inicio y fin
+    // Buscamos el patrón de dirección con horas
+    const directionPattern = /(\d{1,2}:\d{2}\s*(?:AM|PM|am|pm))\s+([^,\n]+,\s*[^,\n]+,\s*[^,\n]+)\s+(\d{1,2}:\d{2}\s*(?:AM|PM|am|pm))/g;
+    const directionMatch = directionPattern.exec(text);
+    
+    if (directionMatch) {
+        tripDetails.startTime = directionMatch[1];
+        tripDetails.origin = directionMatch[2].trim();
+        tripDetails.endTime = directionMatch[3];
+        
+        // Intentar extraer el destino de la siguiente línea
+        const nextLinePattern = /\n([^\n]+,\s*[^\n]+,\s*[^\n]+)/;
+        const remainingText = text.substring(directionMatch.index + directionMatch[0].length);
+        const destinationMatch = remainingText.match(nextLinePattern);
+        
+        if (destinationMatch) {
+            tripDetails.destination = destinationMatch[1].trim();
+        }
+    } else {
+        // Método alternativo: buscar todas las horas y direcciones
+        const timeLocationPattern = /(\d{1,2}:\d{2}\s*(?:AM|PM|am|pm))\s+([^,\n]+,\s*[^,\n]+,\s*[^,\n]+)/g;
+        const matches = [...text.matchAll(timeLocationPattern)];
+        
+        if (matches.length >= 2) {
+            tripDetails.startTime = matches[0][1];
+            tripDetails.origin = matches[0][2].trim();
+            tripDetails.endTime = matches[1][1];
+            tripDetails.destination = matches[1][2].trim();
+        }
+    }
+
+    return tripDetails;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 /**
  * --- VERSIÓN 2: LÓGICA DE VALIDACIÓN CON SEGUNDA OPORTUNIDAD ---
