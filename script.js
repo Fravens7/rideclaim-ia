@@ -279,6 +279,8 @@ function handleImageFiles(files) {
     });
 }
 
+// ... (mantener todo el código anterior)
+
 function processImageFile(file, fileItem) {
     const fileReader = new FileReader();
     fileReader.onload = function(e) {
@@ -286,7 +288,7 @@ function processImageFile(file, fileItem) {
         img.onload = function() {
             const processedImgSrc = preprocessImage(img);
             
-            const progressBar = fileItem.querySelector('.progress');
+            const progressBar = fileItem.querySelector('.progress'); 
             const fileStatus = fileItem.querySelector('.file-status');
             Tesseract.recognize(processedImgSrc, 'eng', {
                 logger: m => {
@@ -299,6 +301,10 @@ function processImageFile(file, fileItem) {
             })
             .then(({ data: { text } }) => {
                 console.log("Raw OCR Text:", text);
+                
+                // NUEVO: Extraer todas las fechas y horas del texto de la imagen
+                const allImageTripDetails = extractImageTripDetails(text);
+                console.log("All extracted dates/times from image:", allImageTripDetails);
                 
                 // --- NUEVO: Usar LLM para estructurar los datos ---
                 // Mostrar estado de procesamiento de la API
@@ -313,24 +319,41 @@ function processImageFile(file, fileItem) {
                         // Ocultar estado de procesamiento
                         apiStatus.style.display = 'none';
                         
-                        const fileDetails = document.createElement('div');
-                        fileDetails.className = 'file-details';
-                        fileDetails.textContent = `${trips.length} trip(s) found.`;
+                        const fileDetails = document.createElement('div'); 
+                        fileDetails.className = 'file-details'; 
+                        fileDetails.textContent = `${trips.length} trip(s) found.`; 
                         fileItem.appendChild(fileDetails);
+                        
                         let validTripsFound = 0;
-                        trips.forEach(trip => {
+                        trips.forEach((trip, index) => {
                             const validationResult = validateTrip(trip, 'image');
                             if (validationResult.isValid) validTripsFound++;
-                            fileResults.push({
-                                name: file.name,
-                                type: 'image',
-                                total: trip.total_lkr,
-                                origin: trip.origin || 'Not specified',
-                                destination: trip.destination,
-                                isValid: validationResult.isValid,
-                                validationDetails: validationResult.details,
+                            
+                            // NUEVO: Mostrar en consola los detalles de cada viaje encontrado en la imagen
+                            if (allImageTripDetails[index]) {
+                                console.log(`=== IMAGE TRIP DETAILS [${file.name} - Trip ${index + 1}] ===`);
+                                console.log(`Trip Date: ${allImageTripDetails[index].tripDate}`);
+                                console.log(`Trip Time: ${allImageTripDetails[index].tripTime}`);
+                                console.log(`Destination: ${trip.destination}`);
+                                console.log(`================================================`);
+                            } else {
+                                console.warn(`Could not extract date/time for trip ${index + 1} in ${file.name}`);
+                            }
+                            
+                            // Guardar los detalles extraídos en el objeto del viaje
+                            trip.tripDate = allImageTripDetails[index] ? allImageTripDetails[index].tripDate : 'Not found';
+                            trip.tripTime = allImageTripDetails[index] ? allImageTripDetails[index].tripTime : 'Not found';
+                            
+                            fileResults.push({ 
+                                name: file.name, 
+                                type: 'image', 
+                                total: trip.total_lkr, 
+                                origin: trip.origin || 'Not specified', 
+                                destination: trip.destination, 
+                                isValid: validationResult.isValid, 
+                                validationDetails: validationResult.details, 
                                 text: text,
-                                tripTime: trip.trip_time || null
+                                tripTime: trip.trip_time || trip.tripTime || null // Usar la hora extraída si está disponible
                                 // NO se añade tripDate para imágenes
                             });
                         });
@@ -352,18 +375,47 @@ function processImageFile(file, fileItem) {
                         fileStatus.textContent = 'Error processing with AI';
                         progressBar.style.display = 'none';
                     });
-            }).catch(err => {
-                console.error('Error processing image:', err);
-                fileItem.className = 'file-item error';
-                fileStatus.className = 'file-status status-error';
-                fileStatus.textContent = 'Error processing';
-                progressBar.style.display = 'none';
+            }).catch(err => { 
+                console.error('Error processing image:', err); 
+                fileItem.className = 'file-item error'; 
+                fileStatus.className = 'file-status status-error'; 
+                fileStatus.textContent = 'Error processing'; 
+                progressBar.style.display = 'none'; 
             });
         };
         img.src = e.target.result;
     };
     fileReader.readAsDataURL(file);
 }
+
+// NUEVA FUNCIÓN: Extraer fechas y horas específicas de imágenes (OCR)
+function extractImageTripDetails(text) {
+    const detailsArray = [];
+    
+    // Patrón para manejar formatos como "Nov 10 -12:34 PM" o "Nov10-10:18 AM"
+    // También maneja errores comunes de OCR como "9+10" en lugar de "9:10"
+    const dateTimePattern = /(\w{3}\s*\d{1,2})\s*[-–]\s*(\d{1,2}[+:]\d{2}\s*(?:AM|PM|am|pm))/gi;
+    const matches = [...text.matchAll(dateTimePattern)];
+    
+    matches.forEach(match => {
+        let date = match[1].replace(/\s+/g, ' ').trim(); // Limpiar parte de la fecha
+        let time = match[2].replace('+', ':').trim(); // Corregir error común de OCR
+        
+        detailsArray.push({
+            tripDate: date,
+            tripTime: time
+        });
+    });
+    
+    return detailsArray;
+}
+
+// ... (mantener el resto del código sin cambios)
+
+
+
+
+
 
 function preprocessImage(img) {
     const canvas = document.createElement('canvas');
