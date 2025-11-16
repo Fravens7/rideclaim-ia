@@ -707,49 +707,31 @@ function associateTripsWithDateTime(trips, allImageTripDetails, text) {
 
 
 
+// NUEVA FUNCIÓN: Extraer fechas, horas y destinos juntos de cada línea - CORREGIDA
 function extractImageTripsWithDateTime(text) {
     const tripsWithDateTime = [];
     
     // Dividir el texto en líneas
     const lines = text.split('\n');
     
-    // Para cada línea, buscar patrones de fecha/hora y destino
+    // Para cada línea, buscar patrones de fecha/hora
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
         
         // Patrones para detectar líneas con fecha/hora
         const timePatterns = [
             // Formato: Nov7-410PM
-            /(\w{3}\s*\d{1,2})[-–](\d{1,2})(\d{2})(AM|PM|am|pm)/gi,
+            {
+                regex: /(\w{3}\s*\d{1,2})[-–](\d{1,2})(\d{2})(AM|PM|am|pm)/i,
+                process: (match) => ({
+                    date: match[1].replace(/\s+/g, ' ').trim(),
+                    time: `${match[2]}:${match[3]} ${match[4]}`
+                })
+            },
             // Formato: Nov 7+ 157 PM
-            /(\w{3}\s*[+.]\s*\d{1,2})\s*[-–]\s*(\d{1,2})(\d{2})\s*(AM|PM|am|pm)/gi,
-            // Formato: Nov 6 - 10:G0 PM
-            /(\w{3}\s*\d{1,2})\s*[-–]\s*(\d{1,2})[G:](\d{2})\s*(AM|PM|am|pm)/gi,
-            // Formato estándar: Nov 6+ 12:45 PM
-            /(\w{3}\s*[+.]\s*\d{1,2})\s*[-–]\s*(\d{1,2}):(\d{2})\s*(AM|PM|am|pm)/gi,
-            // Formato estándar: Nov 6-11:48 AM
-            /(\w{3}\s*\d{1,2})\s*[-–]\s*(\d{1,2}):(\d{2})\s*(AM|PM|am|pm)/gi
-        ];
-        
-        // Probar cada patrón en la línea actual
-        for (const pattern of timePatterns) {
-            const match = line.match(pattern);
-            if (match) {
-                // Procesar la hora según el patrón
-                let time;
-                if (match[3] && !match[4]) {
-                    // Formato con 3 grupos: fecha, hora, minutos, AM/PM
-                    time = `${match[2]}:${match[3]} ${match[4]}`;
-                } else if (match[4]) {
-                    // Formato con 4 grupos: fecha, hora, minutos, AM/PM
-                    if (match[3] === 'G') {
-                        // Caso especial: G es 0
-                        time = `${match[2]}:0${match[4]} ${match[5]}`;
-                    } else {
-                        time = `${match[2]}:${match[3]} ${match[4]}`;
-                    }
-                } else if (match[2] && match[3]) {
-                    // Formato con hora dividida: 157 -> 1:57
+            {
+                regex: /(\w{3}\s*[+.]\s*\d{1,2})\s*[-–]\s*(\d{1,2})(\d{2})\s*(AM|PM|am|pm)/i,
+                process: (match) => {
                     const timeStr = match[2] + match[3];
                     let hour, minute;
                     
@@ -761,51 +743,96 @@ function extractImageTripsWithDateTime(text) {
                         minute = timeStr.substring(2);
                     }
                     
-                    time = `${hour}:${minute} ${match[4]}`;
+                    return {
+                        date: match[1].replace(/[+.]/g, ' ').replace(/\s+/g, ' ').trim(),
+                        time: `${hour}:${minute} ${match[4]}`
+                    };
                 }
+            },
+            // Formato: Nov 6 - 10:G0 PM
+            {
+                regex: /(\w{3}\s*\d{1,2})\s*[-–]\s*(\d{1,2})[G:](\d{2})\s*(AM|PM|am|pm)/i,
+                process: (match) => ({
+                    date: match[1].replace(/\s+/g, ' ').trim(),
+                    time: `${match[2]}:0${match[3]} ${match[4]}`
+                })
+            },
+            // Formato estándar: Nov 6+ 12:45 PM
+            {
+                regex: /(\w{3}\s*[+.]\s*\d{1,2})\s*[-–]\s*(\d{1,2}):(\d{2})\s*(AM|PM|am|pm)/i,
+                process: (match) => ({
+                    date: match[1].replace(/[+.]/g, ' ').replace(/\s+/g, ' ').trim(),
+                    time: `${match[2]}:${match[3]} ${match[4]}`
+                })
+            },
+            // Formato estándar: Nov 6-11:48 AM
+            {
+                regex: /(\w{3}\s*\d{1,2})\s*[-–]\s*(\d{1,2}):(\d{2})\s*(AM|PM|am|pm)/i,
+                process: (match) => ({
+                    date: match[1].replace(/\s+/g, ' ').trim(),
+                    time: `${match[2]}:${match[3]} ${match[4]}`
+                })
+            }
+        ];
+        
+        // Probar cada patrón en la línea actual
+        for (const pattern of timePatterns) {
+            const match = line.match(pattern.regex);
+            if (match) {
+                // Procesar la fecha y hora
+                const processed = pattern.process(match);
                 
                 // Buscar el destino en las líneas cercanas
                 let destination = 'Not found';
                 
-                // Primero, buscar en la línea actual
-                const destInCurrentLine = line.match(/(LKR[\d.,\s]+)(.+?)(\n|$)/i);
-                if (destInCurrentLine) {
-                    destination = destInCurrentLine[2].trim();
+                // Buscar en las líneas siguientes (donde suele estar el destino)
+                for (let j = i + 1; j < Math.min(lines.length, i + 4); j++) {
+                    const nextLine = lines[j].trim();
+                    
+                    // Ignorar líneas vacías o con solo símbolos
+                    if (!nextLine || nextLine.length < 3) continue;
+                    
+                    // Ignorar líneas que contienen precios
+                    if (nextLine.includes('LKR')) continue;
+                    
+                    // Ignorar líneas que contienen "Rebook" o "Canceled"
+                    if (nextLine.toLowerCase().includes('rebook') || 
+                        nextLine.toLowerCase().includes('canceled')) continue;
+                    
+                    // Si encontramos una línea con texto, es probablemente el destino
+                    if (nextLine && nextLine.length > 5) {
+                        destination = nextLine;
+                        break;
+                    }
                 }
                 
-                // Si no se encuentra en la línea actual, buscar en las líneas anteriores
+                // Si no se encuentra en las líneas siguientes, buscar en las anteriores
                 if (destination === 'Not found') {
-                    for (let j = i - 1; j >= Math.max(0, i - 3); j--) {
-                        const prevLine = lines[j];
-                        // Buscar patrones de destino en las líneas anteriores
-                        const destMatch = prevLine.match(/(LKR[\d.,\s]+)(.+?)(\n|$)/i);
-                        if (destMatch) {
-                            destination = destMatch[2].trim();
+                    for (let j = i - 1; j >= Math.max(0, i - 2); j--) {
+                        const prevLine = lines[j].trim();
+                        
+                        // Ignorar líneas vacías o con solo símbolos
+                        if (!prevLine || prevLine.length < 3) continue;
+                        
+                        // Ignorar líneas que contienen precios
+                        if (prevLine.includes('LKR')) continue;
+                        
+                        // Ignorar líneas que contienen "Rebook" o "Canceled"
+                        if (prevLine.toLowerCase().includes('rebook') || 
+                            prevLine.toLowerCase().includes('canceled')) continue;
+                        
+                        // Si encontramos una línea con texto, es probablemente el destino
+                        if (prevLine && prevLine.length > 5) {
+                            destination = prevLine;
                             break;
                         }
                     }
                 }
-                
-                // Si aún no se encuentra, buscar en las líneas siguientes
-                if (destination === 'Not found') {
-                    for (let j = i + 1; j < Math.min(lines.length, i + 3); j++) {
-                        const nextLine = lines[j];
-                        // Buscar patrones de destino en las líneas siguientes
-                        const destMatch = nextLine.match(/(LKR[\d.,\s]+)(.+?)(\n|$)/i);
-                        if (destMatch) {
-                            destination = destMatch[2].trim();
-                            break;
-                        }
-                    }
-                }
-                
-                // Limpiar el destino
-                destination = destination.replace(/LKR[\d.,\s]+/i, '').trim();
                 
                 // Añadir el viaje con su fecha, hora y destino
                 tripsWithDateTime.push({
-                    tripDate: match[1].replace(/\s+/g, ' ').trim(),
-                    tripTime: time,
+                    tripDate: processed.date,
+                    tripTime: processed.time,
                     destination: destination,
                     originalLine: line
                 });
