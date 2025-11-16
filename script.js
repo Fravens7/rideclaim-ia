@@ -242,6 +242,149 @@ function extractTripInfoFromPdf(text) {
 }
 
 /**
+ * --- FUNCIÓN DE PRUEBA: Análisis Estructural Profesional (Open Source) ---
+ * NO MODIFICA ninguna otra lógica del sistema
+ */
+function testDateTimeExtractionStructural(ocrText) {
+    console.log("🏗️ *** ANÁLISIS ESTRUCTURAL PROFESIONAL (DETERMINÍSTICO) ***");
+    
+    // Estructura conocida del recibo basada en layout observado
+    const STRUCTURAL_PATTERNS = [
+        {
+            name: "Compacto_sin_espacios",
+            regex: /(\w{3})(\d{1,2})[-\+\.](\d{1,2})(\d{2})(AM|PM)/gi,
+            extractor: (match) => ({
+                date: `${match[1]} ${match[2]}`,
+                time: `${match[3]}:${match[4]} ${match[5]}`,
+                source: match[0],
+                pattern: "compacto"
+            })
+        },
+        {
+            name: "Con_espacios_y_separadores",
+            regex: /(\w{3})\s*([@+\d])\s*[-\+:]\s*(\d{1,2})[:\s]*(\d{2})\s*(AM|PM)/gi,
+            extractor: (match) => {
+                // Corrección OCR específica
+                const day = match[2].replace(/[@]/g, '9');
+                const time = `${match[3].replace(/[^\d]/g, '')}:${match[4]}`;
+                return {
+                    date: `${match[1]} ${day}`,
+                    time: `${time} ${match[5]}`,
+                    source: match[0],
+                    pattern: "separado"
+                };
+            }
+        },
+        {
+            name: "Formato_estandar_con_guion",
+            regex: /(\w{3})\s*(\d{1,2})\s*[-]\s*(\d{1,2})[:\s]*(\d{2})\s*(AM|PM)/gi,
+            extractor: (match) => ({
+                date: `${match[1]} ${match[2]}`,
+                time: `${match[3]}:${match[4]} ${match[5]}`,
+                source: match[0],
+                pattern: "estandar"
+            })
+        },
+        {
+            name: "Formato_sin_separador_hora",
+            regex: /(\w{3})\s*(\d{1})(\d{2})(\d{2})\s*(AM|PM)/gi,
+            extractor: (match) => {
+                // Lógica para determinar dónde va el ":"
+                const timeStr = match[3] + match[4];
+                const hour = timeStr.length === 3 ? timeStr.substring(0, 1) : timeStr.substring(0, 2);
+                const minute = timeStr.length === 3 ? timeStr.substring(1) : timeStr.substring(2);
+                return {
+                    date: `${match[1]} ${match[2]}`,
+                    time: `${hour}:${minute} ${match[5]}`,
+                    source: match[0],
+                    pattern: "compacto_hora"
+                };
+            }
+        },
+        {
+            name: "Formato_punto_decimal",
+            regex: /(\w{3})[\.]?(\d{1,2})[\.]?(\d{1,2})(\d{2})(AM|PM)/gi,
+            extractor: (match) => {
+                const timeStr = match[3] + match[4];
+                const hour = timeStr.length === 3 ? timeStr.substring(0, 1) : timeStr.substring(0, 2);
+                const minute = timeStr.length === 3 ? timeStr.substring(1) : timeStr.substring(2);
+                return {
+                    date: `${match[1]} ${match[2]}`,
+                    time: `${hour}:${minute} ${match[5]}`,
+                    source: match[0],
+                    pattern: "punto_decimal"
+                };
+            }
+        }
+    ];
+    
+    // Análisis línea por línea (más preciso)
+    const lines = ocrText.split('\n');
+    const results = [];
+    const processedPositions = new Set(); // Evitar duplicados por posición
+    
+    lines.forEach((line, lineIndex) => {
+        // Ignorar líneas que claramente no tienen fecha/hora
+        if (!line || line.trim().length < 5) return;
+        if (/^(LKR|Activity|View store|Canceled|drivers)$/.test(line.trim())) return;
+        
+        STRUCTURAL_PATTERNS.forEach(pattern => {
+            const matches = [...line.matchAll(pattern.regex)];
+            matches.forEach(match => {
+                const positionKey = `${lineIndex}-${match.index}`;
+                if (!processedPositions.has(positionKey)) {
+                    const extracted = pattern.extractor(match);
+                    if (extracted) {
+                        results.push({
+                            ...extracted,
+                            lineNumber: lineIndex + 1,
+                            position: match.index
+                        });
+                        processedPositions.add(positionKey);
+                    }
+                }
+            });
+        });
+    });
+    
+    // Validación y ordenamiento
+    const validResults = results
+        .filter(r => r.date && r.time)
+        .sort((a, b) => {
+            // Primero por número de línea, luego por posición
+            if (a.lineNumber !== b.lineNumber) {
+                return a.lineNumber - b.lineNumber;
+            }
+            return a.position - b.position;
+        });
+    
+    // Logging profesional para análisis
+    console.log("📊 RESULTADO DEL ANÁLISIS ESTRUCTURAL:");
+    console.log(`   • Total de patrones encontrados: ${validResults.length}`);
+    console.log(`   • Líneas procesadas: ${lines.length}`);
+    console.log(`   • Patrones utilizados: ${STRUCTURAL_PATTERNS.length}`);
+    console.log("");
+    console.log("📋 DETALLE ESTRUCTURADO:");
+    validResults.forEach((item, index) => {
+        console.log(`   ${index + 1}. [Línea ${item.lineNumber}] ${item.date} - ${item.time}`);
+        console.log(`      Patrón: ${item.pattern}`);
+        console.log(`      Original: "${item.source}"`);
+        console.log("");
+    });
+    console.log("🔍 ANÁLISIS DE PATRONES:");
+    const patternCounts = {};
+    validResults.forEach(item => {
+        patternCounts[item.pattern] = (patternCounts[item.pattern] || 0) + 1;
+    });
+    Object.entries(patternCounts).forEach(([pattern, count]) => {
+        console.log(`   • ${pattern}: ${count} coincidencias`);
+    });
+    console.log("*****************************************************************");
+    
+    return validResults;
+}
+
+/**
  * --- FUNCIÓN DE PRUEBA: Extrae fecha/hora con JavaScript (determinístico) ---
  * NO MODIFICA ninguna otra lógica del sistema
  */
@@ -768,6 +911,9 @@ function processImageFile(file, fileItem) {
             })
             .then(({ data: { text } }) => {
                 console.log("Raw OCR Text:", text);
+                
+                // --- PRUEBA: Análisis Estructural Profesional (Open Source) ---
+                testDateTimeExtractionStructural(text);
                 
                 // --- PRUEBA: Extraer fechas/horas con JavaScript (determinístico) ---
                 testDateTimeExtractionJS(text);
