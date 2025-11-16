@@ -247,7 +247,7 @@ function extractTripInfoFromPdf(text) {
  */
 async function testDateTimeExtraction(ocrText) {
     const prompt = `
-Extract ONLY dates and times from this OCR text. Do not extract destinations or prices.
+Extract ALL dates and times from this OCR text. Look for patterns near "Rebook" or "¢". Include duplicates.
 
 OCR Text:
 """
@@ -257,14 +257,26 @@ ${ocrText}
 Return a JSON array with this exact format:
 [
   {"date": "Nov 9", "time": "12:42 PM"},
+  {"date": "Nov 9", "time": "12:42 PM"},
   {"date": "Nov 8", "time": "7:57 PM"}
 ]
 
 IMPORTANT RULES:
 1. Fix OCR errors: "@" = "9", "+" = ":", "G" = "0", "Q" = "0", "O" = "0", "A" = "4"
-2. Look for patterns like "Nov 9 12:42 PM" or "Nov9-12:42PM" 
-3. Extract ALL dates/times found in the text
-4. Return ONLY valid JSON, no explanations
+2. Look for patterns like "Nov 9 12:42 PM" or "Nov9-12:42PM" or "Nov @+ 12:42 PM"
+3. Find ALL dates/times - there should be 8 in this receipt (including duplicates)
+4. Each "Rebook" line should have a date/time
+5. INCLUDE DUPLICATES - if the same date/time appears twice, include both
+6. Return ONLY valid JSON, no explanations
+
+Examples of OCR fix:
+"Nov @+ 12:42 PM" → "Nov 9 12:42 PM"
+"Nov 8718 PM" → "Nov 8 7:18 PM"
+"Nov7.448PM" → "Nov 7 4:48 PM"
+"Nov 7- 558 PM" → "Nov 7 5:58 PM"
+"Nov9-1242PM" → "Nov 9 12:42 PM"
+
+CRITICAL: There are TWO receipts for Nov 9 12:42 PM. Both must be included in the result.
 
 Example of OCR fix:
 "Nov @+ 12:42 PM" → "Nov 9 12:42 PM"
@@ -299,6 +311,10 @@ Example of OCR fix:
         console.log("🧪 *** PRUEBA DE EXTRACCIÓN FECHA/HORA CON IA ***");
         console.log("📅 Fechas y horas extraídas por la IA:", datesTimes);
         console.log("🔍 Total de fechas/horas encontradas:", datesTimes.length);
+        console.log("📝 Detalle completo:");
+        datesTimes.forEach((item, index) => {
+            console.log(`  ${index + 1}. ${item.date} - ${item.time}`);
+        });
         console.log("*************************************************");
         
         return datesTimes;
