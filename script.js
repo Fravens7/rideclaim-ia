@@ -242,6 +242,106 @@ function extractTripInfoFromPdf(text) {
 }
 
 /**
+ * --- FUNCIÓN DE PRUEBA: Extrae fecha/hora con JavaScript (determinístico) ---
+ * NO MODIFICA ninguna otra lógica del sistema
+ */
+function testDateTimeExtractionJS(ocrText) {
+    console.log("🧪 *** PRUEBA DE EXTRACCIÓN FECHA/HORA CON JAVASCRIPT (DETERMINÍSTICO) ***");
+    
+    // Patrones exactos basados en tu OCR
+    const patterns = [
+        // "Nov9-1242PM" → Nov 9 12:42 PM
+        {
+            regex: /(\w{3})(\d{1,2})-(\d{1,2})(\d{2})(AM|PM)/gi,
+            process: (match) => ({
+                date: `${match[1]} ${match[2]}`,
+                time: `${match[3]}:${match[4]} ${match[5]}`,
+                original: match[0]
+            })
+        },
+        // "Nov @+ 12:42 PM" → Nov 9 12:42 PM
+        {
+            regex: /(\w{3})\s*[@]\s*(\d{1,2})\s*[+:]\s*(\d{1,2}):(\d{2})\s*(AM|PM)/gi,
+            process: (match) => ({
+                date: `${match[1]} 9`,
+                time: `${match[3]}:${match[4]} ${match[5]}`,
+                original: match[0]
+            })
+        },
+        // "Nov 8- 7:57 PM" → Nov 8 7:57 PM
+        {
+            regex: /(\w{3})\s*(\d{1,2})\s*-\s*(\d{1,2}):(\d{2})\s*(AM|PM)/gi,
+            process: (match) => ({
+                date: `${match[1]} ${match[2]}`,
+                time: `${match[3]}:${match[4]} ${match[5]}`,
+                original: match[0]
+            })
+        },
+        // "Nov 8718 PM" → Nov 8 7:18 PM
+        {
+            regex: /(\w{3})\s*(\d{1})(\d{2})(\d{2})\s*(AM|PM)/gi,
+            process: (match) => ({
+                date: `${match[1]} ${match[2]}`,
+                time: `${match[3]}:${match[4]} ${match[5]}`,
+                original: match[0]
+            })
+        },
+        // "Nov 7- 558 PM" → Nov 7 5:58 PM
+        {
+            regex: /(\w{3})\s*(\d{1,2})\s*-\s*(\d{1,2})(\d{2})\s*(AM|PM)/gi,
+            process: (match) => ({
+                date: `${match[1]} ${match[2]}`,
+                time: `${match[3]}:${match[4]} ${match[5]}`,
+                original: match[0]
+            })
+        },
+        // "Nov 7+ 528 PM" → Nov 7 5:28 PM
+        {
+            regex: /(\w{3})\s*(\d{1,2})\s*[+.]\s*(\d{1,2})(\d{2})\s*(AM|PM)/gi,
+            process: (match) => ({
+                date: `${match[1]} ${match[2]}`,
+                time: `${match[3]}:${match[4]} ${match[5]}`,
+                original: match[0]
+            })
+        },
+        // "Nov7.448PM" → Nov 7 4:48 PM
+        {
+            regex: /(\w{3})[.]?(\d{1,2})[.]?(\d{1,2})(\d{2})(AM|PM)/gi,
+            process: (match) => ({
+                date: `${match[1]} ${match[2]}`,
+                time: `${match[3]}:${match[4]} ${match[5]}`,
+                original: match[0]
+            })
+        }
+    ];
+    
+    const results = [];
+    const lines = ocrText.split('\n');
+    
+    lines.forEach(line => {
+        patterns.forEach(pattern => {
+            const matches = [...line.matchAll(pattern.regex)];
+            matches.forEach(match => {
+                const processed = pattern.process(match);
+                if (processed) {
+                    results.push(processed);
+                }
+            });
+        });
+    });
+    
+    console.log("📅 Fechas y horas extraídas (JavaScript):", results);
+    console.log("🔍 Total de fechas/horas encontradas:", results.length);
+    console.log("📝 Detalle completo:");
+    results.forEach((item, index) => {
+        console.log(`  ${index + 1}. ${item.date} - ${item.time} (original: ${item.original})`);
+    });
+    console.log("*************************************************");
+    
+    return results;
+}
+
+/**
  * --- FUNCIÓN DE PRUEBA: Solo extrae fecha/hora con IA y la imprime en consola ---
  * NO MODIFICA ninguna otra lógica del sistema
  */
@@ -668,6 +768,9 @@ function processImageFile(file, fileItem) {
             })
             .then(({ data: { text } }) => {
                 console.log("Raw OCR Text:", text);
+                
+                // --- PRUEBA: Extraer fechas/horas con JavaScript (determinístico) ---
+                testDateTimeExtractionJS(text);
                 
                 // --- PRUEBA: Extraer fechas/horas con IA (solo para test en consola) ---
                 testDateTimeExtraction(text);
