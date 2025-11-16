@@ -6,20 +6,9 @@ body {
     background-color: #f5f5f5;
 }
 
-/* Eliminamos el layout flex y centramos el contenido principal */
+/* Contenedor principal */
 .main-content {
     width: 100%;
-}
-
-/* Contenedor del logo - ahora centrado arriba */
-.logo-container {
-    text-align: center;
-    margin-bottom: 20px;
-}
-
-.logo-container img {
-    max-width: 200px;
-    height: auto;
 }
 
 .container {
@@ -29,11 +18,28 @@ body {
     box-shadow: 0 2px 10px rgba(0,0,0,0.1);
 }
 
+/* Header con logo y título */
+.header-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 30px;
+}
+
+/* Logo alineado a la izquierda */
+.logo-container {
+    flex-shrink: 0;
+}
+
+.logo-container img {
+    max-width: 80px; /* Reducido a menos de la mitad del tamaño original */
+    height: auto;
+}
+
 /* Título alineado a la derecha */
 h1 {
     color: #333;
-    text-align: right;
-    margin-bottom: 30px;
+    margin: 0; /* Eliminamos el margen para alinearlo perfectamente */
 }
 
 .tabs {
