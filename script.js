@@ -389,63 +389,120 @@ function processImageFile(file, fileItem) {
 }
 
 
-// NUEVA FUNCIÓN: Extraer fechas y horas específicas de imágenes (OCR) - CORREGIDA
+// NUEVA FUNCIÓN: Extraer fechas y horas específicas de imágenes (OCR) - MEJORADA
 function extractImageTripDetails(text) {
     const detailsArray = [];
     
-    // Patrones mejorados para manejar diferentes formatos de fecha/hora con errores de OCR
-    const patterns = [
-        // Formato estándar: Nov 10 -12:34 PM
-        /(\w{3}\s*\d{1,2})\s*[-–]\s*(\d{1,2}[+:]\d{2}\s*(?:AM|PM|am|pm))/gi,
-        // Formato sin espacios: Nov10-10:18 AM
-        /(\w{3}\s*\d{1,2})\s*[-–]\s*(\d{1,2}[+:]\d{2}\s*(?:AM|PM|am|pm))/gi,
-        // Formato con errores de OCR: Nov @+ 12:42 PM (donde @ es un 9)
-        /(\w{3}\s*[@]\s*\d{1,2})\s*[-–]\s*(\d{1,2}[+:]\d{2}\s*(?:AM|PM|am|pm))/gi,
-        // Formato con espacios faltantes: Nov 8718 PM (donde 8718 es 8:18)
-        /(\w{3}\s*\d{1,2})\s*[-–]\s*(\d{1,2})(\d{2})\s*(?:AM|PM|am|pm)/gi,
-        // NUEVO: Formato con punto: Nov7.448PM (donde 448 es 4:48)
-        /(\w{3}\s*\.?\s*\d{1,2})\.?(\d{1,2})(\d{2})\s*(?:AM|PM|am|pm)/gi,
-        // NUEVO: Formato con +: Nov7+528PM (donde 528 es 5:28)
-        /(\w{3}\s*[+.]\s*\d{1,2})\s*(\d{1,2})(\d{2})\s*(?:AM|PM|am|pm)/gi,
-        // NUEVO: Formato sin separador: Nov 7 558PM (donde 558 es 5:58)
-        /(\w{3}\s*\d{1,2})\s*(\d{1,2})(\d{2})\s*(?:AM|PM|am|pm)/gi
-    ];
+    // Dividir el texto en líneas para un análisis más preciso
+    const lines = text.split('\n');
     
-    // Extraer todas las coincidencias de todos los patrones
-    let allMatches = [];
-    patterns.forEach(pattern => {
-        const matches = [...text.matchAll(pattern)];
-        allMatches = allMatches.concat(matches);
-    });
-    
-    // Procesar cada coincidencia
-    allMatches.forEach(match => {
-        let date = match[1].replace(/\s+/g, ' ').trim(); // Limpiar parte de la fecha
-        let time = match[2] ? match[2].trim() : '';
-        
-        // Corregir errores comunes de OCR
-        date = date.replace(/[@]/g, '9'); // Reemplazar @ por 9
-        date = date.replace(/[+]/g, ''); // Eliminar + extra
-        
-        // Si el tiempo está dividido en dos partes (ej. 448), unir con :
-        if (match[3]) {
-            time = `${match[2]}:${match[3]}`;
-        }
-        
-        // Corregir errores comunes en el tiempo
-        time = time.replace(/[+]/g, ':'); // Reemplazar + por :
-        
-        // Añadir AM/PM si no está presente pero está en el texto original
-        if (!/am|pm/i.test(time) && /am|pm/i.test(match[0])) {
-            const ampmMatch = match[0].match(/(AM|PM|am|pm)/);
-            if (ampmMatch) {
-                time += ` ${ampmMatch[1]}`;
+    // Para cada línea, buscar patrones de fecha/hora
+    lines.forEach(line => {
+        // Patrones específicos para diferentes formatos de fecha/hora con errores de OCR
+        const patterns = [
+            // Formato estándar: Nov 10 -12:34 PM
+            {
+                regex: /(\w{3}\s*\d{1,2})\s*[-–]\s*(\d{1,2}[+:]\d{2})\s*(AM|PM|am|pm)/gi,
+                process: (match) => ({
+                    date: match[1].replace(/\s+/g, ' ').trim(),
+                    time: match[2].replace(/[+]/g, ':').trim() + ' ' + match[3]
+                })
+            },
+            // Formato sin espacios: Nov10-10:18 AM
+            {
+                regex: /(\w{3}\s*\d{1,2})\s*[-–]\s*(\d{1,2}[+:]\d{2})\s*(AM|PM|am|pm)/gi,
+                process: (match) => ({
+                    date: match[1].replace(/\s+/g, ' ').trim(),
+                    time: match[2].replace(/[+]/g, ':').trim() + ' ' + match[3]
+                })
+            },
+            // Formato con errores de OCR: Nov @+ 12:42 PM (donde @ es un 9)
+            {
+                regex: /(\w{3}\s*[@]\s*\d{1,2})\s*[-–]\s*(\d{1,2}[+:]\d{2})\s*(AM|PM|am|pm)/gi,
+                process: (match) => ({
+                    date: match[1].replace(/[@]/g, '9').replace(/\s+/g, ' ').trim(),
+                    time: match[2].replace(/[+]/g, ':').trim() + ' ' + match[3]
+                })
+            },
+            // Formato con espacios faltantes: Nov 8718 PM (donde 8718 es 8:18)
+            {
+                regex: /(\w{3}\s*\d{1,2})\s*[-–]\s*(\d{1,2})(\d{2})\s*(AM|PM|am|pm)/gi,
+                process: (match) => ({
+                    date: match[1].replace(/\s+/g, ' ').trim(),
+                    time: `${match[2]}:${match[3]} ${match[4]}`
+                })
+            },
+            // Formato con punto: Nov7.448PM (donde 448 es 4:48)
+            {
+                regex: /(\w{3}\s*\.?\s*\d{1,2})\.?(\d{1,2})(\d{2})\s*(AM|PM|am|pm)/gi,
+                process: (match) => ({
+                    date: match[1].replace(/[.]/g, ' ').replace(/\s+/g, ' ').trim(),
+                    time: `${match[2]}:${match[3]} ${match[4]}`
+                })
+            },
+            // Formato con +: Nov7+528PM (donde 528 es 5:28)
+            {
+                regex: /(\w{3}\s*[+.]\s*\d{1,2})\s*(\d{1,2})(\d{2})\s*(AM|PM|am|pm)/gi,
+                process: (match) => ({
+                    date: match[1].replace(/[+.]/g, ' ').replace(/\s+/g, ' ').trim(),
+                    time: `${match[2]}:${match[3]} ${match[4]}`
+                })
+            },
+            // Formato sin separador: Nov 7 558PM (donde 558 es 5:58)
+            {
+                regex: /(\w{3}\s*\d{1,2})\s*(\d{1,2})(\d{2})\s*(AM|PM|am|pm)/gi,
+                process: (match) => ({
+                    date: match[1].replace(/\s+/g, ' ').trim(),
+                    time: `${match[2]}:${match[3]} ${match[4]}`
+                })
+            },
+            // Formato con errores comunes: Nov 6+ 10:G0 PM (donde G es 0)
+            {
+                regex: /(\w{3}\s*[+.]\s*\d{1,2})\s*[-–]\s*(\d{1,2})[G:](\d{2})\s*(AM|PM|am|pm)/gi,
+                process: (match) => ({
+                    date: match[1].replace(/[+.]/g, ' ').replace(/\s+/g, ' ').trim(),
+                    time: `${match[2]}:0${match[3]} ${match[4]}`
+                })
+            },
+            // Formato con errores comunes: Nov 6+ 157 PM (donde 157 es 1:57)
+            {
+                regex: /(\w{3}\s*[+.]\s*\d{1,2})\s*[-–]\s*(\d{1,2})(\d{2})\s*(AM|PM|am|pm)/gi,
+                process: (match) => {
+                    // Determinar si es formato de 3 o 4 dígitos
+                    const timeStr = match[2] + match[3];
+                    let hour, minute;
+                    
+                    if (timeStr.length === 3) {
+                        // Formato 157 -> 1:57
+                        hour = timeStr.substring(0, 1);
+                        minute = timeStr.substring(1);
+                    } else {
+                        // Formato 1557 -> 15:57 o 3:57 PM
+                        hour = timeStr.substring(0, 2);
+                        minute = timeStr.substring(2);
+                    }
+                    
+                    return {
+                        date: match[1].replace(/[+.]/g, ' ').replace(/\s+/g, ' ').trim(),
+                        time: `${hour}:${minute} ${match[4]}`
+                    };
+                }
             }
-        }
+        ];
         
-        detailsArray.push({
-            tripDate: date,
-            tripTime: time
+        // Probar cada patrón en la línea actual
+        patterns.forEach(pattern => {
+            const matches = [...line.matchAll(pattern.regex)];
+            matches.forEach(match => {
+                const processed = pattern.process(match);
+                if (processed && processed.date && processed.time) {
+                    detailsArray.push({
+                        tripDate: processed.date,
+                        tripTime: processed.time,
+                        originalLine: line // Guardar la línea original para referencia
+                    });
+                }
+            });
         });
     });
     
