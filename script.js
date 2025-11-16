@@ -913,21 +913,121 @@ function findBestMatchForTrip(trip, allImageTripDetails, text) {
 function preprocessImage(img) {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
-    canvas.width = img.width;
-    canvas.height = img.height;
-    ctx.drawImage(img, 0, 0);
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const data = imageData.data;
+    
+    // Paso 1: Aumentar el tamaño de la imagen para mejor reconocimiento
+    const scaleFactor = 2; // Aumentar 2x el tamaño original
+    canvas.width = img.width * scaleFactor;
+    canvas.height = img.height * scaleFactor;
+    
+    // Habilitar suavizado para mejor calidad al redimensionar
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    
+    // Dibujar la imagen redimensionada
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    
+    // Paso 2: Obtener los datos de la imagen
+    let imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    let data = imageData.data;
+    
+    // Paso 3: Mejora de contraste agresiva
+    const contrast = 2.5; // Factor de contraste alto
+    const factor = (259 * (contrast + 255)) / (255 * (259 - contrast));
+    
     for (let i = 0; i < data.length; i += 4) {
-        const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
-        const threshold = 150;
-        const value = gray > threshold ? 255 : 0;
-        data[i] = value;
-        data[i + 1] = value;
-        data[i + 2] = value;
+        data[i] = factor * (data[i] - 128) + 128;     // Red
+        data[i + 1] = factor * (data[i + 1] - 128) + 128; // Green
+        data[i + 2] = factor * (data[i + 2] - 128) + 128; // Blue
+        // Alpha se mantiene igual
     }
+    
+    // Paso 4: Binarización adaptativa
     ctx.putImageData(imageData, 0, 0);
-    return canvas.toDataURL();
+    imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    data = imageData.data;
+    
+    // Calcular umbral adaptativo basado en la imagen
+    let totalBrightness = 0;
+    let pixelCount = 0;
+    
+    for (let i = 0; i < data.length; i += 4) {
+        const brightness = (data[i] + data[i + 1] + data[i + 2]) / 3;
+        totalBrightness += brightness;
+        pixelCount++;
+    }
+    
+    const averageBrightness = totalBrightness / pixelCount;
+    const adaptiveThreshold = averageBrightness * 0.85; // Umbral ligeramente más bajo que el promedio
+    
+    // Aplicar binarización
+    for (let i = 0; i < data.length; i += 4) {
+        const brightness = (data[i] + data[i + 1] + data[i + 2]) / 3;
+        const value = brightness < adaptiveThreshold ? 0 : 255;
+        
+        // Aplicar un umbral más estricto para áreas que podrían ser texto
+        const localThreshold = adaptiveThreshold * 0.9;
+        const strictValue = brightness < localThreshold ? 0 : 255;
+        
+        // Usar el valor más estricto para áreas de posible texto (valores medios)
+        if (brightness > 50 && brightness < 200) {
+            data[i] = strictValue;
+            data[i + 1] = strictValue;
+            data[i + 2] = strictValue;
+        } else {
+            data[i] = value;
+            data[i + 1] = value;
+            data[i + 2] = value;
+        }
+    }
+    
+    // Paso 5: Reducción de ruido
+    ctx.putImageData(imageData, 0, 0);
+    
+    // Aplicar un filtro de mediana para eliminar ruido
+    const medianFilter = (imageData, width, height) => {
+        const output = new Uint8ClampedArray(imageData);
+        const data = imageData.data;
+        
+        for (let y = 1; y < height - 1; y++) {
+            for (let x = 1; x < width - 1; x++) {
+                const idx = (y * width + x) * 4;
+                
+                // Obtener los 9 píxeles vecinos
+                const neighbors = [];
+                for (let dy = -1; dy <= 1; dy++) {
+                    for (let dx = -1; dx <= 1; dx++) {
+                        const nIdx = ((y + dy) * width + (x + dx)) * 4;
+                        neighbors.push(data[nIdx]);
+                    }
+                }
+                
+                // Calcular la mediana
+                neighbors.sort((a, b) => a - b);
+                const median = neighbors[Math.floor(neighbors.length / 2)];
+                
+                // Aplicar la mediana solo si es muy diferente al píxel actual
+                const current = data[idx];
+                if (Math.abs(current - median) > 30) {
+                    output[idx] = median;
+                    output[idx + 1] = median;
+                    output[idx + 2] = median;
+                }
+            }
+        }
+        
+        return new ImageData(output, width, height);
+    };
+    
+    // Aplicar el filtro de mediana
+    const filteredData = medianFilter(imageData, canvas.width, canvas.height);
+    ctx.putImageData(filteredData, 0, 0);
+    
+    // Paso 6: Mejora final de bordes
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.filter = 'contrast(1.2) brightness(0.9)';
+    ctx.drawImage(canvas, 0, 0);
+    
+    return canvas.toDataURL('image/png', 1.0); // Máxima calidad
 }
 
 // ====================================================================
