@@ -388,12 +388,11 @@ function processImageFile(file, fileItem) {
     fileReader.readAsDataURL(file);
 }
 
-// NUEVA FUNCIÓN: Extraer fechas y horas específicas de imágenes (OCR)
-// NUEVA FUNCIÓN: Extraer fechas y horas específicas de imágenes (OCR)
+
 function extractImageTripDetails(text) {
     const detailsArray = [];
     
-    // Patrones para manejar diferentes formatos de fecha/hora con errores de OCR
+    // Patrones mejorados para manejar diferentes formatos de fecha/hora con errores de OCR
     const patterns = [
         // Formato estándar: Nov 10 -12:34 PM
         /(\w{3}\s*\d{1,2})\s*[-–]\s*(\d{1,2}[+:]\d{2}\s*(?:AM|PM|am|pm))/gi,
@@ -402,7 +401,13 @@ function extractImageTripDetails(text) {
         // Formato con errores de OCR: Nov @+ 12:42 PM (donde @ es un 9)
         /(\w{3}\s*[@]\s*\d{1,2})\s*[-–]\s*(\d{1,2}[+:]\d{2}\s*(?:AM|PM|am|pm))/gi,
         // Formato con espacios faltantes: Nov 8718 PM (donde 8718 es 8:18)
-        /(\w{3}\s*\d{1,2})\s*[-–]\s*(\d{1,2})(\d{2})\s*(?:AM|PM|am|pm)/gi
+        /(\w{3}\s*\d{1,2})\s*[-–]\s*(\d{1,2})(\d{2})\s*(?:AM|PM|am|pm))/gi,
+        // NUEVO: Formato con punto: Nov7.448PM (donde 448 es 4:48)
+        /(\w{3}\s*\.?\s*\d{1,2})\.?(\d{1,2})(\d{2})\s*(?:AM|PM|am|pm))/gi,
+        // NUEVO: Formato con +: Nov7+528PM (donde 528 es 5:28)
+        /(\w{3}\s*[+.]\s*\d{1,2})\s*(\d{1,2})(\d{2})\s*(?:AM|PM|am|pm))/gi,
+        // NUEVO: Formato sin separador: Nov 7 558PM (donde 558 es 5:58)
+        /(\w{3}\s*\d{1,2})\s*(\d{1,2})(\d{2})\s*(?:AM|PM|am|pm))/gi
     ];
     
     // Extraer todas las coincidencias de todos los patrones
@@ -419,8 +424,9 @@ function extractImageTripDetails(text) {
         
         // Corregir errores comunes de OCR
         date = date.replace(/[@]/g, '9'); // Reemplazar @ por 9
+        date = date.replace(/[+]/g, ''); // Eliminar + extra
         
-        // Si el tiempo está dividido en dos partes (ej. 8718), unir con :
+        // Si el tiempo está dividido en dos partes (ej. 448), unir con :
         if (match[3]) {
             time = `${match[2]}:${match[3]}`;
         }
@@ -428,14 +434,34 @@ function extractImageTripDetails(text) {
         // Corregir errores comunes en el tiempo
         time = time.replace(/[+]/g, ':'); // Reemplazar + por :
         
+        // Añadir AM/PM si no está presente pero está en el texto original
+        if (!/am|pm/i.test(time) && /am|pm/i.test(match[0])) {
+            const ampmMatch = match[0].match(/(AM|PM|am|pm)/);
+            if (ampmMatch) {
+                time += ` ${ampmMatch[1]}`;
+            }
+        }
+        
         detailsArray.push({
             tripDate: date,
             tripTime: time
         });
     });
     
+    // Eliminar duplicados basados en fecha y hora
+    const uniqueDetails = [];
+    const seen = new Set();
+    
+    detailsArray.forEach(detail => {
+        const key = `${detail.tripDate}-${detail.tripTime}`;
+        if (!seen.has(key)) {
+            seen.add(key);
+            uniqueDetails.push(detail);
+        }
+    });
+    
     // Ordenar por fecha y hora para asegurar consistencia
-    detailsArray.sort((a, b) => {
+    uniqueDetails.sort((a, b) => {
         // Extraer día del mes para comparar
         const dayA = parseInt(a.tripDate.match(/\d+/)[0]);
         const dayB = parseInt(b.tripDate.match(/\d+/)[0]);
@@ -448,8 +474,16 @@ function extractImageTripDetails(text) {
         return convertTimeToMinutes(b.tripTime) - convertTimeToMinutes(a.tripTime);
     });
     
-    return detailsArray;
+    return uniqueDetails;
 }
+
+
+
+
+
+
+
+
 
 // Función auxiliar para convertir tiempo a minutos
 function convertTimeToMinutes(timeStr) {
@@ -468,6 +502,9 @@ function convertTimeToMinutes(timeStr) {
     const totalMinutes = (hours % 12) * 60 + minutes + (period === 'pm' ? 720 : 0);
     return totalMinutes;
 }
+
+
+
 
 // Modificación en processImageFile para mejorar la asignación de fechas/horas
 function processImageFile(file, fileItem) {
@@ -588,7 +625,6 @@ function processImageFile(file, fileItem) {
     fileReader.readAsDataURL(file);
 }
 
-// NUEVA FUNCIÓN: Encontrar la mejor coincidencia de fecha/hora para un viaje
 function findBestMatchForTrip(trip, allImageTripDetails, text) {
     // Buscar el destino en el texto para encontrar la fecha/hora más cercana
     const destination = trip.destination.toLowerCase();
