@@ -699,6 +699,8 @@ function createFileItem(file, type) {
     return fileItem;
 }
 
+// ... (mantener todo el código anterior hasta la función processExtractedText)
+
 function processExtractedText(file, fileItem, text, type, tripInfo) {
     // --- INTENTO 1: Lógica principal para el formato común ---
     let totalMatch = text.match(/Total\s+([\d,.]+)\s+LKR/i);
@@ -720,24 +722,26 @@ function processExtractedText(file, fileItem, text, type, tripInfo) {
             fileItem.className = 'file-item success';
             fileStatus.className = 'file-status status-success';
             fileStatus.textContent = 'Valid';
-
-
+            
             // NUEVO: Extraer información detallada del viaje solo para PDFs válidos
             if (type === 'pdf') {
                 const tripDetails = extractTripDetails(text);
-                console.log(`=== DETALLES DEL VIAJE [${file.name}] ===`);
-                console.log(`Fecha del viaje: ${tripDetails.tripDate}`);
-                console.log(`Hora de inicio: ${tripDetails.startTime}`);
-                console.log(`Hora de fin: ${tripDetails.endTime}`);
-                console.log(`Origen: ${tripDetails.origin}`);
-                console.log(`Destino: ${tripDetails.destination}`);
+                console.log(`=== TRIP DETAILS [${file.name}] ===`);
+                console.log(`Trip Date: ${tripDetails.tripDate}`);
+                console.log(`Start Time: ${tripDetails.startTime}`);
+                console.log(`End Time: ${tripDetails.endTime}`);
+                console.log(`Transport Type: ${tripDetails.transportType}`);
+                console.log(`Origin: ${tripDetails.origin}`);
+                console.log(`Destination: ${tripDetails.destination}`);
                 console.log(`=======================================`);
+                
+                // Guardar detalles del viaje en el objeto de resultados para validaciones futuras
+                const resultIndex = fileResults.findIndex(result => result.name === file.name);
+                if (resultIndex !== -1) {
+                    fileResults[resultIndex].tripDetails = tripDetails;
+                }
             }
-
-
-
-
-
+            
             if (type === 'pdf' && validationResult.direction) displayMap(file.name, validationResult.direction);
         } else {
             fileItem.className = 'file-item invalid';
@@ -751,7 +755,6 @@ function processExtractedText(file, fileItem, text, type, tripInfo) {
         fileStatus.textContent = 'Error: Total not found';
         mapContainer.style.display = 'none';
     }
-
 
     // --- NUEVO: Extraer la fecha del viaje ---
     const dateMatch = text.match(/\b(\d{1,2}\s+\w{3})\b/i); // Busca "1 oct", "2 nov", etc.
@@ -774,15 +777,15 @@ function processExtractedText(file, fileItem, text, type, tripInfo) {
     updateResultsTable();
 }
 
-
 // NUEVA FUNCIÓN: Extraer detalles específicos del viaje
 function extractTripDetails(text) {
     const tripDetails = {
-        tripDate: 'No encontrada',
-        startTime: 'No encontrada',
-        endTime: 'No encontrada',
-        origin: 'No encontrado',
-        destination: 'No encontrado'
+        tripDate: 'Not found',
+        startTime: 'Not found',
+        endTime: 'Not found',
+        transportType: 'Not found',
+        origin: 'Not found',
+        destination: 'Not found'
     };
 
     // Extraer fecha del viaje (formato "Nov 16, 2025" o "11/16/25")
@@ -799,39 +802,53 @@ function extractTripDetails(text) {
         }
     }
 
-    // Extraer horas de inicio y fin
-    // Buscamos el patrón de dirección con horas
-    const directionPattern = /(\d{1,2}:\d{2}\s*(?:AM|PM|am|pm))\s+([^,\n]+,\s*[^,\n]+,\s*[^,\n]+)\s+(\d{1,2}:\d{2}\s*(?:AM|PM|am|pm))/g;
-    const directionMatch = directionPattern.exec(text);
+    // Extraer tipo de transporte (Tuk o Zip)
+    const transportPatterns = [
+        /Trip details\s+(Tuk|Zip)/i,
+        /(Tuk|Zip)\s+\d+.\d+\s+kilometers/i
+    ];
     
-    if (directionMatch) {
-        tripDetails.startTime = directionMatch[1];
-        tripDetails.origin = directionMatch[2].trim();
-        tripDetails.endTime = directionMatch[3];
-        
-        // Intentar extraer el destino de la siguiente línea
-        const nextLinePattern = /\n([^\n]+,\s*[^\n]+,\s*[^\n]+)/;
-        const remainingText = text.substring(directionMatch.index + directionMatch[0].length);
-        const destinationMatch = remainingText.match(nextLinePattern);
-        
-        if (destinationMatch) {
-            tripDetails.destination = destinationMatch[1].trim();
+    for (const pattern of transportPatterns) {
+        const match = text.match(pattern);
+        if (match) {
+            tripDetails.transportType = match[1];
+            break;
         }
-    } else {
-        // Método alternativo: buscar todas las horas y direcciones
-        const timeLocationPattern = /(\d{1,2}:\d{2}\s*(?:AM|PM|am|pm))\s+([^,\n]+,\s*[^,\n]+,\s*[^,\n]+)/g;
-        const matches = [...text.matchAll(timeLocationPattern)];
+    }
+
+    // Extraer direcciones con horas - método mejorado
+    // Buscamos líneas que contengan hora seguida de dirección
+    const timeLocationPattern = /(\d{1,2}:\d{2}\s*(?:AM|PM|am|pm))\s+([A-Za-z0-9\s,]+Sri Lanka)/g;
+    const matches = [...text.matchAll(timeLocationPattern)];
+    
+    if (matches.length >= 2) {
+        // Ordenamos las horas para asegurar que startTime < endTime
+        const timeData = matches.map(match => ({
+            time: match[1],
+            location: match[2].trim()
+        }));
         
-        if (matches.length >= 2) {
-            tripDetails.startTime = matches[0][1];
-            tripDetails.origin = matches[0][2].trim();
-            tripDetails.endTime = matches[1][1];
-            tripDetails.destination = matches[1][2].trim();
-        }
+        // Convertimos las horas a minutos para comparar
+        const convertToMinutes = (timeStr) => {
+            const [time, period] = timeStr.split(/\s+/);
+            const [hours, minutes] = time.split(':').map(Number);
+            const totalMinutes = (hours % 12) * 60 + minutes + (period.toLowerCase() === 'pm' ? 720 : 0);
+            return totalMinutes;
+        };
+        
+        // Ordenamos por tiempo
+        timeData.sort((a, b) => convertToMinutes(a.time) - convertToMinutes(b.time));
+        
+        tripDetails.startTime = timeData[0].time;
+        tripDetails.origin = timeData[0].location;
+        tripDetails.endTime = timeData[timeData.length - 1].time;
+        tripDetails.destination = timeData[timeData.length - 1].location;
     }
 
     return tripDetails;
 }
+
+// ... (mantener el resto del código sin cambios)
 
 
 
