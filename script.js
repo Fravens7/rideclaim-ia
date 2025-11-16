@@ -980,47 +980,28 @@ function preprocessImage(img) {
         }
     }
     
-    // Paso 5: Reducción de ruido
+    // Paso 5: Reducción de ruido simplificada
     ctx.putImageData(imageData, 0, 0);
     
-    // Aplicar un filtro de mediana para eliminar ruido
-    const medianFilter = (imageData, width, height) => {
-        const output = new Uint8ClampedArray(imageData);
-        const data = imageData.data;
-        
-        for (let y = 1; y < height - 1; y++) {
-            for (let x = 1; x < width - 1; x++) {
-                const idx = (y * width + x) * 4;
-                
-                // Obtener los 9 píxeles vecinos
-                const neighbors = [];
-                for (let dy = -1; dy <= 1; dy++) {
-                    for (let dx = -1; dx <= 1; dx++) {
-                        const nIdx = ((y + dy) * width + (x + dx)) * 4;
-                        neighbors.push(data[nIdx]);
-                    }
-                }
-                
-                // Calcular la mediana
-                neighbors.sort((a, b) => a - b);
-                const median = neighbors[Math.floor(neighbors.length / 2)];
-                
-                // Aplicar la mediana solo si es muy diferente al píxel actual
-                const current = data[idx];
-                if (Math.abs(current - median) > 30) {
-                    output[idx] = median;
-                    output[idx + 1] = median;
-                    output[idx + 2] = median;
-                }
-            }
-        }
-        
-        return new ImageData(output, width, height);
-    };
+    // Aplicar un desenfoque ligero para eliminar ruido
+    ctx.filter = 'blur(0.5px)';
+    ctx.drawImage(canvas, 0, 0);
     
-    // Aplicar el filtro de mediana
-    const filteredData = medianFilter(imageData, canvas.width, canvas.height);
-    ctx.putImageData(filteredData, 0, 0);
+    // Aplicar un umbral final para asegurar binarización
+    ctx.filter = 'none';
+    imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    data = imageData.data;
+    
+    for (let i = 0; i < data.length; i += 4) {
+        const brightness = (data[i] + data[i + 1] + data[i + 2]) / 3;
+        const value = brightness < 128 ? 0 : 255;
+        
+        data[i] = value;
+        data[i + 1] = value;
+        data[i + 2] = value;
+    }
+    
+    ctx.putImageData(imageData, 0, 0);
     
     // Paso 6: Mejora final de bordes
     ctx.globalCompositeOperation = 'multiply';
@@ -1029,7 +1010,6 @@ function preprocessImage(img) {
     
     return canvas.toDataURL('image/png', 1.0); // Máxima calidad
 }
-
 // ====================================================================
 // NUEVAS FUNCIONES DE SUPERVISIÓN (NO INVASIVAS)
 // ====================================================================
