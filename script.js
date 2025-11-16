@@ -769,7 +769,7 @@ function superviseParsing(text) {
  * AÑADIDO: Si hay inconsistencia, extrae el recibo incompleto y lo añade a los resultados.
  */
 // Supongamos que 'rawOcrText' es el texto completo que te da Tesseract.
-async function extractTripsWithNewHybridApproach(rawOcrText) {
+async function extractTripsWithLLM(rawOcrText) {
     console.log("🚀 Iniciando Nuevo Parser Híbrido (Segmentar + Extraer)...");
 
     // --- PASO 1: SEGMENTACIÓN ---
