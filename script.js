@@ -389,6 +389,7 @@ function processImageFile(file, fileItem) {
 }
 
 
+// NUEVA FUNCIÓN: Extraer fechas y horas específicas de imágenes (OCR) - CORREGIDA
 function extractImageTripDetails(text) {
     const detailsArray = [];
     
@@ -401,13 +402,13 @@ function extractImageTripDetails(text) {
         // Formato con errores de OCR: Nov @+ 12:42 PM (donde @ es un 9)
         /(\w{3}\s*[@]\s*\d{1,2})\s*[-–]\s*(\d{1,2}[+:]\d{2}\s*(?:AM|PM|am|pm))/gi,
         // Formato con espacios faltantes: Nov 8718 PM (donde 8718 es 8:18)
-        /(\w{3}\s*\d{1,2})\s*[-–]\s*(\d{1,2})(\d{2})\s*(?:AM|PM|am|pm))/gi,
+        /(\w{3}\s*\d{1,2})\s*[-–]\s*(\d{1,2})(\d{2})\s*(?:AM|PM|am|pm)/gi,
         // NUEVO: Formato con punto: Nov7.448PM (donde 448 es 4:48)
-        /(\w{3}\s*\.?\s*\d{1,2})\.?(\d{1,2})(\d{2})\s*(?:AM|PM|am|pm))/gi,
+        /(\w{3}\s*\.?\s*\d{1,2})\.?(\d{1,2})(\d{2})\s*(?:AM|PM|am|pm)/gi,
         // NUEVO: Formato con +: Nov7+528PM (donde 528 es 5:28)
-        /(\w{3}\s*[+.]\s*\d{1,2})\s*(\d{1,2})(\d{2})\s*(?:AM|PM|am|pm))/gi,
+        /(\w{3}\s*[+.]\s*\d{1,2})\s*(\d{1,2})(\d{2})\s*(?:AM|PM|am|pm)/gi,
         // NUEVO: Formato sin separador: Nov 7 558PM (donde 558 es 5:58)
-        /(\w{3}\s*\d{1,2})\s*(\d{1,2})(\d{2})\s*(?:AM|PM|am|pm))/gi
+        /(\w{3}\s*\d{1,2})\s*(\d{1,2})(\d{2})\s*(?:AM|PM|am|pm)/gi
     ];
     
     // Extraer todas las coincidencias de todos los patrones
@@ -476,7 +477,6 @@ function extractImageTripDetails(text) {
     
     return uniqueDetails;
 }
-
 
 
 
