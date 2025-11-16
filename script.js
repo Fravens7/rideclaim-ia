@@ -242,6 +242,166 @@ function extractTripInfoFromPdf(text) {
 }
 
 /**
+ * --- FUNCIÓN DE PRUEBA: Parser Inteligente de Líneas ---
+ * Separa correctamente destino de fecha/hora
+ */
+function testIntelligentLineParser(ocrText) {
+    console.log("🧠 *** PARSER INTELIGENTE DE LÍNEAS ***");
+    
+    const lines = ocrText.split('\n');
+    const trips = [];
+    
+    lines.forEach((line, index) => {
+        const trimmedLine = line.trim();
+        
+        // Ignorar líneas que no son relevantes
+        if (!trimmedLine || 
+            trimmedLine.startsWith('LKR') || 
+            trimmedLine.startsWith('Activity') ||
+            trimmedLine.includes('View store') ||
+            trimmedLine.includes('Canceled') ||
+            trimmedLine.includes('drivers')) {
+            return;
+        }
+        
+        // Patrones inteligentes para separar destino de fecha/hora
+        const patterns = [
+            // "Get UFit Gym .t Nov 8718 PM ¢, Rebook"
+            {
+                regex: /^(.+?)\s*[.t]\s*(\w{3}\s*\d{1,2}\d{3,4}\s*(AM|PM))\s*[¢]/i,
+                extractor: (match) => ({
+                    destination: match[1].trim(),
+                    dateTime: match[2],
+                    fullLine: trimmedLine
+                })
+            },
+            // "Mireka Tower g Nov9-1242PM ¢ Rebaok"
+            {
+                regex: /^(.+?)\s*[g]\s*(\w{3}\d{1,2}-\d{1,2}\d{2}(AM|PM))\s*[¢]/i,
+                extractor: (match) => ({
+                    destination: match[1].trim(),
+                    dateTime: match[2],
+                    fullLine: trimmedLine
+                })
+            },
+            // "Mireka Tower Q Nov @+ 12:42 PM ¢, Rebook"
+            {
+                regex: /^(.+?)\s*[Q]\s*(\w{3}\s*[@]\d{1,2}\s*[+:]\s*\d{1,2}:\d{2}\s*(AM|PM))\s*[¢]/i,
+                extractor: (match) => ({
+                    destination: match[1].trim(),
+                    dateTime: match[2],
+                    fullLine: trimmedLine
+                })
+            },
+            // "43b Lauries Rd 't Nov 8- 7:57 PM ¢, Rebook"
+            {
+                regex: /^(.+?)\s*['t]\s*(\w{3}\s*\d{1,2}\s*-\s*\d{1,2}:\d{2}\s*(AM|PM))\s*[¢]/i,
+                extractor: (match) => ({
+                    destination: match[1].trim(),
+                    dateTime: match[2],
+                    fullLine: trimmedLine
+                })
+            },
+            // "Jungle Juice Bar ) Nov 7 - 11:59 PMt R View store"
+            {
+                regex: /^(.+?)\s*[)]\s*(\w{3}\s*\d{1,2}\s*-\s*\d{1,2}:\d{2}\s*(AM|PM))/i,
+                extractor: (match) => ({
+                    destination: match[1].trim(),
+                    dateTime: match[2],
+                    fullLine: trimmedLine
+                })
+            },
+            // "43b Lauries Rd ,.t Nov 7 - 558 PM ¢, Rebook"
+            {
+                regex: /^(.+?)\s*[,.t]\s*(\w{3}\s*\d{1,2}\s*-\s*\d{1,2}\d{2}\s*(AM|PM))\s*[¢]/i,
+                extractor: (match) => ({
+                    destination: match[1].trim(),
+                    dateTime: match[2],
+                    fullLine: trimmedLine
+                })
+            },
+            // "Mireka Tower .Q—' Nov 7+ 528 PM ¢, Rebook"
+            {
+                regex: /^(.+?)\s*[.Q—']\s*(\w{3}\s*\d{1,2}\s*[+.]\s*\d{1,2}\d{2}\s*(AM|PM))\s*[¢]/i,
+                extractor: (match) => ({
+                    destination: match[1].trim(),
+                    dateTime: match[2],
+                    fullLine: trimmedLine
+                })
+            },
+            // "AR Exotics Marine ~ Aquarium Sri Lanka © T Nov7.448PM Rebook"
+            {
+                regex: /^(.+?)\s*[~]\s*.*?[©]\s*[T]\s*(\w{3}\d{1,2}\.\d{3,4}(AM|PM))/i,
+                extractor: (match) => ({
+                    destination: match[1].trim(),
+                    dateTime: match[2],
+                    fullLine: trimmedLine
+                })
+            }
+        ];
+        
+        patterns.forEach(pattern => {
+            const match = trimmedLine.match(pattern.regex);
+            if (match) {
+                const extracted = pattern.extractor(match);
+                
+                // Procesar la fecha/hora extraída
+                const processedDateTime = processDateTime(extracted.dateTime);
+                
+                trips.push({
+                    lineNumber: index + 1,
+                    destination: extracted.destination,
+                    rawDateTime: extracted.dateTime,
+                    processedDateTime: processedDateTime,
+                    fullLine: extracted.fullLine,
+                    pattern: pattern.name
+                });
+            }
+        });
+    });
+    
+    console.log("🧠 RESULTADO DEL PARSER INTELIGENTE:");
+    console.log(`   • Total de viajes detectados: ${trips.length}`);
+    console.log("");
+    console.log("📋 DETALLE POR VIAJE:");
+    trips.forEach((trip, index) => {
+        console.log(`   ${index + 1}. [Línea ${trip.lineNumber}] ${trip.destination}`);
+        console.log(`      Fecha/Hora: ${trip.processedDateTime.date} - ${trip.processedDateTime.time}`);
+        console.log(`      Original: "${trip.rawDateTime}"`);
+        console.log(`      Línea completa: "${trip.fullLine}"`);
+        console.log("");
+    });
+    console.log("*****************************************************************");
+    
+    return trips;
+}
+
+// Función auxiliar para procesar fecha/hora
+function processDateTime(dateTimeStr) {
+    // Corregir errores comunes de OCR
+    let corrected = dateTimeStr
+        .replace(/[@]/g, '9')
+        .replace(/[+]/g, ':')
+        .replace(/[G]/g, '0')
+        .replace(/[Q]/g, '0')
+        .replace(/[O]/g, '0')
+        .replace(/[A]/g, '4');
+    
+    // Extraer fecha y hora
+    const dateMatch = corrected.match(/(\w{3})\s*(\d{1,2})/);
+    const timeMatch = corrected.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/);
+    
+    if (dateMatch && timeMatch) {
+        return {
+            date: `${dateMatch[1]} ${dateMatch[2]}`,
+            time: `${timeMatch[1]}:${timeMatch[2]} ${timeMatch[3]}`
+        };
+    }
+    
+    return { date: 'Unknown', time: 'Unknown' };
+}
+
+/**
  * --- FUNCIÓN DE PRUEBA: OCR Alternativo (EasyOCR) ---
  * Llama a backend en Vercel para segundo OCR
  */
@@ -980,6 +1140,9 @@ function processImageFile(file, fileItem) {
                 //     await testAlternativeOCR(imageData);
                 // };
                 // img.src = e.target.result;
+                
+                // --- PRUEBA: Parser Inteligente de Líneas ---
+                testIntelligentLineParser(text);
                 
                 // --- PRUEBA: Análisis Estructural Profesional (Open Source) ---
                 testDateTimeExtractionStructural(text);
