@@ -290,6 +290,8 @@ function processImageFile(file, fileItem) {
             
             const progressBar = fileItem.querySelector('.progress'); 
             const fileStatus = fileItem.querySelector('.file-status');
+            
+            // NUEVA CONFIGURACIÓN MEJORADA DE TESSERACT
             Tesseract.recognize(processedImgSrc, 'eng', {
                 logger: m => {
                     if (m.status === 'recognizing text') {
@@ -297,17 +299,23 @@ function processImageFile(file, fileItem) {
                         progressBar.style.width = `${progress}%`;
                         fileStatus.textContent = `Processing... ${progress}%`;
                     }
-                }
+                },
+                // NUEVOS PARÁMETROS PARA MEJORAR RECONOCIMIENTO DE FECHAS/HORAS
+                tessedit_char_whitelist: '0123456789:AMPMDayNovJunFebMarAprMayJulAugSepOctDec+-., ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz',
+                tessedit_pagesegmode: '6', // Modo para texto uniforme de recibos
+                preserve_interword_spaces: '1',
+                tessedit_ocr_engine_mode: '1', // Usar el motor LSTM más preciso
+                tessedit_zero_rejection: '0', // No rechazar caracteres
+                tessedit_zero_rejection_certainty: '95' // Umbral de certeza más bajo
             })
             .then(({ data: { text } }) => {
-                console.log("Raw OCR Text:", text);
+                console.log("Improved OCR Text:", text);
                 
-                // NUEVO: Extraer todas las fechas y horas del texto de la imagen
+                // Extraer todas las fechas y horas del texto de la imagen
                 const allImageTripDetails = extractImageTripDetails(text);
                 console.log("All extracted dates/times from image:", allImageTripDetails);
                 
                 // --- NUEVO: Usar LLM para estructurar los datos ---
-                // Mostrar estado de procesamiento de la API
                 apiStatus.style.display = 'block';
                 apiStatus.className = 'api-status processing';
                 apiStatus.textContent = 'Processing with AI...';
@@ -325,24 +333,20 @@ function processImageFile(file, fileItem) {
                         fileItem.appendChild(fileDetails);
                         
                         let validTripsFound = 0;
-                        trips.forEach((trip, index) => {
+                        
+                        // NUEVO: Usar los viajes extraídos con fecha/hora/destino
+                        const tripsWithDateTime = associateTripsWithDateTime(trips, allImageTripDetails, text);
+                        
+                        tripsWithDateTime.forEach((trip, index) => {
                             const validationResult = validateTrip(trip, 'image');
                             if (validationResult.isValid) validTripsFound++;
                             
-                            // NUEVO: Mostrar en consola los detalles de cada viaje encontrado en la imagen
-                            if (allImageTripDetails[index]) {
-                                console.log(`=== IMAGE TRIP DETAILS [${file.name} - Trip ${index + 1}] ===`);
-                                console.log(`Trip Date: ${allImageTripDetails[index].tripDate}`);
-                                console.log(`Trip Time: ${allImageTripDetails[index].tripTime}`);
-                                console.log(`Destination: ${trip.destination}`);
-                                console.log(`================================================`);
-                            } else {
-                                console.warn(`Could not extract date/time for trip ${index + 1} in ${file.name}`);
-                            }
-                            
-                            // Guardar los detalles extraídos en el objeto del viaje
-                            trip.tripDate = allImageTripDetails[index] ? allImageTripDetails[index].tripDate : 'Not found';
-                            trip.tripTime = allImageTripDetails[index] ? allImageTripDetails[index].tripTime : 'Not found';
+                            // Mostrar en consola los detalles de cada viaje encontrado en la imagen
+                            console.log(`=== IMAGE TRIP DETAILS [${file.name} - Trip ${index + 1}] ===`);
+                            console.log(`Trip Date: ${trip.tripDate}`);
+                            console.log(`Trip Time: ${trip.tripTime}`);
+                            console.log(`Destination: ${trip.destination}`);
+                            console.log(`================================================`);
                             
                             fileResults.push({ 
                                 name: file.name, 
@@ -353,10 +357,10 @@ function processImageFile(file, fileItem) {
                                 isValid: validationResult.isValid, 
                                 validationDetails: validationResult.details, 
                                 text: text,
-                                tripTime: trip.trip_time || trip.tripTime || null // Usar la hora extraída si está disponible
-                                // NO se añade tripDate para imágenes
+                                tripTime: trip.trip_time || trip.tripTime || null
                             });
                         });
+                        
                         fileItem.className = validTripsFound > 0 ? 'file-item success' : 'file-item invalid';
                         fileStatus.className = `file-status ${validTripsFound > 0 ? 'status-success' : 'status-invalid'}`;
                         fileStatus.textContent = `Completed (${validTripsFound} valid)`;
@@ -366,7 +370,6 @@ function processImageFile(file, fileItem) {
                     .catch(error => {
                         console.error('Error processing with LLM:', error);
                         
-                        // Mostrar estado de error
                         apiStatus.className = 'api-status error';
                         apiStatus.textContent = `Error processing with AI: ${error.message}`;
                         
@@ -387,7 +390,6 @@ function processImageFile(file, fileItem) {
     };
     fileReader.readAsDataURL(file);
 }
-
 
 // NUEVA FUNCIÓN: Extraer fechas y horas específicas de imágenes (OCR) - MEJORADA
 // NUEVA FUNCIÓN: Extraer fechas y horas específicas de imágenes (OCR) - ENFOQUE DIRECTO
