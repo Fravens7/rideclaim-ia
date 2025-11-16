@@ -768,111 +768,36 @@ function superviseParsing(text) {
  * Primero usa lógica dura y determinista. La IA es solo un respaldo.
  * AÑADIDO: Si hay inconsistencia, extrae el recibo incompleto y lo añade a los resultados.
  */
-// Supongamos que 'rawOcrText' es el texto completo que te da Tesseract.
-async function extractTripsWithLLM(rawOcrText) {
-    console.log("🚀 Iniciando Nuevo Parser Híbrido (Segmentar + Extraer)...");
+async function extractTripsWithLLM(ocrText) {
+    console.log("🚀 Iniciando Parser Híbrido con Supervisión...");
 
-    // --- PASO 1: SEGMENTACIÓN ---
-    console.log("✂️ [SEGMENTACIÓN] Dividiendo el texto en trozos de viaje...");
-    
-    // Limpiamos el texto para que la segmentación sea más robusta
-    const cleanedText = rawOcrText.replace(/\n\s*\n/g, '\n').trim();
-    
-    // Usamos "Rebook" como delimitador. La 'i' lo hace insensible a mayúsculas/minúsculas.
-    const tripChunks = cleanedText.split(/Rebook/i);
-    
-    // Filtramos los trozos para eliminar basura y quedarnos solo con los que parecen viajes válidos
-    const potentialTrips = tripChunks
-        .map(chunk => chunk.trim()) // Quitamos espacios en blanco al inicio y final
-        .filter(chunk => chunk.length > 20); // Ignoramos trozos muy cortos
+    // --- PASO DE SUPERVISIÓN ---
+    const rebookCount = superviseParsing(ocrText);
+    console.log(`🔍 [SUPERVISIÓN] Se encontraron ${rebookCount} palabras "Rebook" en el texto.`);
 
-    console.log(`🔍 [SEGMENTACIÓN] Se encontraron ${potentialTrips.length} trozos de viaje potenciales.`);
-    console.log(potentialTrips);
+    // --- PASO 1: PARSER DETERMINISTA DE JAVASCRIPT ---
+    const jsTrips = parseTripsWithJS(ocrText);
 
-
-    // --- PASO 2: EXTRACCIÓN FOCALIZADA CON LLAMA ---
-    const structuredTrips = [];
-    const promptTemplate = `
-Eres un experto en extracción de datos. Analiza el siguiente texto, que corresponde a una línea de un recibo de viaje, y extrae la información clave.
-
-El texto puede tener errores de OCR, símbolos extraños o falta de formato. Tu tarea es inferir la información correcta.
-
-Texto de entrada:
-"""
-{TRIP_CHUNK}
-"""
-
-Devuelve ÚNICAMENTE un objeto JSON con las siguientes claves:
-- "destination": El nombre del lugar (ej. "Mireka Tower", "43b Lauries Rd"). Si no se encuentra, pon null.
-- "date": La fecha del viaje en formato "Month Day" (ej. "Nov 8"). Si no se encuentra, pon null.
-- "time": La hora del viaje en formato "H:MM AM/PM" (ej. "7:57 PM", "12:42 PM"). Corrige errores comunes como "8718 PM" a "8:18 PM" o "558 PM" a "5:58 PM". Si no se encuentra, pon null.
-
-Ejemplo de salida JSON:
-{ "destination": "Get UFit Gym", "date": "Nov 8", "time": "7:18 PM" }
-`;
-
-    // Iteramos sobre cada trozo y hacemos una llamada a Llama para cada uno
-    for (const chunk of potentialTrips) {
-        console.log(`🤖 [LLM] Enviando a Llama el trozo: "${chunk.substring(0, 50)}..."`);
+    // --- NUEVO: LÓGICA PARA EXTRAER Y AÑADIR EL INCOMPLETO ---
+    if (rebookCount > jsTrips.length) {
+        console.warn(`⚠️ [SUPERVISIÓN] ¡Inconsistencia detectada! Se esperaban ${rebookCount} viajes, pero el parser solo extrajo ${jsTrips.length}.`);
         
-        // Inyectamos el trozo actual en nuestro prompt
-        const finalPrompt = promptTemplate.replace("{TRIP_CHUNK}", chunk);
-
-        try {
-            // --- AQUÍ VA TU LLAMADA EXISTENTE A LLAMA ---
-            // Adapta esta parte a cómo llamas a tu API actualmente.
-            // Simulo una respuesta de tu API.
-            const responseFromLLM = await callYourLlamaAPI(finalPrompt); 
-
-            // Intentamos parsear la respuesta a JSON
-            const tripData = JSON.parse(responseFromLLM);
-            structuredTrips.push(tripData);
-            console.log("✅ [LLM] Respuesta recibida y parseada:", tripData);
-
-        } catch (error) {
-            console.error("❌ [LLM] Error al procesar un trozo con Llama:", error);
-            // Opcionalmente, podrías añadir un objeto de error para no perder el viaje
-            structuredTrips.push({ destination: null, date: null, time: null, error: true });
+        const incompleteTrip = extractIncompleteTrip(ocrText);
+        if (incompleteTrip) {
+            jsTrips.push(incompleteTrip); // <-- ¡Añadimos el viaje incompleto al array!
+            console.log(`✅ [SUPERVISIÓN] Recibo incompleto procesado y añadido a los resultados.`);
         }
     }
 
-    // --- PASO 3: UNIÓN Y RETORNO ---
-    console.log("🏁 [FINAL] Proceso completado. Datos estructurados finales:", structuredTrips);
-    return structuredTrips;
+    if (jsTrips.length > 0) {
+        console.log(`✅ Parser JS encontró ${jsTrips.length} viajes (incluyendo posibles incompletos). No se necesita la IA.`);
+        return jsTrips;
+    }
+
+    // --- PASO 2: FALLBACK A LA IA (si el parser JS falló) ---
+    console.log("⚠️ El parser JS no encontró viajes. Activando fallback a la IA...");
+    return await parseTripsWithLLM(ocrText);
 }
-
-// --- FUNCIÓN SIMULADA DE TU API ---
-// REEMPLAZA ESTA FUNCIÓN CON TU LLAMADA REAL A LA API DE LLAMA
-async function callYourLlamaAPI(prompt) {
-    console.log("-> Llamando a la API de Llama con el prompt...");
-    
-    // Aquí iría tu fetch() o axios.post() a tu endpoint en Vercel.
-    // const response = await fetch('TU_ENDPOINT_VERCEL', {
-    //     method: 'POST',
-    //     headers: { 'Content-Type': 'application/json' },
-    //     body: JSON.stringify({ prompt: prompt })
-    // });
-    // const data = await response.json();
-    // return data.output; // O como sea que tu API devuelva el texto.
-
-    // --- SIMULACIÓN PARA PRUEBAS ---
-    // Simulo que Llama responde correctamente para un par de ejemplos.
-    if (prompt.includes("Mireka Tower")) {
-        return JSON.stringify({ destination: "Mireka Tower", date: "Nov 9", time: "12:42 PM" });
-    }
-    if (prompt.includes("Lauries Rd")) {
-        return JSON.stringify({ destination: "43b Lauries Rd", date: "Nov 8", time: "7:57 PM" });
-    }
-    if (prompt.includes("Get UFit Gym")) {
-        return JSON.stringify({ destination: "Get UFit Gym", date: "Nov 8", time: "7:18 PM" }); // Corrige 8718 PM
-    }
-    return JSON.stringify({ destination: null, date: null, time: null });
-}
-
-// --- CÓMO USARLA ---
-// En el lugar donde procesas la imagen, después de obtener el texto de Tesseract:
-// const rawOcrText = "7:409 B ol 4G..."; // Todo el texto del OCR
-// extractTripsWithNewHybridApproach(rawOcrText);
 
 /**
  * --- NUEVA FUNCIÓN: Extrae un recibo incompleto del texto ---
