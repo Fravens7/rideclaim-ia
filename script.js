@@ -531,7 +531,7 @@ function convertTimeToMinutes(timeStr) {
 
 
 
-// Modificación en processImageFile para mejorar la asociación de fechas/horas
+// Modificación en processImageFile para usar la nueva función
 function processImageFile(file, fileItem) {
     const fileReader = new FileReader();
     fileReader.onload = function(e) {
@@ -553,9 +553,9 @@ function processImageFile(file, fileItem) {
             .then(({ data: { text } }) => {
                 console.log("Raw OCR Text:", text);
                 
-                // Extraer todas las fechas y horas del texto de la imagen
-                const allImageTripDetails = extractImageTripDetails(text);
-                console.log("All extracted dates/times from image:", allImageTripDetails);
+                // NUEVO: Extraer todos los viajes con sus fechas, horas y destinos
+                const tripsWithDateTime = extractImageTripsWithDateTime(text);
+                console.log("All extracted trips with date/time from image:", tripsWithDateTime);
                 
                 // --- NUEVO: Usar LLM para estructurar los datos ---
                 apiStatus.style.display = 'block';
@@ -576,19 +576,28 @@ function processImageFile(file, fileItem) {
                         
                         let validTripsFound = 0;
                         
-                        // NUEVO: Asociar cada viaje con su fecha/hora correcta
-                        const tripsWithDateTime = associateTripsWithDateTime(trips, allImageTripDetails, text);
-                        
-                        tripsWithDateTime.forEach((trip, index) => {
+                        // NUEVO: Usar los viajes extraídos con fecha/hora/destino
+                        trips.forEach((trip, index) => {
                             const validationResult = validateTrip(trip, 'image');
                             if (validationResult.isValid) validTripsFound++;
                             
+                            // Buscar el viaje correspondiente con fecha/hora/destino
+                            const matchingTrip = tripsWithDateTime[index];
+                            
                             // Mostrar en consola los detalles de cada viaje encontrado en la imagen
-                            console.log(`=== IMAGE TRIP DETAILS [${file.name} - Trip ${index + 1}] ===`);
-                            console.log(`Trip Date: ${trip.tripDate}`);
-                            console.log(`Trip Time: ${trip.tripTime}`);
-                            console.log(`Destination: ${trip.destination}`);
-                            console.log(`================================================`);
+                            if (matchingTrip) {
+                                console.log(`=== IMAGE TRIP DETAILS [${file.name} - Trip ${index + 1}] ===`);
+                                console.log(`Trip Date: ${matchingTrip.tripDate}`);
+                                console.log(`Trip Time: ${matchingTrip.tripTime}`);
+                                console.log(`Destination: ${trip.destination}`);
+                                console.log(`================================================`);
+                            } else {
+                                console.warn(`Could not extract date/time for trip ${index + 1} in ${file.name}`);
+                            }
+                            
+                            // Guardar los detalles extraídos en el objeto del viaje
+                            trip.tripDate = matchingTrip ? matchingTrip.tripDate : 'Not found';
+                            trip.tripTime = matchingTrip ? matchingTrip.tripTime : 'Not found';
                             
                             fileResults.push({ 
                                 name: file.name, 
@@ -698,7 +707,131 @@ function associateTripsWithDateTime(trips, allImageTripDetails, text) {
 
 
 
-
+function extractImageTripsWithDateTime(text) {
+    const tripsWithDateTime = [];
+    
+    // Dividir el texto en líneas
+    const lines = text.split('\n');
+    
+    // Para cada línea, buscar patrones de fecha/hora y destino
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        
+        // Patrones para detectar líneas con fecha/hora
+        const timePatterns = [
+            // Formato: Nov7-410PM
+            /(\w{3}\s*\d{1,2})[-–](\d{1,2})(\d{2})(AM|PM|am|pm)/gi,
+            // Formato: Nov 7+ 157 PM
+            /(\w{3}\s*[+.]\s*\d{1,2})\s*[-–]\s*(\d{1,2})(\d{2})\s*(AM|PM|am|pm)/gi,
+            // Formato: Nov 6 - 10:G0 PM
+            /(\w{3}\s*\d{1,2})\s*[-–]\s*(\d{1,2})[G:](\d{2})\s*(AM|PM|am|pm)/gi,
+            // Formato estándar: Nov 6+ 12:45 PM
+            /(\w{3}\s*[+.]\s*\d{1,2})\s*[-–]\s*(\d{1,2}):(\d{2})\s*(AM|PM|am|pm)/gi,
+            // Formato estándar: Nov 6-11:48 AM
+            /(\w{3}\s*\d{1,2})\s*[-–]\s*(\d{1,2}):(\d{2})\s*(AM|PM|am|pm)/gi
+        ];
+        
+        // Probar cada patrón en la línea actual
+        for (const pattern of timePatterns) {
+            const match = line.match(pattern);
+            if (match) {
+                // Procesar la hora según el patrón
+                let time;
+                if (match[3] && !match[4]) {
+                    // Formato con 3 grupos: fecha, hora, minutos, AM/PM
+                    time = `${match[2]}:${match[3]} ${match[4]}`;
+                } else if (match[4]) {
+                    // Formato con 4 grupos: fecha, hora, minutos, AM/PM
+                    if (match[3] === 'G') {
+                        // Caso especial: G es 0
+                        time = `${match[2]}:0${match[4]} ${match[5]}`;
+                    } else {
+                        time = `${match[2]}:${match[3]} ${match[4]}`;
+                    }
+                } else if (match[2] && match[3]) {
+                    // Formato con hora dividida: 157 -> 1:57
+                    const timeStr = match[2] + match[3];
+                    let hour, minute;
+                    
+                    if (timeStr.length === 3) {
+                        hour = timeStr.substring(0, 1);
+                        minute = timeStr.substring(1);
+                    } else {
+                        hour = timeStr.substring(0, 2);
+                        minute = timeStr.substring(2);
+                    }
+                    
+                    time = `${hour}:${minute} ${match[4]}`;
+                }
+                
+                // Buscar el destino en las líneas cercanas
+                let destination = 'Not found';
+                
+                // Primero, buscar en la línea actual
+                const destInCurrentLine = line.match(/(LKR[\d.,\s]+)(.+?)(\n|$)/i);
+                if (destInCurrentLine) {
+                    destination = destInCurrentLine[2].trim();
+                }
+                
+                // Si no se encuentra en la línea actual, buscar en las líneas anteriores
+                if (destination === 'Not found') {
+                    for (let j = i - 1; j >= Math.max(0, i - 3); j--) {
+                        const prevLine = lines[j];
+                        // Buscar patrones de destino en las líneas anteriores
+                        const destMatch = prevLine.match(/(LKR[\d.,\s]+)(.+?)(\n|$)/i);
+                        if (destMatch) {
+                            destination = destMatch[2].trim();
+                            break;
+                        }
+                    }
+                }
+                
+                // Si aún no se encuentra, buscar en las líneas siguientes
+                if (destination === 'Not found') {
+                    for (let j = i + 1; j < Math.min(lines.length, i + 3); j++) {
+                        const nextLine = lines[j];
+                        // Buscar patrones de destino en las líneas siguientes
+                        const destMatch = nextLine.match(/(LKR[\d.,\s]+)(.+?)(\n|$)/i);
+                        if (destMatch) {
+                            destination = destMatch[2].trim();
+                            break;
+                        }
+                    }
+                }
+                
+                // Limpiar el destino
+                destination = destination.replace(/LKR[\d.,\s]+/i, '').trim();
+                
+                // Añadir el viaje con su fecha, hora y destino
+                tripsWithDateTime.push({
+                    tripDate: match[1].replace(/\s+/g, ' ').trim(),
+                    tripTime: time,
+                    destination: destination,
+                    originalLine: line
+                });
+                
+                // Salir del bucle de patrones una vez encontrado
+                break;
+            }
+        }
+    }
+    
+    // Ordenar por fecha y hora
+    tripsWithDateTime.sort((a, b) => {
+        // Extraer día del mes para comparar
+        const dayA = parseInt(a.tripDate.match(/\d+/)[0]);
+        const dayB = parseInt(b.tripDate.match(/\d+/)[0]);
+        
+        if (dayA !== dayB) {
+            return dayB - dayA; // Ordenar descendente por día (más reciente primero)
+        }
+        
+        // Si mismo día, ordenar por hora
+        return convertTimeToMinutes(b.tripTime) - convertTimeToMinutes(a.tripTime);
+    });
+    
+    return tripsWithDateTime;
+}
 
 
 
