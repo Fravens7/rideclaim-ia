@@ -301,7 +301,11 @@ function processImageFile(file, fileItem) {
             })
             .then(({ data: { text } }) => {
                 console.log("Raw OCR Text:", text);
-                
+                // ==================== NUEVA LÍNEA AÑADIDA ====================
+                runPaddleOCRExperiment(img); // Lanza el experimento paralelo con PaddleOCR
+    // ============================================================
+    
+                   
                 // NUEVO: Extraer todas las fechas y horas del texto de la imagen
                 const allImageTripDetails = extractImageTripDetails(text);
                 console.log("All extracted dates/times from image:", allImageTripDetails);
