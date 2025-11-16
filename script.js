@@ -390,88 +390,38 @@ function processImageFile(file, fileItem) {
 
 
 // NUEVA FUNCIÓN: Extraer fechas y horas específicas de imágenes (OCR) - MEJORADA
+// NUEVA FUNCIÓN: Extraer fechas y horas específicas de imágenes (OCR) - ENFOQUE DIRECTO
 function extractImageTripDetails(text) {
     const detailsArray = [];
     
     // Dividir el texto en líneas para un análisis más preciso
     const lines = text.split('\n');
     
-    // Para cada línea, buscar patrones de fecha/hora
+    // Buscar líneas que contengan patrones de fecha/hora
     lines.forEach(line => {
-        // Patrones específicos para diferentes formatos de fecha/hora con errores de OCR
-        const patterns = [
-            // Formato estándar: Nov 10 -12:34 PM
+        // Patrones específicos para los formatos que vemos en el OCR
+        const timePatterns = [
+            // Formato: Nov7-410PM
             {
-                regex: /(\w{3}\s*\d{1,2})\s*[-–]\s*(\d{1,2}[+:]\d{2})\s*(AM|PM|am|pm)/gi,
-                process: (match) => ({
-                    date: match[1].replace(/\s+/g, ' ').trim(),
-                    time: match[2].replace(/[+]/g, ':').trim() + ' ' + match[3]
-                })
+                regex: /(\w{3}\s*\d{1,2})[-–](\d{1,2})(\d{2})(AM|PM|am|pm)/gi,
+                process: (match) => {
+                    const hour = match[2];
+                    const minute = match[3];
+                    return {
+                        date: match[1].replace(/\s+/g, ' ').trim(),
+                        time: `${hour}:${minute} ${match[4]}`,
+                        originalLine: line
+                    };
+                }
             },
-            // Formato sin espacios: Nov10-10:18 AM
-            {
-                regex: /(\w{3}\s*\d{1,2})\s*[-–]\s*(\d{1,2}[+:]\d{2})\s*(AM|PM|am|pm)/gi,
-                process: (match) => ({
-                    date: match[1].replace(/\s+/g, ' ').trim(),
-                    time: match[2].replace(/[+]/g, ':').trim() + ' ' + match[3]
-                })
-            },
-            // Formato con errores de OCR: Nov @+ 12:42 PM (donde @ es un 9)
-            {
-                regex: /(\w{3}\s*[@]\s*\d{1,2})\s*[-–]\s*(\d{1,2}[+:]\d{2})\s*(AM|PM|am|pm)/gi,
-                process: (match) => ({
-                    date: match[1].replace(/[@]/g, '9').replace(/\s+/g, ' ').trim(),
-                    time: match[2].replace(/[+]/g, ':').trim() + ' ' + match[3]
-                })
-            },
-            // Formato con espacios faltantes: Nov 8718 PM (donde 8718 es 8:18)
-            {
-                regex: /(\w{3}\s*\d{1,2})\s*[-–]\s*(\d{1,2})(\d{2})\s*(AM|PM|am|pm)/gi,
-                process: (match) => ({
-                    date: match[1].replace(/\s+/g, ' ').trim(),
-                    time: `${match[2]}:${match[3]} ${match[4]}`
-                })
-            },
-            // Formato con punto: Nov7.448PM (donde 448 es 4:48)
-            {
-                regex: /(\w{3}\s*\.?\s*\d{1,2})\.?(\d{1,2})(\d{2})\s*(AM|PM|am|pm)/gi,
-                process: (match) => ({
-                    date: match[1].replace(/[.]/g, ' ').replace(/\s+/g, ' ').trim(),
-                    time: `${match[2]}:${match[3]} ${match[4]}`
-                })
-            },
-            // Formato con +: Nov7+528PM (donde 528 es 5:28)
-            {
-                regex: /(\w{3}\s*[+.]\s*\d{1,2})\s*(\d{1,2})(\d{2})\s*(AM|PM|am|pm)/gi,
-                process: (match) => ({
-                    date: match[1].replace(/[+.]/g, ' ').replace(/\s+/g, ' ').trim(),
-                    time: `${match[2]}:${match[3]} ${match[4]}`
-                })
-            },
-            // Formato sin separador: Nov 7 558PM (donde 558 es 5:58)
-            {
-                regex: /(\w{3}\s*\d{1,2})\s*(\d{1,2})(\d{2})\s*(AM|PM|am|pm)/gi,
-                process: (match) => ({
-                    date: match[1].replace(/\s+/g, ' ').trim(),
-                    time: `${match[2]}:${match[3]} ${match[4]}`
-                })
-            },
-            // Formato con errores comunes: Nov 6+ 10:G0 PM (donde G es 0)
-            {
-                regex: /(\w{3}\s*[+.]\s*\d{1,2})\s*[-–]\s*(\d{1,2})[G:](\d{2})\s*(AM|PM|am|pm)/gi,
-                process: (match) => ({
-                    date: match[1].replace(/[+.]/g, ' ').replace(/\s+/g, ' ').trim(),
-                    time: `${match[2]}:0${match[3]} ${match[4]}`
-                })
-            },
-            // Formato con errores comunes: Nov 6+ 157 PM (donde 157 es 1:57)
+            // Formato: Nov 7+ 157 PM
             {
                 regex: /(\w{3}\s*[+.]\s*\d{1,2})\s*[-–]\s*(\d{1,2})(\d{2})\s*(AM|PM|am|pm)/gi,
                 process: (match) => {
-                    // Determinar si es formato de 3 o 4 dígitos
                     const timeStr = match[2] + match[3];
                     let hour, minute;
                     
+                    // Determinar si es formato de 3 o 4 dígitos
                     if (timeStr.length === 3) {
                         // Formato 157 -> 1:57
                         hour = timeStr.substring(0, 1);
@@ -484,55 +434,73 @@ function extractImageTripDetails(text) {
                     
                     return {
                         date: match[1].replace(/[+.]/g, ' ').replace(/\s+/g, ' ').trim(),
-                        time: `${hour}:${minute} ${match[4]}`
+                        time: `${hour}:${minute} ${match[4]}`,
+                        originalLine: line
+                    };
+                }
+            },
+            // Formato: Nov 6 - 10:G0 PM (G es 0)
+            {
+                regex: /(\w{3}\s*\d{1,2})\s*[-–]\s*(\d{1,2})[G:](\d{2})\s*(AM|PM|am|pm)/gi,
+                process: (match) => {
+                    return {
+                        date: match[1].replace(/\s+/g, ' ').trim(),
+                        time: `${match[2]}:0${match[3]} ${match[4]}`,
+                        originalLine: line
+                    };
+                }
+            },
+            // Formato estándar: Nov 6+ 12:45 PM
+            {
+                regex: /(\w{3}\s*[+.]\s*\d{1,2})\s*[-–]\s*(\d{1,2}):(\d{2})\s*(AM|PM|am|pm)/gi,
+                process: (match) => {
+                    return {
+                        date: match[1].replace(/[+.]/g, ' ').replace(/\s+/g, ' ').trim(),
+                        time: `${match[2]}:${match[3]} ${match[4]}`,
+                        originalLine: line
+                    };
+                }
+            },
+            // Formato estándar: Nov 6-11:48 AM
+            {
+                regex: /(\w{3}\s*\d{1,2})\s*[-–]\s*(\d{1,2}):(\d{2})\s*(AM|PM|am|pm)/gi,
+                process: (match) => {
+                    return {
+                        date: match[1].replace(/\s+/g, ' ').trim(),
+                        time: `${match[2]}:${match[3]} ${match[4]}`,
+                        originalLine: line
                     };
                 }
             }
         ];
         
         // Probar cada patrón en la línea actual
-        patterns.forEach(pattern => {
+        timePatterns.forEach(pattern => {
             const matches = [...line.matchAll(pattern.regex)];
             matches.forEach(match => {
                 const processed = pattern.process(match);
                 if (processed && processed.date && processed.time) {
-                    detailsArray.push({
-                        tripDate: processed.date,
-                        tripTime: processed.time,
-                        originalLine: line // Guardar la línea original para referencia
-                    });
+                    detailsArray.push(processed);
                 }
             });
         });
     });
     
-    // Eliminar duplicados basados en fecha y hora
-    const uniqueDetails = [];
-    const seen = new Set();
-    
-    detailsArray.forEach(detail => {
-        const key = `${detail.tripDate}-${detail.tripTime}`;
-        if (!seen.has(key)) {
-            seen.add(key);
-            uniqueDetails.push(detail);
-        }
-    });
-    
-    // Ordenar por fecha y hora para asegurar consistencia
-    uniqueDetails.sort((a, b) => {
+    // Ordenar por fecha y hora
+    detailsArray.sort((a, b) => {
         // Extraer día del mes para comparar
-        const dayA = parseInt(a.tripDate.match(/\d+/)[0]);
-        const dayB = parseInt(b.tripDate.match(/\d+/)[0]);
+        const dayA = parseInt(a.date.match(/\d+/)[0]);
+        const dayB = parseInt(b.date.match(/\d+/)[0]);
         
         if (dayA !== dayB) {
             return dayB - dayA; // Ordenar descendente por día (más reciente primero)
         }
         
         // Si mismo día, ordenar por hora
-        return convertTimeToMinutes(b.tripTime) - convertTimeToMinutes(a.tripTime);
+        return convertTimeToMinutes(b.time) - convertTimeToMinutes(a.time);
     });
     
-    return uniqueDetails;
+    return detailsArray;
 }
 
 
@@ -563,7 +531,7 @@ function convertTimeToMinutes(timeStr) {
 
 
 
-// Modificación en processImageFile para mejorar la asignación de fechas/horas
+// Modificación en processImageFile para mejorar la asociación de fechas/horas
 function processImageFile(file, fileItem) {
     const fileReader = new FileReader();
     fileReader.onload = function(e) {
@@ -585,12 +553,11 @@ function processImageFile(file, fileItem) {
             .then(({ data: { text } }) => {
                 console.log("Raw OCR Text:", text);
                 
-                // NUEVO: Extraer todas las fechas y horas del texto de la imagen
+                // Extraer todas las fechas y horas del texto de la imagen
                 const allImageTripDetails = extractImageTripDetails(text);
                 console.log("All extracted dates/times from image:", allImageTripDetails);
                 
                 // --- NUEVO: Usar LLM para estructurar los datos ---
-                // Mostrar estado de procesamiento de la API
                 apiStatus.style.display = 'block';
                 apiStatus.className = 'api-status processing';
                 apiStatus.textContent = 'Processing with AI...';
@@ -608,35 +575,20 @@ function processImageFile(file, fileItem) {
                         fileItem.appendChild(fileDetails);
                         
                         let validTripsFound = 0;
-                        trips.forEach((trip, index) => {
+                        
+                        // NUEVO: Asociar cada viaje con su fecha/hora correcta
+                        const tripsWithDateTime = associateTripsWithDateTime(trips, allImageTripDetails, text);
+                        
+                        tripsWithDateTime.forEach((trip, index) => {
                             const validationResult = validateTrip(trip, 'image');
                             if (validationResult.isValid) validTripsFound++;
                             
-                            // NUEVO: Intentar asociar cada viaje con su fecha/hora más cercana
-                            let tripDetail = null;
-                            
-                            // Si tenemos suficientes detalles para todos los viajes
-                            if (allImageTripDetails.length >= trips.length) {
-                                tripDetail = allImageTripDetails[index];
-                            } else if (allImageTripDetails.length > 0) {
-                                // Si tenemos menos detalles que viajes, intentamos asociar por destino
-                                tripDetail = findBestMatchForTrip(trip, allImageTripDetails, text);
-                            }
-                            
                             // Mostrar en consola los detalles de cada viaje encontrado en la imagen
-                            if (tripDetail) {
-                                console.log(`=== IMAGE TRIP DETAILS [${file.name} - Trip ${index + 1}] ===`);
-                                console.log(`Trip Date: ${tripDetail.tripDate}`);
-                                console.log(`Trip Time: ${tripDetail.tripTime}`);
-                                console.log(`Destination: ${trip.destination}`);
-                                console.log(`================================================`);
-                            } else {
-                                console.warn(`Could not extract date/time for trip ${index + 1} in ${file.name}`);
-                            }
-                            
-                            // Guardar los detalles extraídos en el objeto del viaje
-                            trip.tripDate = tripDetail ? tripDetail.tripDate : 'Not found';
-                            trip.tripTime = tripDetail ? tripDetail.tripTime : 'Not found';
+                            console.log(`=== IMAGE TRIP DETAILS [${file.name} - Trip ${index + 1}] ===`);
+                            console.log(`Trip Date: ${trip.tripDate}`);
+                            console.log(`Trip Time: ${trip.tripTime}`);
+                            console.log(`Destination: ${trip.destination}`);
+                            console.log(`================================================`);
                             
                             fileResults.push({ 
                                 name: file.name, 
@@ -647,10 +599,10 @@ function processImageFile(file, fileItem) {
                                 isValid: validationResult.isValid, 
                                 validationDetails: validationResult.details, 
                                 text: text,
-                                tripTime: trip.trip_time || trip.tripTime || null // Usar la hora extraída si está disponible
-                                // NO se añade tripDate para imágenes
+                                tripTime: trip.trip_time || trip.tripTime || null
                             });
                         });
+                        
                         fileItem.className = validTripsFound > 0 ? 'file-item success' : 'file-item invalid';
                         fileStatus.className = `file-status ${validTripsFound > 0 ? 'status-success' : 'status-invalid'}`;
                         fileStatus.textContent = `Completed (${validTripsFound} valid)`;
@@ -660,7 +612,6 @@ function processImageFile(file, fileItem) {
                     .catch(error => {
                         console.error('Error processing with LLM:', error);
                         
-                        // Mostrar estado de error
                         apiStatus.className = 'api-status error';
                         apiStatus.textContent = `Error processing with AI: ${error.message}`;
                         
@@ -681,6 +632,75 @@ function processImageFile(file, fileItem) {
     };
     fileReader.readAsDataURL(file);
 }
+
+
+// NUEVA FUNCIÓN: Asociar cada viaje con su fecha/hora correcta
+function associateTripsWithDateTime(trips, allImageTripDetails, text) {
+    // Si tenemos el mismo número de detalles que viajes, asociamos directamente
+    if (trips.length === allImageTripDetails.length) {
+        return trips.map((trip, index) => ({
+            ...trip,
+            tripDate: allImageTripDetails[index].date,
+            tripTime: allImageTripDetails[index].time
+        }));
+    }
+    
+    // Si no, intentamos asociar por proximidad en el texto
+    const lines = text.split('\n');
+    const tripsWithDateTime = [];
+    
+    // Para cada viaje, encontrar la fecha/hora más cercana
+    trips.forEach(trip => {
+        let bestMatch = null;
+        let minDistance = Infinity;
+        
+        // Buscar la línea que contiene el destino
+        const destLineIndex = lines.findIndex(line => 
+            line.toLowerCase().includes(trip.destination.toLowerCase().substring(0, 10))
+        );
+        
+        if (destLineIndex !== -1) {
+            // Buscar la fecha/hora más cercana a esta línea
+            allImageTripDetails.forEach(detail => {
+                const timeLineIndex = lines.findIndex(line => 
+                    line.includes(detail.date) && line.includes(detail.time)
+                );
+                
+                if (timeLineIndex !== -1) {
+                    const distance = Math.abs(destLineIndex - timeLineIndex);
+                    if (distance < minDistance) {
+                        minDistance = distance;
+                        bestMatch = detail;
+                    }
+                }
+            });
+        }
+        
+        // Si encontramos una coincidencia, la usamos
+        if (bestMatch) {
+            tripsWithDateTime.push({
+                ...trip,
+                tripDate: bestMatch.date,
+                tripTime: bestMatch.time
+            });
+        } else {
+            // Si no, dejamos los valores por defecto
+            tripsWithDateTime.push({
+                ...trip,
+                tripDate: 'Not found',
+                tripTime: 'Not found'
+            });
+        }
+    });
+    
+    return tripsWithDateTime;
+}
+
+
+
+
+
+
 
 function findBestMatchForTrip(trip, allImageTripDetails, text) {
     // Buscar el destino en el texto para encontrar la fecha/hora más cercana
