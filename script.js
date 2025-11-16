@@ -241,6 +241,74 @@ function extractTripInfoFromPdf(text) {
     return { origin, destination, tripTime };
 }
 
+/**
+ * --- FUNCIÓN DE PRUEBA: Solo extrae fecha/hora con IA y la imprime en consola ---
+ * NO MODIFICA ninguna otra lógica del sistema
+ */
+async function testDateTimeExtraction(ocrText) {
+    const prompt = `
+Extract ONLY dates and times from this OCR text. Do not extract destinations or prices.
+
+OCR Text:
+"""
+${ocrText}
+"""
+
+Return a JSON array with this exact format:
+[
+  {"date": "Nov 9", "time": "12:42 PM"},
+  {"date": "Nov 8", "time": "7:57 PM"}
+]
+
+IMPORTANT RULES:
+1. Fix OCR errors: "@" = "9", "+" = ":", "G" = "0", "Q" = "0", "O" = "0", "A" = "4"
+2. Look for patterns like "Nov 9 12:42 PM" or "Nov9-12:42PM" 
+3. Extract ALL dates/times found in the text
+4. Return ONLY valid JSON, no explanations
+
+Example of OCR fix:
+"Nov @+ 12:42 PM" → "Nov 9 12:42 PM"
+"Nov 8718 PM" → "Nov 8 7:18 PM"
+`;
+
+    try {
+        const response = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prompt })
+        });
+
+        if (!response.ok) {
+            throw new Error(`API request failed with status ${response.status}`);
+        }
+
+        const data = await response.json();
+        if (data.error) {
+            throw new Error(data.error);
+        }
+
+        // Parsear la respuesta JSON
+        const llmResponse = data.message;
+        const jsonMatch = llmResponse.match(/\[[\s\S]*\]/);
+        
+        if (!jsonMatch) {
+            throw new Error('No valid JSON found in LLM response');
+        }
+
+        const datesTimes = JSON.parse(jsonMatch[0]);
+        console.log("🧪 *** PRUEBA DE EXTRACCIÓN FECHA/HORA CON IA ***");
+        console.log("📅 Fechas y horas extraídas por la IA:", datesTimes);
+        console.log("🔍 Total de fechas/horas encontradas:", datesTimes.length);
+        console.log("*************************************************");
+        
+        return datesTimes;
+        
+    } catch (error) {
+        console.error('❌ Error en prueba de extracción:', error);
+        return null;
+    }
+}
+
 // --- LÓGICA IMAGEN (MODIFICADA) ---
 function handleImageFileSelect(e) {
     if (e.target.files.length) handleImageFiles(e.target.files);
@@ -280,6 +348,114 @@ function handleImageFiles(files) {
 }
 
 // ... (mantener todo el código anterior)
+
+function processImageFile(file, fileItem) {
+    const fileReader = new FileReader();
+    fileReader.onload = function(e) {
+        const img = new Image();
+        img.onload = function() {
+            const processedImgSrc = preprocessImage(img);
+            
+            const progressBar = fileItem.querySelector('.progress'); 
+            const fileStatus = fileItem.querySelector('.file-status');
+            Tesseract.recognize(processedImgSrc, 'eng', {
+                logger: m => {
+                    if (m.status === 'recognizing text') {
+                        const progress = Math.round(m.progress * 100);
+                        progressBar.style.width = `${progress}%`;
+                        fileStatus.textContent = `Processing... ${progress}%`;
+                    }
+                }
+            })
+            .then(({ data: { text } }) => {
+                console.log("Raw OCR Text:", text);
+                
+                // NUEVO: Extraer todas las fechas y horas del texto de la imagen
+                const allImageTripDetails = extractImageTripDetails(text);
+                console.log("All extracted dates/times from image:", allImageTripDetails);
+                
+                // --- NUEVO: Usar LLM para estructurar los datos ---
+                // Mostrar estado de procesamiento de la API
+                apiStatus.style.display = 'block';
+                apiStatus.className = 'api-status processing';
+                apiStatus.textContent = 'Processing with AI...';
+                
+                extractTripsWithLLM(text)
+                    .then(trips => {
+                        console.log("Structured Data from LLM:", trips);
+                        
+                        // Ocultar estado de procesamiento
+                        apiStatus.style.display = 'none';
+                        
+                        const fileDetails = document.createElement('div'); 
+                        fileDetails.className = 'file-details'; 
+                        fileDetails.textContent = `${trips.length} trip(s) found.`; 
+                        fileItem.appendChild(fileDetails);
+                        
+                        let validTripsFound = 0;
+                        trips.forEach((trip, index) => {
+                            const validationResult = validateTrip(trip, 'image');
+                            if (validationResult.isValid) validTripsFound++;
+                            
+                            // NUEVO: Mostrar en consola los detalles de cada viaje encontrado en la imagen
+                            if (allImageTripDetails[index]) {
+                                console.log(`=== IMAGE TRIP DETAILS [${file.name} - Trip ${index + 1}] ===`);
+                                console.log(`Trip Date: ${allImageTripDetails[index].tripDate}`);
+                                console.log(`Trip Time: ${allImageTripDetails[index].tripTime}`);
+                                console.log(`Destination: ${trip.destination}`);
+                                console.log(`================================================`);
+                            } else {
+                                console.warn(`Could not extract date/time for trip ${index + 1} in ${file.name}`);
+                            }
+                            
+                            // Guardar los detalles extraídos en el objeto del viaje
+                            trip.tripDate = allImageTripDetails[index] ? allImageTripDetails[index].tripDate : 'Not found';
+                            trip.tripTime = allImageTripDetails[index] ? allImageTripDetails[index].tripTime : 'Not found';
+                            
+                            fileResults.push({ 
+                                name: file.name, 
+                                type: 'image', 
+                                total: trip.total_lkr, 
+                                origin: trip.origin || 'Not specified', 
+                                destination: trip.destination, 
+                                isValid: validationResult.isValid, 
+                                validationDetails: validationResult.details, 
+                                text: text,
+                                tripTime: trip.trip_time || trip.tripTime || null // Usar la hora extraída si está disponible
+                                // NO se añade tripDate para imágenes
+                            });
+                        });
+                        fileItem.className = validTripsFound > 0 ? 'file-item success' : 'file-item invalid';
+                        fileStatus.className = `file-status ${validTripsFound > 0 ? 'status-success' : 'status-invalid'}`;
+                        fileStatus.textContent = `Completed (${validTripsFound} valid)`;
+                        progressBar.style.display = 'none';
+                        updateResultsTable();
+                    })
+                    .catch(error => {
+                        console.error('Error processing with LLM:', error);
+                        
+                        // Mostrar estado de error
+                        apiStatus.className = 'api-status error';
+                        apiStatus.textContent = `Error processing with AI: ${error.message}`;
+                        
+                        fileItem.className = 'file-item error';
+                        fileStatus.className = 'file-status status-error';
+                        fileStatus.textContent = 'Error processing with AI';
+                        progressBar.style.display = 'none';
+                    });
+            }).catch(err => { 
+                console.error('Error processing image:', err); 
+                fileItem.className = 'file-item error'; 
+                fileStatus.className = 'file-status status-error'; 
+                fileStatus.textContent = 'Error processing'; 
+                progressBar.style.display = 'none'; 
+            });
+        };
+        img.src = e.target.result;
+    };
+    fileReader.readAsDataURL(file);
+}
+
 
 // NUEVA FUNCIÓN: Extraer fechas y horas específicas de imágenes (OCR) - MEJORADA
 function extractImageTripDetails(text) {
@@ -477,6 +653,9 @@ function processImageFile(file, fileItem) {
             .then(({ data: { text } }) => {
                 console.log("Raw OCR Text:", text);
                 
+                // --- PRUEBA: Extraer fechas/horas con IA (solo para test en consola) ---
+                testDateTimeExtraction(text);
+                
                 // NUEVO: Extraer todas las fechas y horas del texto de la imagen
                 const allImageTripDetails = extractImageTripDetails(text);
                 console.log("All extracted dates/times from image:", allImageTripDetails);
@@ -487,59 +666,62 @@ function processImageFile(file, fileItem) {
                 apiStatus.className = 'api-status processing';
                 apiStatus.textContent = 'Processing with AI...';
                 
-                extractDateTimeWithLLM(text)
+                extractTripsWithLLM(text)
                     .then(trips => {
-                        console.log("🤖 AI-extracted trips with correct dates/times:", trips);
-                        
-                        if (!trips || trips.length === 0) {
-                            throw new Error('No trips could be extracted by AI');
-                        }
+                        console.log("Structured Data from LLM:", trips);
                         
                         // Ocultar estado de procesamiento
                         apiStatus.style.display = 'none';
                         
                         const fileDetails = document.createElement('div'); 
                         fileDetails.className = 'file-details'; 
-                        fileDetails.textContent = `${trips.length} trip(s) found by AI.`; 
+                        fileDetails.textContent = `${trips.length} trip(s) found.`; 
                         fileItem.appendChild(fileDetails);
                         
                         let validTripsFound = 0;
                         trips.forEach((trip, index) => {
-                            // Estructurar el trip para validación
-                            const tripForValidation = {
-                                destination: trip.destination,
-                                total_lkr: trip.price,
-                                status: 'valid',
-                                trip_time: trip.time,
-                                trip_date: trip.date
-                            };
-                            
-                            const validationResult = validateTrip(tripForValidation, 'image');
+                            const validationResult = validateTrip(trip, 'image');
                             if (validationResult.isValid) validTripsFound++;
                             
-                            // Mostrar detalles correctos en consola
-                            console.log(`=== AI EXTRACTED TRIP [${file.name} - Trip ${index + 1}] ===`);
-                            console.log(`Destination: ${trip.destination}`);
-                            console.log(`Date: ${trip.date}`);
-                            console.log(`Time: ${trip.time}`);
-                            console.log(`Price: ${trip.price} LKR`);
-                            console.log(`Valid: ${validationResult.isValid}`);
-                            console.log(`================================================`);
+                            // NUEVO: Intentar asociar cada viaje con su fecha/hora más cercana
+                            let tripDetail = null;
+                            
+                            // Si tenemos suficientes detalles para todos los viajes
+                            if (allImageTripDetails.length >= trips.length) {
+                                tripDetail = allImageTripDetails[index];
+                            } else if (allImageTripDetails.length > 0) {
+                                // Si tenemos menos detalles que viajes, intentamos asociar por destino
+                                tripDetail = findBestMatchForTrip(trip, allImageTripDetails, text);
+                            }
+                            
+                            // Mostrar en consola los detalles de cada viaje encontrado en la imagen
+                            if (tripDetail) {
+                                console.log(`=== IMAGE TRIP DETAILS [${file.name} - Trip ${index + 1}] ===`);
+                                console.log(`Trip Date: ${tripDetail.tripDate}`);
+                                console.log(`Trip Time: ${tripDetail.tripTime}`);
+                                console.log(`Destination: ${trip.destination}`);
+                                console.log(`================================================`);
+                            } else {
+                                console.warn(`Could not extract date/time for trip ${index + 1} in ${file.name}`);
+                            }
+                            
+                            // Guardar los detalles extraídos en el objeto del viaje
+                            trip.tripDate = tripDetail ? tripDetail.tripDate : 'Not found';
+                            trip.tripTime = tripDetail ? tripDetail.tripTime : 'Not found';
                             
                             fileResults.push({ 
                                 name: file.name, 
                                 type: 'image', 
-                                total: trip.price, 
-                                origin: 'Not specified', 
+                                total: trip.total_lkr, 
+                                origin: trip.origin || 'Not specified', 
                                 destination: trip.destination, 
                                 isValid: validationResult.isValid, 
                                 validationDetails: validationResult.details, 
                                 text: text,
-                                tripTime: trip.time,
-                                tripDate: trip.date
+                                tripTime: trip.trip_time || trip.tripTime || null // Usar la hora extraída si está disponible
+                                // NO se añade tripDate para imágenes
                             });
                         });
-                        
                         fileItem.className = validTripsFound > 0 ? 'file-item success' : 'file-item invalid';
                         fileStatus.className = `file-status ${validTripsFound > 0 ? 'status-success' : 'status-invalid'}`;
                         fileStatus.textContent = `Completed (${validTripsFound} valid)`;
@@ -547,15 +729,15 @@ function processImageFile(file, fileItem) {
                         updateResultsTable();
                     })
                     .catch(error => {
-                        console.error('❌ Error processing with AI:', error);
+                        console.error('Error processing with LLM:', error);
                         
                         // Mostrar estado de error
                         apiStatus.className = 'api-status error';
-                        apiStatus.textContent = `Error extracting with AI: ${error.message}`;
+                        apiStatus.textContent = `Error processing with AI: ${error.message}`;
                         
                         fileItem.className = 'file-item error';
                         fileStatus.className = 'file-status status-error';
-                        fileStatus.textContent = 'Error with AI extraction';
+                        fileStatus.textContent = 'Error processing with AI';
                         progressBar.style.display = 'none';
                     });
             }).catch(err => { 
@@ -1139,74 +1321,6 @@ function extractTripDetails(text) {
 
 
 
-
-/**
- * --- NUEVA FUNCIÓN: Extrae fechas y horas usando Llama ---
- * Usa IA para asociar correctamente cada fecha/hora con su destino
- */
-async function extractDateTimeWithLLM(ocrText) {
-    const prompt = `
-Extract the exact date and time for each trip from this OCR text. The text contains receipts with destinations, dates, times, and prices.
-
-OCR Text:
-"""
-${ocrText}
-"""
-
-Return a JSON array with this exact format:
-[
-  {"destination": "exact destination name", "date": "Nov 9", "time": "12:42 PM", "price": "351.82"},
-  {"destination": "exact destination name", "date": "Nov 9", "time": "12:42 PM", "price": "0.00"}
-]
-
-IMPORTANT RULES:
-1. Each destination must have its corresponding date and time
-2. Look for patterns like "Nov 9 12:42 PM" or "Nov9-12:42PM" 
-3. Fix OCR errors: "@" = "9", "+" = ":", "G" = "0", "Q" = "0", "O" = "0", "A" = "4"
-4. Extract the price after "LKR" (fix OCR characters)
-5. Include ALL trips found in the text
-6. Return ONLY valid JSON, no explanations
-
-Example of OCR fix:
-"Nov @+ 12:42 PM" → "Nov 9 12:42 PM"
-"LKR0O.QO" → "LKR0.00"
-"Nov 8718 PM" → "Nov 8 7:18 PM"
-`;
-
-    try {
-        const response = await fetch('/api/chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prompt })
-        });
-
-        if (!response.ok) {
-            throw new Error(`API request failed with status ${response.status}`);
-        }
-
-        const data = await response.json();
-        if (data.error) {
-            throw new Error(data.error);
-        }
-
-        // Parsear la respuesta JSON
-        const llmResponse = data.message;
-        const jsonMatch = llmResponse.match(/\[[\s\S]*\]/);
-        
-        if (!jsonMatch) {
-            throw new Error('No valid JSON found in LLM response');
-        }
-
-        const tripsData = JSON.parse(jsonMatch[0]);
-        console.log("🤖 LLM extracted trips with dates/times:", tripsData);
-        
-        return tripsData;
-        
-    } catch (error) {
-        console.error('❌ Error in LLM date/time extraction:', error);
-        return null;
-    }
-}
 
 /**
  * --- VERSIÓN 2: LÓGICA DE VALIDACIÓN CON SEGUNDA OPORTUNIDAD ---
