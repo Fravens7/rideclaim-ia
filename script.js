@@ -788,9 +788,10 @@ function extractTripDetails(text) {
         destination: 'Not found'
     };
 
-    // Extraer fecha del viaje (formato "Nov 16, 2025" o "11/16/25")
+    // Extraer fecha del viaje (formato "Nov 16, 2025", "9 nov 2025" o "11/16/25")
     const datePatterns = [
         /(\w{3}\s+\d{1,2},\s+\d{4})/,  // Nov 16, 2025
+        /(\d{1,2}\s+\w{3}\s+\d{4})/,    // 9 nov 2025
         /(\d{1,2}\/\d{1,2}\/\d{2,4})/    // 11/16/25
     ];
     
@@ -802,10 +803,12 @@ function extractTripDetails(text) {
         }
     }
 
-    // Extraer tipo de transporte (Tuk o Zip)
+    // Extraer tipo de transporte (Tuk o Zip) - patrones mejorados
     const transportPatterns = [
         /Trip details\s+(Tuk|Zip)/i,
-        /(Tuk|Zip)\s+\d+.\d+\s+kilometers/i
+        /(Tuk|Zip)\s+\d+.\d+\s+kilometers/i,
+        /Detalles del viaje\s+(Tuk|Zip)/i,
+        /(Tuk|Zip)\s+\d+.\d+\s+kilómetros/i
     ];
     
     for (const pattern of transportPatterns) {
@@ -816,10 +819,16 @@ function extractTripDetails(text) {
         }
     }
 
-    // Extraer direcciones con horas - método mejorado
-    // Buscamos líneas que contengan hora seguida de dirección
-    const timeLocationPattern = /(\d{1,2}:\d{2}\s*(?:AM|PM|am|pm))\s+([A-Za-z0-9\s,]+Sri Lanka)/g;
-    const matches = [...text.matchAll(timeLocationPattern)];
+    // Extraer direcciones con horas - método mejorado y más flexible
+    // Primero intentamos con el formato que incluye AM/PM
+    let timeLocationPattern = /(\d{1,2}:\d{2}\s*(?:AM|PM|am|pm))\s+([A-Za-z0-9\s,]+Sri Lanka)/g;
+    let matches = [...text.matchAll(timeLocationPattern)];
+    
+    // Si no encontramos suficientes coincidencias, intentamos sin AM/PM
+    if (matches.length < 2) {
+        timeLocationPattern = /(\d{1,2}:\d{2})\s+([A-Za-z0-9\s,]+Sri Lanka)/g;
+        matches = [...text.matchAll(timeLocationPattern)];
+    }
     
     if (matches.length >= 2) {
         // Ordenamos las horas para asegurar que startTime < endTime
@@ -830,9 +839,19 @@ function extractTripDetails(text) {
         
         // Convertimos las horas a minutos para comparar
         const convertToMinutes = (timeStr) => {
-            const [time, period] = timeStr.split(/\s+/);
-            const [hours, minutes] = time.split(':').map(Number);
-            const totalMinutes = (hours % 12) * 60 + minutes + (period.toLowerCase() === 'pm' ? 720 : 0);
+            // Verificar si ya tiene AM/PM
+            const hasAmPm = /am|pm/i.test(timeStr);
+            
+            let [hours, minutes] = timeStr.split(':').map(Number);
+            
+            // Si no tiene AM/PM, asumimos que es formato 24h
+            if (!hasAmPm) {
+                return hours * 60 + minutes;
+            }
+            
+            // Si tiene AM/PM, convertimos a formato 24h
+            const period = timeStr.match(/am|pm/i)[0].toLowerCase();
+            const totalMinutes = (hours % 12) * 60 + minutes + (period === 'pm' ? 720 : 0);
             return totalMinutes;
         };
         
@@ -847,7 +866,6 @@ function extractTripDetails(text) {
 
     return tripDetails;
 }
-
 // ... (mantener el resto del código sin cambios)
 
 
