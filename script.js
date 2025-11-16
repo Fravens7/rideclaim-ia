@@ -538,10 +538,6 @@ function extractImageTripDetails(text) {
 
 
 
-
-
-
-
 // Función auxiliar para convertir tiempo a minutos
 function convertTimeToMinutes(timeStr) {
     // Verificar si ya tiene AM/PM
@@ -562,125 +558,6 @@ function convertTimeToMinutes(timeStr) {
 
 
 
-
-// Modificación en processImageFile para mejorar la asignación de fechas/horas
-function processImageFile(file, fileItem) {
-    const fileReader = new FileReader();
-    fileReader.onload = function(e) {
-        const img = new Image();
-        img.onload = function() {
-            const processedImgSrc = preprocessImage(img);
-            
-            const progressBar = fileItem.querySelector('.progress'); 
-            const fileStatus = fileItem.querySelector('.file-status');
-            Tesseract.recognize(processedImgSrc, 'eng', {
-                logger: m => {
-                    if (m.status === 'recognizing text') {
-                        const progress = Math.round(m.progress * 100);
-                        progressBar.style.width = `${progress}%`;
-                        fileStatus.textContent = `Processing... ${progress}%`;
-                    }
-                }
-            })
-            .then(({ data: { text } }) => {
-                console.log("Raw OCR Text:", text);
-                
-                // NUEVO: Extraer todas las fechas y horas del texto de la imagen
-                const allImageTripDetails = extractImageTripDetails(text);
-                console.log("All extracted dates/times from image:", allImageTripDetails);
-                
-                // --- NUEVO: Usar LLM para estructurar los datos ---
-                // Mostrar estado de procesamiento de la API
-                apiStatus.style.display = 'block';
-                apiStatus.className = 'api-status processing';
-                apiStatus.textContent = 'Processing with AI...';
-                
-                extractTripsWithLLM(text)
-                    .then(trips => {
-                        console.log("Structured Data from LLM:", trips);
-                        
-                        // Ocultar estado de procesamiento
-                        apiStatus.style.display = 'none';
-                        
-                        const fileDetails = document.createElement('div'); 
-                        fileDetails.className = 'file-details'; 
-                        fileDetails.textContent = `${trips.length} trip(s) found.`; 
-                        fileItem.appendChild(fileDetails);
-                        
-                        let validTripsFound = 0;
-                        trips.forEach((trip, index) => {
-                            const validationResult = validateTrip(trip, 'image');
-                            if (validationResult.isValid) validTripsFound++;
-                            
-                            // NUEVO: Intentar asociar cada viaje con su fecha/hora más cercana
-                            let tripDetail = null;
-                            
-                            // Si tenemos suficientes detalles para todos los viajes
-                            if (allImageTripDetails.length >= trips.length) {
-                                tripDetail = allImageTripDetails[index];
-                            } else if (allImageTripDetails.length > 0) {
-                                // Si tenemos menos detalles que viajes, intentamos asociar por destino
-                                tripDetail = findBestMatchForTrip(trip, allImageTripDetails, text);
-                            }
-                            
-                            // Mostrar en consola los detalles de cada viaje encontrado en la imagen
-                            if (tripDetail) {
-                                console.log(`=== IMAGE TRIP DETAILS [${file.name} - Trip ${index + 1}] ===`);
-                                console.log(`Trip Date: ${tripDetail.tripDate}`);
-                                console.log(`Trip Time: ${tripDetail.tripTime}`);
-                                console.log(`Destination: ${trip.destination}`);
-                                console.log(`================================================`);
-                            } else {
-                                console.warn(`Could not extract date/time for trip ${index + 1} in ${file.name}`);
-                            }
-                            
-                            // Guardar los detalles extraídos en el objeto del viaje
-                            trip.tripDate = tripDetail ? tripDetail.tripDate : 'Not found';
-                            trip.tripTime = tripDetail ? tripDetail.tripTime : 'Not found';
-                            
-                            fileResults.push({ 
-                                name: file.name, 
-                                type: 'image', 
-                                total: trip.total_lkr, 
-                                origin: trip.origin || 'Not specified', 
-                                destination: trip.destination, 
-                                isValid: validationResult.isValid, 
-                                validationDetails: validationResult.details, 
-                                text: text,
-                                tripTime: trip.trip_time || trip.tripTime || null // Usar la hora extraída si está disponible
-                                // NO se añade tripDate para imágenes
-                            });
-                        });
-                        fileItem.className = validTripsFound > 0 ? 'file-item success' : 'file-item invalid';
-                        fileStatus.className = `file-status ${validTripsFound > 0 ? 'status-success' : 'status-invalid'}`;
-                        fileStatus.textContent = `Completed (${validTripsFound} valid)`;
-                        progressBar.style.display = 'none';
-                        updateResultsTable();
-                    })
-                    .catch(error => {
-                        console.error('Error processing with LLM:', error);
-                        
-                        // Mostrar estado de error
-                        apiStatus.className = 'api-status error';
-                        apiStatus.textContent = `Error processing with AI: ${error.message}`;
-                        
-                        fileItem.className = 'file-item error';
-                        fileStatus.className = 'file-status status-error';
-                        fileStatus.textContent = 'Error processing with AI';
-                        progressBar.style.display = 'none';
-                    });
-            }).catch(err => { 
-                console.error('Error processing image:', err); 
-                fileItem.className = 'file-item error'; 
-                fileStatus.className = 'file-status status-error'; 
-                fileStatus.textContent = 'Error processing'; 
-                progressBar.style.display = 'none'; 
-            });
-        };
-        img.src = e.target.result;
-    };
-    fileReader.readAsDataURL(file);
-}
 
 function findBestMatchForTrip(trip, allImageTripDetails, text) {
     // Buscar el destino en el texto para encontrar la fecha/hora más cercana
@@ -1659,4 +1536,50 @@ function updateTripCalendar() {
     calendarContainer.innerHTML = '';
     calendarContainer.appendChild(calendarHeader);
     calendarContainer.appendChild(calendarTable);
+}
+
+
+
+
+
+
+/**
+ * =================================================================
+ * EXPERIMENTO: OCR con PaddleOCR (No interfere con el flujo principal)
+ * =================================================================
+ */
+async function runPaddleOCRExperiment(imageElement) {
+    console.log("\n=========================================================");
+    console.log("🧪 INICIANDO EXPERIMENTO: PaddleOCR");
+    console.log("=========================================================");
+
+    // Aseguramos que PaddleOCR esté disponible
+    if (typeof PaddleOCR === 'undefined') {
+        console.error("❌ [PaddleOCR Exp] La librería PaddleOCR no se cargó. ¿Añadiste el script al HTML?");
+        return;
+    }
+
+    try {
+        // Inicializa PaddleOCR. Esto puede tardar un momento la primera vez.
+        console.log("⏳ [PaddleOCR Exp] Inicializando motor PaddleOCR...");
+        const ocr = await PaddleOCR.create();
+        console.log("✅ [PaddleOCR Exp] Motor inicializado. Reconociendo texto...");
+        
+        // Ejecuta el OCR sobre la imagen
+        const res = await ocr.recognize(imageElement);
+
+        // PaddleOCR devuelve un array de objetos. Lo unimos en un solo string.
+        const extractedText = res.map(line => line.text).join('\n');
+
+        console.log("📄 [PaddleOCR Exp] TEXTO EXTRAÍDO:");
+        console.log("---");
+        console.log(extractedText);
+        console.log("---");
+        console.log("🏁 FIN DEL EXPERIMENTO DE PADDLEOCR");
+        console.log("=========================================================\n");
+
+    } catch (error) {
+        console.error("❌ [PaddleOCR Exp] Error durante el experimento:", error);
+        console.log("=========================================================\n");
+    }
 }
