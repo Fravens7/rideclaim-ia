@@ -345,6 +345,19 @@ function testDateTimeExtractionStructural(ocrText) {
             }
         },
         {
+            name: "Formato_8718_especifico",
+            regex: /(\w{3})\s*(\d{1})\s*(\d{3})(\d{2})\s*(AM|PM)/gi,
+            extractor: (match) => {
+                // Patrón específico para "Nov 8718 PM"
+                return {
+                    date: `${match[1]} ${match[2]}`,
+                    time: `${match[3]}:${match[4]} ${match[5]}`,
+                    source: match[0],
+                    pattern: "8718_especifico"
+                };
+            }
+        },
+        {
             name: "Formato_punto_decimal",
             regex: /(\w{3})[\.]?(\d{1,2})[\.]?(\d{1,2})(\d{2})(AM|PM)/gi,
             extractor: (match) => {
@@ -955,19 +968,18 @@ function processImageFile(file, fileItem) {
             .then(({ data: { text } }) => {
                 console.log("Raw OCR Text:", text);
                 
-                // --- PRUEBA: OCR Alternativo (Vercel) ---
-                // Obtener el imageData del contexto
-                const canvas = document.createElement('canvas');
-                const ctx = canvas.getContext('2d');
-                const img = new Image();
-                img.onload = async function() {
-                    canvas.width = img.width;
-                    canvas.height = img.height;
-                    ctx.drawImage(img, 0, 0);
-                    const imageData = canvas.toDataURL('image/png');
-                    await testAlternativeOCR(imageData);
-                };
-                img.src = e.target.result;
+                // --- PRUEBA: OCR Alternativo (Vercel) - TEMPORALMENTE DESACTIVADO ---
+                // const canvas = document.createElement('canvas');
+                // const ctx = canvas.getContext('2d');
+                // const img = new Image();
+                // img.onload = async function() {
+                //     canvas.width = img.width;
+                //     canvas.height = img.height;
+                //     ctx.drawImage(img, 0, 0);
+                //     const imageData = canvas.toDataURL('image/png');
+                //     await testAlternativeOCR(imageData);
+                // };
+                // img.src = e.target.result;
                 
                 // --- PRUEBA: Análisis Estructural Profesional (Open Source) ---
                 testDateTimeExtractionStructural(text);
