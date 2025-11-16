@@ -2,6 +2,9 @@
 
 // Extraer detalles de viajes usando nuestro endpoint especializado en imágenes
 async function extractTripsWithGroqImages(ocrText) {
+    // NUEVO: Log para verificar si se está llamando a esta función
+    console.log("🔍 [GROQ_IMAGES_TIME] Iniciando extracción con IA especializada en imágenes");
+    
     // Prompt específico para extraer fechas/horas de recibos de Uber
     const prompt = `
 Extract trip details from the following OCR text of an Uber receipt. Focus on extracting accurate dates and times.
@@ -42,6 +45,9 @@ OCR Text:
 `;
 
     try {
+        // NUEVO: Log para verificar si se está haciendo la llamada a la API
+        console.log("📡 [GROQ_IMAGES_TIME] Enviando solicitud a /api/chat-images-time");
+        
         const response = await fetch('/api/chat-images-time', {
             method: 'POST',
             headers: {
@@ -75,10 +81,14 @@ OCR Text:
             throw new Error('Failed to parse trip data from AI response');
         }
         
+        // NUEVO: Log para verificar si se extrajeron los datos correctamente
+        console.log("✅ [GROQ_IMAGES_TIME] Extracción completada. Viajes encontrados:", tripsData.length);
+        
         return tripsData;
 
     } catch (error) {
-        console.error('Error calling Groq Images Time API:', error);
+        // NUEVO: Log para verificar si hay error
+        console.error("❌ [GROQ_IMAGES_TIME] Error en la extracción:", error);
         throw error;
     }
 }
