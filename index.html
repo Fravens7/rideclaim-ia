@@ -14,6 +14,12 @@
     <!-- Tesseract.js para OCR -->
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
 
+    
+    <!-- Transformers.js para LLM en el navegador -->
+    <script src="https://cdn.jsdelivr.net/npm/@huggingface/transformers@2.17.2/dist/transformers.min.js"></script>
+
+    
+    
     <!--chart.js para graficos-->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
@@ -1595,6 +1601,113 @@ function updateTripCalendar() {
     calendarContainer.appendChild(calendarHeader);
     calendarContainer.appendChild(calendarTable);
 }
+
+
+
+
+
+
+// ====================================================================
+// PRUEBA DE CONCEPTO: LLM para parsear OCR (Aislada y Segura)
+// ====================================================================
+
+async function testLLMParsing() {
+    console.log("🧪 [PRUEBA LLM] Iniciando prueba de concepto con Transformers.js...");
+
+    // 1. El texto problemático que ya conoces
+    const messyOcrText = `
+7:409 ol 4G 4
+Activity
+Mireka Tower
+Q Mo &« 12:47 Pid ¢, Rebook
+1KR38182
+Mireka Tower
+Q Now - 12:42 P ¢, Rebook
+I KRE00 - Cancelal
+-~ 43b Lauries Rd
+A New 5 - 7:57 P ¢, Rebook
+LKRCO0 - Cancelad - 2 Grivers
+-~ Get U Fit Gym
+Tl Naw & - 7:18 P ¢, Rebook
+LKR263.0C
+A& .. Jungle Juice Bar
+A N 7 - LI5S P2 @ View store
+3 LKR 52400 - Lite
+2 ;
+-~ 3b Lauries Rd
+N Ny /- 558 P ¢, Rebook
+LKR2B/ 50 - 2 drivers
+o~ Mireka Tower
+N Neav /- 508 PR ¢, Rebook
+LKR4/6.34 - 2 drivers
+AR Exotics Marine
+- Aquarium Sri Lanka
+?‘/ q _ ¢, Rebook
+. Ny 7448 P
+LKR3AL75
+Activity
+—`;
+
+    // 2. El prompt para el LLM, pidiendo solo fecha y hora
+    const prompt = `
+Analiza el siguiente texto extraído por un OCR de una captura de pantalla de viajes.
+Extrae la fecha y la hora de CADA viaje encontrado.
+Ignora los viajes cancelados, los de comida (ej. "View store") y los que no tengan una hora clara.
+Devuelve la respuesta como un JSON array de objetos. Cada objeto debe tener las claves "date" y "time".
+Ejemplo de salida: [{"date": "7 Nov", "time": "12:47 PM"}, {"date": "7 Nov", "time": "7:57 PM"}]
+
+Texto del OCR:
+"""
+ ${messyOcrText}
+"""
+`;
+
+    try {
+        console.log("🧪 [PRUEBA LLM] Cargando el modelo Qwen2-0.5B... (Puede tardar unos segundos la primera vez)");
+
+        // 3. Cargar el modelo usando Transformers.js (CON EL NOMBRE CORRECTO)
+        const pipe = await transformers.pipeline('text-generation', 'Xenova/Qwen2-0.5B-Instruct');
+
+        console.log("🧪 [PRUEBA LLM] Modelo cargado. Enviando texto al LLM...");
+        
+        // 4. Enviar el prompt al modelo
+        const output = await pipe(prompt, {
+            max_new_tokens: 256,
+            do_sample: false,
+            return_full_text: false,
+        });
+
+        // 5. Imprimir el resultado crudo del LLM
+        console.log("🧪 [PRUEBA LLM] Respuesta cruda del LLM:");
+        console.log(output[0].generated_text);
+
+        // 6. Intentar parsear el resultado a JSON para ver si es válido
+        try {
+            const parsedJson = JSON.parse(output[0].generated_text);
+            console.log("✅ [PRUEBA LLM] ¡Éxito! El LLM devolvió un JSON válido:");
+            console.log(parsedJson);
+        } catch (e) {
+            console.error("❌ [PRUEBA LLM] Fallo: El LLM no devolvió un JSON válido.");
+            console.error("Error:", e);
+        }
+
+    } catch (error) {
+        console.error("🚨 [PRUEBA LLM] Error general al ejecutar la prueba:", error);
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
