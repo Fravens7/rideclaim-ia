@@ -242,6 +242,98 @@ function extractTripInfoFromPdf(text) {
 }
 
 /**
+ * --- FUNCIÓN DE PRUEBA: Parser Simplificado pero Robusto ---
+ * Separa correctamente destino de fecha/hora
+ */
+function testSimplifiedRobustParser(ocrText) {
+    console.log("⚡ *** PARSER SIMPLIFICADO PERO ROBUSTO ***");
+    
+    const lines = ocrText.split('\n');
+    const trips = [];
+    
+    lines.forEach((line, index) => {
+        const trimmedLine = line.trim();
+        
+        // Ignorar líneas que no son relevantes
+        if (!trimmedLine || 
+            trimmedLine.startsWith('LKR') || 
+            trimmedLine.startsWith('Activity') ||
+            trimmedLine.includes('View store') ||
+            trimmedLine.includes('Canceled') ||
+            trimmedLine.includes('drivers') ||
+            trimmedLine.includes('&') ||
+            trimmedLine.includes('[') ||
+            trimmedLine.includes(']')) {
+            return;
+        }
+        
+        // Buscar patrones de fecha/hora en la línea
+        const datePatterns = [
+            /(\w{3}\s*\d{1,2}[-\+.]\d{1,2}[:]\d{2}\s*(AM|PM))/gi,
+            /(\w{3}\s*\d{1,2}\d{3,4}\s*(AM|PM))/gi,
+            /(\w{3}\s*[@]\d{1,2}\s*[+:]\s*\d{1,2}[:]\d{2}\s*(AM|PM))/gi
+        ];
+        
+        let dateTimeFound = null;
+        for (const pattern of datePatterns) {
+            const match = trimmedLine.match(pattern);
+            if (match) {
+                dateTimeFound = match[1];
+                break;
+            }
+        }
+        
+        if (dateTimeFound) {
+            // Separar destino de fecha/hora
+            const parts = trimmedLine.split(dateTimeFound);
+            let destination = '';
+            
+            if (parts.length > 0) {
+                destination = parts[0].trim();
+                // Limpiar caracteres extraños del destino
+                destination = destination
+                    .replace(/[.t]$/i, '')
+                    .replace(/[,.t]$/i, '')
+                    .replace(/[.Q—']$/i, '')
+                    .replace(/[~][^©]*[T][^]*$/i, '')
+                    .replace(/['t][^¢]*$/i, '')
+                    .replace(/g$/i, '')
+                    .replace(/Q$/i, '')
+                    .trim();
+            }
+            
+            // Procesar la fecha/hora
+            const processedDateTime = processDateTime(dateTimeFound);
+            
+            if (destination && processedDateTime.date !== 'Unknown') {
+                trips.push({
+                    lineNumber: index + 1,
+                    destination: destination,
+                    rawDateTime: dateTimeFound,
+                    processedDateTime: processedDateTime,
+                    fullLine: trimmedLine
+                });
+            }
+        }
+    });
+    
+    console.log("⚡ RESULTADO DEL PARSER SIMPLIFICADO:");
+    console.log(`   • Total de viajes detectados: ${trips.length}`);
+    console.log("");
+    console.log("📋 DETALLE POR VIAJE:");
+    trips.forEach((trip, index) => {
+        console.log(`   ${index + 1}. [Línea ${trip.lineNumber}] ${trip.destination}`);
+        console.log(`      Fecha/Hora: ${trip.processedDateTime.date} - ${trip.processedDateTime.time}`);
+        console.log(`      Original: "${trip.rawDateTime}"`);
+        console.log(`      Línea completa: "${trip.fullLine}"`);
+        console.log("");
+    });
+    console.log("*****************************************************************");
+    
+    return trips;
+}
+
+/**
  * --- FUNCIÓN DE PRUEBA: Parser Inteligente de Líneas ---
  * Separa correctamente destino de fecha/hora
  */
@@ -1141,8 +1233,8 @@ function processImageFile(file, fileItem) {
                 // };
                 // img.src = e.target.result;
                 
-                // --- PRUEBA: Parser Inteligente de Líneas ---
-                testIntelligentLineParser(text);
+                // --- PRUEBA: Parser Simplificado pero Robusto ---
+                testSimplifiedRobustParser(text);
                 
                 // --- PRUEBA: Análisis Estructural Profesional (Open Source) ---
                 testDateTimeExtractionStructural(text);
