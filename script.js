@@ -290,8 +290,6 @@ function processImageFile(file, fileItem) {
             
             const progressBar = fileItem.querySelector('.progress'); 
             const fileStatus = fileItem.querySelector('.file-status');
-            
-            // NUEVA CONFIGURACIÓN MEJORADA DE TESSERACT
             Tesseract.recognize(processedImgSrc, 'eng', {
                 logger: m => {
                     if (m.status === 'recognizing text') {
@@ -299,23 +297,17 @@ function processImageFile(file, fileItem) {
                         progressBar.style.width = `${progress}%`;
                         fileStatus.textContent = `Processing... ${progress}%`;
                     }
-                },
-                // NUEVOS PARÁMETROS PARA MEJORAR RECONOCIMIENTO DE FECHAS/HORAS
-                tessedit_char_whitelist: '0123456789:AMPMDayNovJunFebMarAprMayJulAugSepOctDec+-., ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz',
-                tessedit_pagesegmode: '6', // Modo para texto uniforme de recibos
-                preserve_interword_spaces: '1',
-                tessedit_ocr_engine_mode: '1', // Usar el motor LSTM más preciso
-                tessedit_zero_rejection: '0', // No rechazar caracteres
-                tessedit_zero_rejection_certainty: '95' // Umbral de certeza más bajo
+                }
             })
             .then(({ data: { text } }) => {
-                console.log("Improved OCR Text:", text);
+                console.log("Raw OCR Text:", text);
                 
-                // Extraer todas las fechas y horas del texto de la imagen
+                // NUEVO: Extraer todas las fechas y horas del texto de la imagen
                 const allImageTripDetails = extractImageTripDetails(text);
                 console.log("All extracted dates/times from image:", allImageTripDetails);
                 
                 // --- NUEVO: Usar LLM para estructurar los datos ---
+                // Mostrar estado de procesamiento de la API
                 apiStatus.style.display = 'block';
                 apiStatus.className = 'api-status processing';
                 apiStatus.textContent = 'Processing with AI...';
@@ -333,20 +325,24 @@ function processImageFile(file, fileItem) {
                         fileItem.appendChild(fileDetails);
                         
                         let validTripsFound = 0;
-                        
-                        // NUEVO: Usar los viajes extraídos con fecha/hora/destino
-                        const tripsWithDateTime = associateTripsWithDateTime(trips, allImageTripDetails, text);
-                        
-                        tripsWithDateTime.forEach((trip, index) => {
+                        trips.forEach((trip, index) => {
                             const validationResult = validateTrip(trip, 'image');
                             if (validationResult.isValid) validTripsFound++;
                             
-                            // Mostrar en consola los detalles de cada viaje encontrado en la imagen
-                            console.log(`=== IMAGE TRIP DETAILS [${file.name} - Trip ${index + 1}] ===`);
-                            console.log(`Trip Date: ${trip.tripDate}`);
-                            console.log(`Trip Time: ${trip.tripTime}`);
-                            console.log(`Destination: ${trip.destination}`);
-                            console.log(`================================================`);
+                            // NUEVO: Mostrar en consola los detalles de cada viaje encontrado en la imagen
+                            if (allImageTripDetails[index]) {
+                                console.log(`=== IMAGE TRIP DETAILS [${file.name} - Trip ${index + 1}] ===`);
+                                console.log(`Trip Date: ${allImageTripDetails[index].tripDate}`);
+                                console.log(`Trip Time: ${allImageTripDetails[index].tripTime}`);
+                                console.log(`Destination: ${trip.destination}`);
+                                console.log(`================================================`);
+                            } else {
+                                console.warn(`Could not extract date/time for trip ${index + 1} in ${file.name}`);
+                            }
+                            
+                            // Guardar los detalles extraídos en el objeto del viaje
+                            trip.tripDate = allImageTripDetails[index] ? allImageTripDetails[index].tripDate : 'Not found';
+                            trip.tripTime = allImageTripDetails[index] ? allImageTripDetails[index].tripTime : 'Not found';
                             
                             fileResults.push({ 
                                 name: file.name, 
@@ -357,10 +353,10 @@ function processImageFile(file, fileItem) {
                                 isValid: validationResult.isValid, 
                                 validationDetails: validationResult.details, 
                                 text: text,
-                                tripTime: trip.trip_time || trip.tripTime || null
+                                tripTime: trip.trip_time || trip.tripTime || null // Usar la hora extraída si está disponible
+                                // NO se añade tripDate para imágenes
                             });
                         });
-                        
                         fileItem.className = validTripsFound > 0 ? 'file-item success' : 'file-item invalid';
                         fileStatus.className = `file-status ${validTripsFound > 0 ? 'status-success' : 'status-invalid'}`;
                         fileStatus.textContent = `Completed (${validTripsFound} valid)`;
@@ -370,6 +366,7 @@ function processImageFile(file, fileItem) {
                     .catch(error => {
                         console.error('Error processing with LLM:', error);
                         
+                        // Mostrar estado de error
                         apiStatus.className = 'api-status error';
                         apiStatus.textContent = `Error processing with AI: ${error.message}`;
                         
@@ -391,39 +388,90 @@ function processImageFile(file, fileItem) {
     fileReader.readAsDataURL(file);
 }
 
+
 // NUEVA FUNCIÓN: Extraer fechas y horas específicas de imágenes (OCR) - MEJORADA
-// NUEVA FUNCIÓN: Extraer fechas y horas específicas de imágenes (OCR) - ENFOQUE DIRECTO
 function extractImageTripDetails(text) {
     const detailsArray = [];
     
     // Dividir el texto en líneas para un análisis más preciso
     const lines = text.split('\n');
     
-    // Buscar líneas que contengan patrones de fecha/hora
+    // Para cada línea, buscar patrones de fecha/hora
     lines.forEach(line => {
-        // Patrones específicos para los formatos que vemos en el OCR
-        const timePatterns = [
-            // Formato: Nov7-410PM
+        // Patrones específicos para diferentes formatos de fecha/hora con errores de OCR
+        const patterns = [
+            // Formato estándar: Nov 10 -12:34 PM
             {
-                regex: /(\w{3}\s*\d{1,2})[-–](\d{1,2})(\d{2})(AM|PM|am|pm)/gi,
-                process: (match) => {
-                    const hour = match[2];
-                    const minute = match[3];
-                    return {
-                        date: match[1].replace(/\s+/g, ' ').trim(),
-                        time: `${hour}:${minute} ${match[4]}`,
-                        originalLine: line
-                    };
-                }
+                regex: /(\w{3}\s*\d{1,2})\s*[-–]\s*(\d{1,2}[+:]\d{2})\s*(AM|PM|am|pm)/gi,
+                process: (match) => ({
+                    date: match[1].replace(/\s+/g, ' ').trim(),
+                    time: match[2].replace(/[+]/g, ':').trim() + ' ' + match[3]
+                })
             },
-            // Formato: Nov 7+ 157 PM
+            // Formato sin espacios: Nov10-10:18 AM
+            {
+                regex: /(\w{3}\s*\d{1,2})\s*[-–]\s*(\d{1,2}[+:]\d{2})\s*(AM|PM|am|pm)/gi,
+                process: (match) => ({
+                    date: match[1].replace(/\s+/g, ' ').trim(),
+                    time: match[2].replace(/[+]/g, ':').trim() + ' ' + match[3]
+                })
+            },
+            // Formato con errores de OCR: Nov @+ 12:42 PM (donde @ es un 9)
+            {
+                regex: /(\w{3}\s*[@]\s*\d{1,2})\s*[-–]\s*(\d{1,2}[+:]\d{2})\s*(AM|PM|am|pm)/gi,
+                process: (match) => ({
+                    date: match[1].replace(/[@]/g, '9').replace(/\s+/g, ' ').trim(),
+                    time: match[2].replace(/[+]/g, ':').trim() + ' ' + match[3]
+                })
+            },
+            // Formato con espacios faltantes: Nov 8718 PM (donde 8718 es 8:18)
+            {
+                regex: /(\w{3}\s*\d{1,2})\s*[-–]\s*(\d{1,2})(\d{2})\s*(AM|PM|am|pm)/gi,
+                process: (match) => ({
+                    date: match[1].replace(/\s+/g, ' ').trim(),
+                    time: `${match[2]}:${match[3]} ${match[4]}`
+                })
+            },
+            // Formato con punto: Nov7.448PM (donde 448 es 4:48)
+            {
+                regex: /(\w{3}\s*\.?\s*\d{1,2})\.?(\d{1,2})(\d{2})\s*(AM|PM|am|pm)/gi,
+                process: (match) => ({
+                    date: match[1].replace(/[.]/g, ' ').replace(/\s+/g, ' ').trim(),
+                    time: `${match[2]}:${match[3]} ${match[4]}`
+                })
+            },
+            // Formato con +: Nov7+528PM (donde 528 es 5:28)
+            {
+                regex: /(\w{3}\s*[+.]\s*\d{1,2})\s*(\d{1,2})(\d{2})\s*(AM|PM|am|pm)/gi,
+                process: (match) => ({
+                    date: match[1].replace(/[+.]/g, ' ').replace(/\s+/g, ' ').trim(),
+                    time: `${match[2]}:${match[3]} ${match[4]}`
+                })
+            },
+            // Formato sin separador: Nov 7 558PM (donde 558 es 5:58)
+            {
+                regex: /(\w{3}\s*\d{1,2})\s*(\d{1,2})(\d{2})\s*(AM|PM|am|pm)/gi,
+                process: (match) => ({
+                    date: match[1].replace(/\s+/g, ' ').trim(),
+                    time: `${match[2]}:${match[3]} ${match[4]}`
+                })
+            },
+            // Formato con errores comunes: Nov 6+ 10:G0 PM (donde G es 0)
+            {
+                regex: /(\w{3}\s*[+.]\s*\d{1,2})\s*[-–]\s*(\d{1,2})[G:](\d{2})\s*(AM|PM|am|pm)/gi,
+                process: (match) => ({
+                    date: match[1].replace(/[+.]/g, ' ').replace(/\s+/g, ' ').trim(),
+                    time: `${match[2]}:0${match[3]} ${match[4]}`
+                })
+            },
+            // Formato con errores comunes: Nov 6+ 157 PM (donde 157 es 1:57)
             {
                 regex: /(\w{3}\s*[+.]\s*\d{1,2})\s*[-–]\s*(\d{1,2})(\d{2})\s*(AM|PM|am|pm)/gi,
                 process: (match) => {
+                    // Determinar si es formato de 3 o 4 dígitos
                     const timeStr = match[2] + match[3];
                     let hour, minute;
                     
-                    // Determinar si es formato de 3 o 4 dígitos
                     if (timeStr.length === 3) {
                         // Formato 157 -> 1:57
                         hour = timeStr.substring(0, 1);
@@ -436,73 +484,55 @@ function extractImageTripDetails(text) {
                     
                     return {
                         date: match[1].replace(/[+.]/g, ' ').replace(/\s+/g, ' ').trim(),
-                        time: `${hour}:${minute} ${match[4]}`,
-                        originalLine: line
-                    };
-                }
-            },
-            // Formato: Nov 6 - 10:G0 PM (G es 0)
-            {
-                regex: /(\w{3}\s*\d{1,2})\s*[-–]\s*(\d{1,2})[G:](\d{2})\s*(AM|PM|am|pm)/gi,
-                process: (match) => {
-                    return {
-                        date: match[1].replace(/\s+/g, ' ').trim(),
-                        time: `${match[2]}:0${match[3]} ${match[4]}`,
-                        originalLine: line
-                    };
-                }
-            },
-            // Formato estándar: Nov 6+ 12:45 PM
-            {
-                regex: /(\w{3}\s*[+.]\s*\d{1,2})\s*[-–]\s*(\d{1,2}):(\d{2})\s*(AM|PM|am|pm)/gi,
-                process: (match) => {
-                    return {
-                        date: match[1].replace(/[+.]/g, ' ').replace(/\s+/g, ' ').trim(),
-                        time: `${match[2]}:${match[3]} ${match[4]}`,
-                        originalLine: line
-                    };
-                }
-            },
-            // Formato estándar: Nov 6-11:48 AM
-            {
-                regex: /(\w{3}\s*\d{1,2})\s*[-–]\s*(\d{1,2}):(\d{2})\s*(AM|PM|am|pm)/gi,
-                process: (match) => {
-                    return {
-                        date: match[1].replace(/\s+/g, ' ').trim(),
-                        time: `${match[2]}:${match[3]} ${match[4]}`,
-                        originalLine: line
+                        time: `${hour}:${minute} ${match[4]}`
                     };
                 }
             }
         ];
         
         // Probar cada patrón en la línea actual
-        timePatterns.forEach(pattern => {
+        patterns.forEach(pattern => {
             const matches = [...line.matchAll(pattern.regex)];
             matches.forEach(match => {
                 const processed = pattern.process(match);
                 if (processed && processed.date && processed.time) {
-                    detailsArray.push(processed);
+                    detailsArray.push({
+                        tripDate: processed.date,
+                        tripTime: processed.time,
+                        originalLine: line // Guardar la línea original para referencia
+                    });
                 }
             });
         });
     });
     
-    // Ordenar por fecha y hora
-    detailsArray.sort((a, b) => {
+    // Eliminar duplicados basados en fecha y hora
+    const uniqueDetails = [];
+    const seen = new Set();
+    
+    detailsArray.forEach(detail => {
+        const key = `${detail.tripDate}-${detail.tripTime}`;
+        if (!seen.has(key)) {
+            seen.add(key);
+            uniqueDetails.push(detail);
+        }
+    });
+    
+    // Ordenar por fecha y hora para asegurar consistencia
+    uniqueDetails.sort((a, b) => {
         // Extraer día del mes para comparar
-        const dayA = parseInt(a.date.match(/\d+/)[0]);
-        const dayB = parseInt(b.date.match(/\d+/)[0]);
+        const dayA = parseInt(a.tripDate.match(/\d+/)[0]);
+        const dayB = parseInt(b.tripDate.match(/\d+/)[0]);
         
         if (dayA !== dayB) {
             return dayB - dayA; // Ordenar descendente por día (más reciente primero)
         }
         
         // Si mismo día, ordenar por hora
-        return convertTimeToMinutes(b.time) - convertTimeToMinutes(a.time);
+        return convertTimeToMinutes(b.tripTime) - convertTimeToMinutes(a.tripTime);
     });
     
-    return detailsArray;
+    return uniqueDetails;
 }
 
 
@@ -533,7 +563,7 @@ function convertTimeToMinutes(timeStr) {
 
 
 
-// Modificación en processImageFile para usar la nueva función
+// Modificación en processImageFile para mejorar la asignación de fechas/horas
 function processImageFile(file, fileItem) {
     const fileReader = new FileReader();
     fileReader.onload = function(e) {
@@ -555,11 +585,12 @@ function processImageFile(file, fileItem) {
             .then(({ data: { text } }) => {
                 console.log("Raw OCR Text:", text);
                 
-                // NUEVO: Extraer todos los viajes con sus fechas, horas y destinos
-                const tripsWithDateTime = extractImageTripsWithDateTime(text);
-                console.log("All extracted trips with date/time from image:", tripsWithDateTime);
+                // NUEVO: Extraer todas las fechas y horas del texto de la imagen
+                const allImageTripDetails = extractImageTripDetails(text);
+                console.log("All extracted dates/times from image:", allImageTripDetails);
                 
                 // --- NUEVO: Usar LLM para estructurar los datos ---
+                // Mostrar estado de procesamiento de la API
                 apiStatus.style.display = 'block';
                 apiStatus.className = 'api-status processing';
                 apiStatus.textContent = 'Processing with AI...';
@@ -577,20 +608,26 @@ function processImageFile(file, fileItem) {
                         fileItem.appendChild(fileDetails);
                         
                         let validTripsFound = 0;
-                        
-                        // NUEVO: Usar los viajes extraídos con fecha/hora/destino
                         trips.forEach((trip, index) => {
                             const validationResult = validateTrip(trip, 'image');
                             if (validationResult.isValid) validTripsFound++;
                             
-                            // Buscar el viaje correspondiente con fecha/hora/destino
-                            const matchingTrip = tripsWithDateTime[index];
+                            // NUEVO: Intentar asociar cada viaje con su fecha/hora más cercana
+                            let tripDetail = null;
+                            
+                            // Si tenemos suficientes detalles para todos los viajes
+                            if (allImageTripDetails.length >= trips.length) {
+                                tripDetail = allImageTripDetails[index];
+                            } else if (allImageTripDetails.length > 0) {
+                                // Si tenemos menos detalles que viajes, intentamos asociar por destino
+                                tripDetail = findBestMatchForTrip(trip, allImageTripDetails, text);
+                            }
                             
                             // Mostrar en consola los detalles de cada viaje encontrado en la imagen
-                            if (matchingTrip) {
+                            if (tripDetail) {
                                 console.log(`=== IMAGE TRIP DETAILS [${file.name} - Trip ${index + 1}] ===`);
-                                console.log(`Trip Date: ${matchingTrip.tripDate}`);
-                                console.log(`Trip Time: ${matchingTrip.tripTime}`);
+                                console.log(`Trip Date: ${tripDetail.tripDate}`);
+                                console.log(`Trip Time: ${tripDetail.tripTime}`);
                                 console.log(`Destination: ${trip.destination}`);
                                 console.log(`================================================`);
                             } else {
@@ -598,8 +635,8 @@ function processImageFile(file, fileItem) {
                             }
                             
                             // Guardar los detalles extraídos en el objeto del viaje
-                            trip.tripDate = matchingTrip ? matchingTrip.tripDate : 'Not found';
-                            trip.tripTime = matchingTrip ? matchingTrip.tripTime : 'Not found';
+                            trip.tripDate = tripDetail ? tripDetail.tripDate : 'Not found';
+                            trip.tripTime = tripDetail ? tripDetail.tripTime : 'Not found';
                             
                             fileResults.push({ 
                                 name: file.name, 
@@ -610,10 +647,10 @@ function processImageFile(file, fileItem) {
                                 isValid: validationResult.isValid, 
                                 validationDetails: validationResult.details, 
                                 text: text,
-                                tripTime: trip.trip_time || trip.tripTime || null
+                                tripTime: trip.trip_time || trip.tripTime || null // Usar la hora extraída si está disponible
+                                // NO se añade tripDate para imágenes
                             });
                         });
-                        
                         fileItem.className = validTripsFound > 0 ? 'file-item success' : 'file-item invalid';
                         fileStatus.className = `file-status ${validTripsFound > 0 ? 'status-success' : 'status-invalid'}`;
                         fileStatus.textContent = `Completed (${validTripsFound} valid)`;
@@ -623,6 +660,7 @@ function processImageFile(file, fileItem) {
                     .catch(error => {
                         console.error('Error processing with LLM:', error);
                         
+                        // Mostrar estado de error
                         apiStatus.className = 'api-status error';
                         apiStatus.textContent = `Error processing with AI: ${error.message}`;
                         
@@ -643,226 +681,6 @@ function processImageFile(file, fileItem) {
     };
     fileReader.readAsDataURL(file);
 }
-
-
-// NUEVA FUNCIÓN: Asociar cada viaje con su fecha/hora correcta
-function associateTripsWithDateTime(trips, allImageTripDetails, text) {
-    // Si tenemos el mismo número de detalles que viajes, asociamos directamente
-    if (trips.length === allImageTripDetails.length) {
-        return trips.map((trip, index) => ({
-            ...trip,
-            tripDate: allImageTripDetails[index].date,
-            tripTime: allImageTripDetails[index].time
-        }));
-    }
-    
-    // Si no, intentamos asociar por proximidad en el texto
-    const lines = text.split('\n');
-    const tripsWithDateTime = [];
-    
-    // Para cada viaje, encontrar la fecha/hora más cercana
-    trips.forEach(trip => {
-        let bestMatch = null;
-        let minDistance = Infinity;
-        
-        // Buscar la línea que contiene el destino
-        const destLineIndex = lines.findIndex(line => 
-            line.toLowerCase().includes(trip.destination.toLowerCase().substring(0, 10))
-        );
-        
-        if (destLineIndex !== -1) {
-            // Buscar la fecha/hora más cercana a esta línea
-            allImageTripDetails.forEach(detail => {
-                const timeLineIndex = lines.findIndex(line => 
-                    line.includes(detail.date) && line.includes(detail.time)
-                );
-                
-                if (timeLineIndex !== -1) {
-                    const distance = Math.abs(destLineIndex - timeLineIndex);
-                    if (distance < minDistance) {
-                        minDistance = distance;
-                        bestMatch = detail;
-                    }
-                }
-            });
-        }
-        
-        // Si encontramos una coincidencia, la usamos
-        if (bestMatch) {
-            tripsWithDateTime.push({
-                ...trip,
-                tripDate: bestMatch.date,
-                tripTime: bestMatch.time
-            });
-        } else {
-            // Si no, dejamos los valores por defecto
-            tripsWithDateTime.push({
-                ...trip,
-                tripDate: 'Not found',
-                tripTime: 'Not found'
-            });
-        }
-    });
-    
-    return tripsWithDateTime;
-}
-
-
-
-// NUEVA FUNCIÓN: Extraer fechas, horas y destinos juntos de cada línea - CORREGIDA
-function extractImageTripsWithDateTime(text) {
-    const tripsWithDateTime = [];
-    
-    // Dividir el texto en líneas
-    const lines = text.split('\n');
-    
-    // Para cada línea, buscar patrones de fecha/hora
-    for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        
-        // Patrones para detectar líneas con fecha/hora
-        const timePatterns = [
-            // Formato: Nov7-410PM
-            {
-                regex: /(\w{3}\s*\d{1,2})[-–](\d{1,2})(\d{2})(AM|PM|am|pm)/i,
-                process: (match) => ({
-                    date: match[1].replace(/\s+/g, ' ').trim(),
-                    time: `${match[2]}:${match[3]} ${match[4]}`
-                })
-            },
-            // Formato: Nov 7+ 157 PM
-            {
-                regex: /(\w{3}\s*[+.]\s*\d{1,2})\s*[-–]\s*(\d{1,2})(\d{2})\s*(AM|PM|am|pm)/i,
-                process: (match) => {
-                    const timeStr = match[2] + match[3];
-                    let hour, minute;
-                    
-                    if (timeStr.length === 3) {
-                        hour = timeStr.substring(0, 1);
-                        minute = timeStr.substring(1);
-                    } else {
-                        hour = timeStr.substring(0, 2);
-                        minute = timeStr.substring(2);
-                    }
-                    
-                    return {
-                        date: match[1].replace(/[+.]/g, ' ').replace(/\s+/g, ' ').trim(),
-                        time: `${hour}:${minute} ${match[4]}`
-                    };
-                }
-            },
-            // Formato: Nov 6 - 10:G0 PM
-            {
-                regex: /(\w{3}\s*\d{1,2})\s*[-–]\s*(\d{1,2})[G:](\d{2})\s*(AM|PM|am|pm)/i,
-                process: (match) => ({
-                    date: match[1].replace(/\s+/g, ' ').trim(),
-                    time: `${match[2]}:0${match[3]} ${match[4]}`
-                })
-            },
-            // Formato estándar: Nov 6+ 12:45 PM
-            {
-                regex: /(\w{3}\s*[+.]\s*\d{1,2})\s*[-–]\s*(\d{1,2}):(\d{2})\s*(AM|PM|am|pm)/i,
-                process: (match) => ({
-                    date: match[1].replace(/[+.]/g, ' ').replace(/\s+/g, ' ').trim(),
-                    time: `${match[2]}:${match[3]} ${match[4]}`
-                })
-            },
-            // Formato estándar: Nov 6-11:48 AM
-            {
-                regex: /(\w{3}\s*\d{1,2})\s*[-–]\s*(\d{1,2}):(\d{2})\s*(AM|PM|am|pm)/i,
-                process: (match) => ({
-                    date: match[1].replace(/\s+/g, ' ').trim(),
-                    time: `${match[2]}:${match[3]} ${match[4]}`
-                })
-            }
-        ];
-        
-        // Probar cada patrón en la línea actual
-        for (const pattern of timePatterns) {
-            const match = line.match(pattern.regex);
-            if (match) {
-                // Procesar la fecha y hora
-                const processed = pattern.process(match);
-                
-                // Buscar el destino en las líneas cercanas
-                let destination = 'Not found';
-                
-                // Buscar en las líneas siguientes (donde suele estar el destino)
-                for (let j = i + 1; j < Math.min(lines.length, i + 4); j++) {
-                    const nextLine = lines[j].trim();
-                    
-                    // Ignorar líneas vacías o con solo símbolos
-                    if (!nextLine || nextLine.length < 3) continue;
-                    
-                    // Ignorar líneas que contienen precios
-                    if (nextLine.includes('LKR')) continue;
-                    
-                    // Ignorar líneas que contienen "Rebook" o "Canceled"
-                    if (nextLine.toLowerCase().includes('rebook') || 
-                        nextLine.toLowerCase().includes('canceled')) continue;
-                    
-                    // Si encontramos una línea con texto, es probablemente el destino
-                    if (nextLine && nextLine.length > 5) {
-                        destination = nextLine;
-                        break;
-                    }
-                }
-                
-                // Si no se encuentra en las líneas siguientes, buscar en las anteriores
-                if (destination === 'Not found') {
-                    for (let j = i - 1; j >= Math.max(0, i - 2); j--) {
-                        const prevLine = lines[j].trim();
-                        
-                        // Ignorar líneas vacías o con solo símbolos
-                        if (!prevLine || prevLine.length < 3) continue;
-                        
-                        // Ignorar líneas que contienen precios
-                        if (prevLine.includes('LKR')) continue;
-                        
-                        // Ignorar líneas que contienen "Rebook" o "Canceled"
-                        if (prevLine.toLowerCase().includes('rebook') || 
-                            prevLine.toLowerCase().includes('canceled')) continue;
-                        
-                        // Si encontramos una línea con texto, es probablemente el destino
-                        if (prevLine && prevLine.length > 5) {
-                            destination = prevLine;
-                            break;
-                        }
-                    }
-                }
-                
-                // Añadir el viaje con su fecha, hora y destino
-                tripsWithDateTime.push({
-                    tripDate: processed.date,
-                    tripTime: processed.time,
-                    destination: destination,
-                    originalLine: line
-                });
-                
-                // Salir del bucle de patrones una vez encontrado
-                break;
-            }
-        }
-    }
-    
-    // Ordenar por fecha y hora
-    tripsWithDateTime.sort((a, b) => {
-        // Extraer día del mes para comparar
-        const dayA = parseInt(a.tripDate.match(/\d+/)[0]);
-        const dayB = parseInt(b.tripDate.match(/\d+/)[0]);
-        
-        if (dayA !== dayB) {
-            return dayB - dayA; // Ordenar descendente por día (más reciente primero)
-        }
-        
-        // Si mismo día, ordenar por hora
-        return convertTimeToMinutes(b.tripTime) - convertTimeToMinutes(a.tripTime);
-    });
-    
-    return tripsWithDateTime;
-}
-
-
 
 function findBestMatchForTrip(trip, allImageTripDetails, text) {
     // Buscar el destino en el texto para encontrar la fecha/hora más cercana
@@ -913,103 +731,23 @@ function findBestMatchForTrip(trip, allImageTripDetails, text) {
 function preprocessImage(img) {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
-    
-    // Paso 1: Aumentar el tamaño de la imagen para mejor reconocimiento
-    const scaleFactor = 2; // Aumentar 2x el tamaño original
-    canvas.width = img.width * scaleFactor;
-    canvas.height = img.height * scaleFactor;
-    
-    // Habilitar suavizado para mejor calidad al redimensionar
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
-    
-    // Dibujar la imagen redimensionada
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-    
-    // Paso 2: Obtener los datos de la imagen
-    let imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    let data = imageData.data;
-    
-    // Paso 3: Mejora de contraste agresiva
-    const contrast = 2.5; // Factor de contraste alto
-    const factor = (259 * (contrast + 255)) / (255 * (259 - contrast));
-    
+    canvas.width = img.width;
+    canvas.height = img.height;
+    ctx.drawImage(img, 0, 0);
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
     for (let i = 0; i < data.length; i += 4) {
-        data[i] = factor * (data[i] - 128) + 128;     // Red
-        data[i + 1] = factor * (data[i + 1] - 128) + 128; // Green
-        data[i + 2] = factor * (data[i + 2] - 128) + 128; // Blue
-        // Alpha se mantiene igual
-    }
-    
-    // Paso 4: Binarización adaptativa
-    ctx.putImageData(imageData, 0, 0);
-    imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    data = imageData.data;
-    
-    // Calcular umbral adaptativo basado en la imagen
-    let totalBrightness = 0;
-    let pixelCount = 0;
-    
-    for (let i = 0; i < data.length; i += 4) {
-        const brightness = (data[i] + data[i + 1] + data[i + 2]) / 3;
-        totalBrightness += brightness;
-        pixelCount++;
-    }
-    
-    const averageBrightness = totalBrightness / pixelCount;
-    const adaptiveThreshold = averageBrightness * 0.85; // Umbral ligeramente más bajo que el promedio
-    
-    // Aplicar binarización
-    for (let i = 0; i < data.length; i += 4) {
-        const brightness = (data[i] + data[i + 1] + data[i + 2]) / 3;
-        const value = brightness < adaptiveThreshold ? 0 : 255;
-        
-        // Aplicar un umbral más estricto para áreas que podrían ser texto
-        const localThreshold = adaptiveThreshold * 0.9;
-        const strictValue = brightness < localThreshold ? 0 : 255;
-        
-        // Usar el valor más estricto para áreas de posible texto (valores medios)
-        if (brightness > 50 && brightness < 200) {
-            data[i] = strictValue;
-            data[i + 1] = strictValue;
-            data[i + 2] = strictValue;
-        } else {
-            data[i] = value;
-            data[i + 1] = value;
-            data[i + 2] = value;
-        }
-    }
-    
-    // Paso 5: Reducción de ruido simplificada
-    ctx.putImageData(imageData, 0, 0);
-    
-    // Aplicar un desenfoque ligero para eliminar ruido
-    ctx.filter = 'blur(0.5px)';
-    ctx.drawImage(canvas, 0, 0);
-    
-    // Aplicar un umbral final para asegurar binarización
-    ctx.filter = 'none';
-    imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    data = imageData.data;
-    
-    for (let i = 0; i < data.length; i += 4) {
-        const brightness = (data[i] + data[i + 1] + data[i + 2]) / 3;
-        const value = brightness < 128 ? 0 : 255;
-        
+        const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+        const threshold = 150;
+        const value = gray > threshold ? 255 : 0;
         data[i] = value;
         data[i + 1] = value;
         data[i + 2] = value;
     }
-    
     ctx.putImageData(imageData, 0, 0);
-    
-    // Paso 6: Mejora final de bordes
-    ctx.globalCompositeOperation = 'multiply';
-    ctx.filter = 'contrast(1.2) brightness(0.9)';
-    ctx.drawImage(canvas, 0, 0);
-    
-    return canvas.toDataURL('image/png', 1.0); // Máxima calidad
+    return canvas.toDataURL();
 }
+
 // ====================================================================
 // NUEVAS FUNCIONES DE SUPERVISIÓN (NO INVASIVAS)
 // ====================================================================
