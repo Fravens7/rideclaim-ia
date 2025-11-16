@@ -242,6 +242,49 @@ function extractTripInfoFromPdf(text) {
 }
 
 /**
+ * --- FUNCIÓN DE PRUEBA: OCR Alternativo (EasyOCR) ---
+ * Llama a backend en Vercel para segundo OCR
+ */
+async function testAlternativeOCR(imageData) {
+    console.log("🔄 *** OCR ALTERNATIVO (VERCEL) ***");
+    
+    try {
+        console.log("📡 Enviando imagen a OCR alternativo...");
+        
+        const response = await fetch('https://tu-repo-de-ocr.vercel.app/api/ocr-alternative', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ imageData })
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const result = await response.json();
+        
+        console.log("✅ [OCR Alternativo] Resultado exitoso:");
+        console.log("📝 Texto completo:", result.text);
+        console.log("📅 Fechas/horas extraídas:", result.dateTimes);
+        console.log(`🔍 Total encontradas: ${result.count}`);
+        console.log("📊 Detalle completo:");
+        result.dateTimes.forEach((item, index) => {
+            console.log(`  ${index + 1}. ${item.date} - ${item.time} (original: ${item.original})`);
+        });
+        console.log("*************************************************");
+        
+        return result;
+        
+    } catch (error) {
+        console.error("❌ [OCR Alternativo] Error:", error);
+        console.log("🔄 [OCR Alternativo] Usando fallback local...");
+        return null;
+    }
+}
+
+/**
  * --- FUNCIÓN DE PRUEBA: Análisis Estructural Profesional (Open Source) ---
  * NO MODIFICA ninguna otra lógica del sistema
  */
@@ -911,6 +954,20 @@ function processImageFile(file, fileItem) {
             })
             .then(({ data: { text } }) => {
                 console.log("Raw OCR Text:", text);
+                
+                // --- PRUEBA: OCR Alternativo (Vercel) ---
+                // Obtener el imageData del contexto
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                const img = new Image();
+                img.onload = async function() {
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    ctx.drawImage(img, 0, 0);
+                    const imageData = canvas.toDataURL('image/png');
+                    await testAlternativeOCR(imageData);
+                };
+                img.src = e.target.result;
                 
                 // --- PRUEBA: Análisis Estructural Profesional (Open Source) ---
                 testDateTimeExtractionStructural(text);
