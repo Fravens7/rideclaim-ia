@@ -1,0 +1,13 @@
+{
+  "functions": {
+    "api/ocr-alternative.js": {
+      "maxDuration": 30
+    }
+  },
+  "routes": [
+    {
+      "src": "/api/ocr-alternative",
+      "dest": "/api/ocr-alternative.js"
+    }
+  ]
+}
