@@ -302,14 +302,19 @@ function processImageFile(file, fileItem) {
             .then(({ data: { text } }) => {
                 console.log("Raw OCR Text:", text);
                 
-                // NUEVO: Usar Groq API para extraer fechas/horas
+                // NUEVO: Extraer todas las fechas y horas del texto de la imagen
+                const allImageTripDetails = extractImageTripDetails(text);
+                console.log("All extracted dates/times from image:", allImageTripDetails);
+                
+                // --- NUEVO: Usar LLM para estructurar los datos ---
+                // Mostrar estado de procesamiento de la API
                 apiStatus.style.display = 'block';
                 apiStatus.className = 'api-status processing';
-                apiStatus.textContent = 'Extracting trip details with AI...';
+                apiStatus.textContent = 'Processing with AI...';
                 
-                extractTripsWithGroq(text)
+                extractTripsWithLLM(text)
                     .then(trips => {
-                        console.log("Structured Data from Groq:", trips);
+                        console.log("Structured Data from LLM:", trips);
                         
                         // Ocultar estado de procesamiento
                         apiStatus.style.display = 'none';
@@ -324,12 +329,20 @@ function processImageFile(file, fileItem) {
                             const validationResult = validateTrip(trip, 'image');
                             if (validationResult.isValid) validTripsFound++;
                             
-                            // Mostrar en consola los detalles de cada viaje encontrado en la imagen
-                            console.log(`=== IMAGE TRIP DETAILS [${file.name} - Trip ${index + 1}] ===`);
-                            console.log(`Trip Date: ${trip.tripDate}`);
-                            console.log(`Trip Time: ${trip.tripTime}`);
-                            console.log(`Destination: ${trip.destination}`);
-                            console.log(`================================================`);
+                            // NUEVO: Mostrar en consola los detalles de cada viaje encontrado en la imagen
+                            if (allImageTripDetails[index]) {
+                                console.log(`=== IMAGE TRIP DETAILS [${file.name} - Trip ${index + 1}] ===`);
+                                console.log(`Trip Date: ${allImageTripDetails[index].tripDate}`);
+                                console.log(`Trip Time: ${allImageTripDetails[index].tripTime}`);
+                                console.log(`Destination: ${trip.destination}`);
+                                console.log(`================================================`);
+                            } else {
+                                console.warn(`Could not extract date/time for trip ${index + 1} in ${file.name}`);
+                            }
+                            
+                            // Guardar los detalles extraídos en el objeto del viaje
+                            trip.tripDate = allImageTripDetails[index] ? allImageTripDetails[index].tripDate : 'Not found';
+                            trip.tripTime = allImageTripDetails[index] ? allImageTripDetails[index].tripTime : 'Not found';
                             
                             fileResults.push({ 
                                 name: file.name, 
@@ -340,7 +353,8 @@ function processImageFile(file, fileItem) {
                                 isValid: validationResult.isValid, 
                                 validationDetails: validationResult.details, 
                                 text: text,
-                                tripTime: trip.trip_time || trip.tripTime || null
+                                tripTime: trip.trip_time || trip.tripTime || null // Usar la hora extraída si está disponible
+                                // NO se añade tripDate para imágenes
                             });
                         });
                         fileItem.className = validTripsFound > 0 ? 'file-item success' : 'file-item invalid';
@@ -350,7 +364,7 @@ function processImageFile(file, fileItem) {
                         updateResultsTable();
                     })
                     .catch(error => {
-    console.error('Error processing with Groq Images Time:', error);
+                        console.error('Error processing with LLM:', error);
                         
                         // Mostrar estado de error
                         apiStatus.className = 'api-status error';
@@ -373,15 +387,6 @@ function processImageFile(file, fileItem) {
     };
     fileReader.readAsDataURL(file);
 }
-
-
-
-
-
-
-
-
-
 
 
 // NUEVA FUNCIÓN: Extraer fechas y horas específicas de imágenes (OCR) - MEJORADA
@@ -590,9 +595,9 @@ function processImageFile(file, fileItem) {
                 apiStatus.className = 'api-status processing';
                 apiStatus.textContent = 'Processing with AI...';
                 
-                extractTripsWithGroqImages(text)
-    .then(trips => {
-        console.log("Structured Data from Groq Images Time:", trips);
+                extractTripsWithLLM(text)
+                    .then(trips => {
+                        console.log("Structured Data from LLM:", trips);
                         
                         // Ocultar estado de procesamiento
                         apiStatus.style.display = 'none';
@@ -676,9 +681,6 @@ function processImageFile(file, fileItem) {
     };
     fileReader.readAsDataURL(file);
 }
-
-
-
 
 function findBestMatchForTrip(trip, allImageTripDetails, text) {
     // Buscar el destino en el texto para encontrar la fecha/hora más cercana
