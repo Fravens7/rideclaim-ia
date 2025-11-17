@@ -71,6 +71,8 @@ function analyzeEmployeePatterns() {
 
 // --- FUNCIÓN PRINCIPAL DEL MÓDULO ---
 // Esta función será llamada desde script.js
+// --- FUNCIÓN PRINCIPAL DEL MÓDULO ---
+// Esta función será llamada desde script.js
 export async function processImageWithAI(fileName, ocrText, imageDataURL) {
     // --- DEPURACIÓN: Verificamos qué estamos recibiendo ---
     console.log("🔍 [IA-MODULE] Received data:", { fileName, ocrText, imageDataURL: imageDataURL ? 'present' : 'MISSING' });
@@ -81,15 +83,15 @@ export async function processImageWithAI(fileName, ocrText, imageDataURL) {
         const qwenResult = await extractWithQwen(base64Image, fileName, 'image/jpeg');
 
         qwenExtractedData.push({
-            fileName: file.name,
+            fileName: fileName, // <-- CORREGIDO
             extractedText: qwenResult.extractedText
         });
 
-        console.log(`✅ [IA-MODULE] Qwen extraction completed for ${file.name}`);
+        console.log(`✅ [IA-MODULE] Qwen extraction completed for ${fileName}`); // <-- CORREGIDO
         analyzeEmployeePatterns();
 
     } catch (qwenError) {
-        console.error(`❌ [IA-MODULE] Error processing ${file.name}:`, qwenError);
+        console.error(`❌ [IA-MODULE] Error processing ${fileName}:`, qwenError); // <-- CORREGIDO
     }
 }
 
