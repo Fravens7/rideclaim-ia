@@ -71,10 +71,12 @@ function analyzeEmployeePatterns() {
 
 // --- FUNCIÓN PRINCIPAL DEL MÓDULO ---
 // Esta función será llamada desde script.js
-export async function processImageWithAI(file, ocrText) {
-    console.log(`🤖 [IA-MODULE] Starting AI processing for ${file.name}...`);
+export async function processImageWithAI(fileName, ocrText, imageDataURL) {
+    // --- DEPURACIÓN: Verificamos qué estamos recibiendo ---
+    console.log("🔍 [IA-MODULE] Received data:", { fileName, ocrText, imageDataURL: imageDataURL ? 'present' : 'MISSING' });
+
+    console.log(`🤖 [IA-MODULE] Starting AI processing for ${fileName}...`);
     try {
-        
         const base64Image = imageDataURL.split(',')[1];
         const qwenResult = await extractWithQwen(base64Image, fileName, 'image/jpeg');
 
