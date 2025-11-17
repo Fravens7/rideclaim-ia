@@ -74,8 +74,9 @@ function analyzeEmployeePatterns() {
 export async function processImageWithAI(file, ocrText) {
     console.log(`🤖 [IA-MODULE] Starting AI processing for ${file.name}...`);
     try {
-        const base64Image = await fileToBase64(file);
-        const qwenResult = await extractWithQwen(base64Image, file.name, file.type);
+        
+        const base64Image = imageDataURL.split(',')[1];
+        const qwenResult = await extractWithQwen(base64Image, fileName, 'image/jpeg');
 
         qwenExtractedData.push({
             fileName: file.name,
@@ -90,12 +91,3 @@ export async function processImageWithAI(file, ocrText) {
     }
 }
 
-// --- FUNCIÓN AUXILIAR (también debe estar en el módulo) ---
-function fileToBase64(file) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onload = () => resolve(reader.result.split(',')[1]);
-        reader.onerror = error => reject(error);
-    });
-}

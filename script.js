@@ -318,7 +318,7 @@ function processImageFile(file, fileItem) {
                 // No esperamos a que termine. Disparamos y olvidamos.
                 console.log(`📢 [MAIN] Dispatching 'imageProcessed' event for ${file.name}`);
                 document.dispatchEvent(new CustomEvent('imageProcessed', { 
-                detail: { file: file, ocrText: text } 
+                detail: { file: file, ocrText: text, imageDataURL: imageDataURL } //editando
                 }));
 
 
@@ -1322,8 +1322,9 @@ function updateTripCalendar() {
 // --- ESCUCHADOR DE EVENTOS ---
 // Cuando se dispara 'imageProcessed', llamamos a nuestro módulo de IA.
 document.addEventListener('imageProcessed', (event) => {
-    const { file, ocrText } = event.detail;
-    processImageWithAI(file, ocrText);
+    const { fileName, ocrText, imageDataURL } = event.detail;
+    // Llamamos a la función con los parámetros correctos
+    processImageWithAI(fileName, ocrText, imageDataURL);
 });
 
 // (Opcional) Escuchador para el resultado del análisis
