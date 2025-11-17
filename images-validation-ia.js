@@ -21,12 +21,24 @@ async function extractWithQwen(base64Image, fileName, mimeType) {
 }
 
 // --- FUNCIÓN AUXILIAR PARA ANALIZAR PATRONES ---
+// images-validation-ia.js
+
+// --- FUNCIÓN AUXILIAR PARA ANALIZAR PATRONES ---
 function analyzeEmployeePatterns() {
     console.log("🧠 [IA-MODULE] Starting analysis with accumulated data...");
     console.log("📊 [IA-MODULE] Total data points:", qwenExtractedData.length);
 
     if (qwenExtractedData.length === 0) return;
 
+    // --- LÓGICA FUTURA: Extraer y clasificar viajes (Home-to-Office vs Office-to-Home) ---
+    // Para un análisis preciso, necesitaríamos:
+    // 1. El destino de cada viaje (ej. "Mireka Tower" o "43b Lauries Rd").
+    // 2. La hora de cada viaje.
+    // 3. Clasificar cada viaje como "home_to_office" (mañana) u "office_to_home" (tarde).
+    // 4. Calcular el rango horario para cada tipo de viaje por separado.
+    // Ejemplo de resultado futuro: "Your typical Home-to-Office schedule is from 8:30 AM to 9:00 AM, and Office-to-Home from 6:15 PM to 6:45 PM."
+
+    // Por ahora, solo extraemos la hora como prueba de concepto.
     const extractedTimes = [];
     qwenExtractedData.forEach(data => {
         const timeMatch = data.extractedText.match(/(\d{1,2}:\d{2}\s*(?:AM|PM))/i);
@@ -42,6 +54,7 @@ function analyzeEmployeePatterns() {
 
     console.log("🕒 [IA-MODULE] Extracted times:", extractedTimes);
 
+    // --- LÓGICA TEMPORAL: Calculamos un rango simple (sin clasificar viajes) ---
     const timesInMinutes = extractedTimes.map(timeStr => {
         const [time, period] = timeStr.split(' ');
         let [hours, minutes] = time.split(':').map(Number);
@@ -61,14 +74,13 @@ function analyzeEmployeePatterns() {
         return `${displayHour}:${displayMinute.toString().padStart(2, '0')} ${period}`;
     };
 
-    const result = `Your typical schedule appears to be from ${formatTime(earliestTime)} to ${formatTime(latestTime)}.`;
+    // Mensaje provisional
+    const result = `Working on it... Current data shows a range from ${formatTime(earliestTime)} to ${formatTime(latestTime)}.`;
     console.log(`🎯 [IA-MODULE] RESULT: ${result}`);
 
     // --- PUBLICAR EL RESULTADO DEL ANÁLISIS ---
-    // Disparamos un evento personalizado con el resultado del análisis.
     document.dispatchEvent(new CustomEvent('patternAnalyzed', { detail: { result } }));
 }
-
 // --- FUNCIÓN PRINCIPAL DEL MÓDULO ---
 // Esta función será llamada desde script.js
 // --- FUNCIÓN PRINCIPAL DEL MÓDULO ---
