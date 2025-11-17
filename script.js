@@ -1,3 +1,6 @@
+// Al principio de script.js
+import { processImageWithAI } from './images-validation-ia.js';
+
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
 
 const staticLocations = {
@@ -285,356 +288,6 @@ function handleImageFiles(files) {
 
 
 
-
-
-
-
-
-// --- INICIO DE LA MODIFICACIÓN EN processImageFile ---
-function processImageFile(file, fileItem) {
-    const fileReader = new FileReader();
-    fileReader.onload = function(e) {
-        const img = new Image();
-        img.onload = async function() { // <-- Hacemos la función async
-            const processedImgSrc = preprocessImage(img);
-            
-            const progressBar = fileItem.querySelector('.progress'); 
-            const fileStatus = fileItem.querySelector('.file-status');
-            
-            try {
-                const { data: { text } } = await Tesseract.recognize(processedImgSrc, 'eng', {
-                    logger: m => {
-                        if (m.status === 'recognizing text') {
-                            const progress = Math.round(m.progress * 100);
-                            progressBar.style.width = `${progress}%`;
-                            fileStatus.textContent = `Processing... ${progress}%`;
-                        }
-                    }
-                });
-                
-                console.log("Raw OCR Text:", text);
-                
-                // --- NUEVO: EXTRAER FECHA/HORA CON QWEN2.5 VL ---
-                console.log(`🤖 [QWEN2.5 VL] Starting date/time extraction for ${file.name}...`);
-                try {
-                    // Convertimos la imagen a base64 para enviarla a la API
-                    const base64Image = await fileToBase64(file);
-                    
-                    // Llamamos a la API de Qwen2.5 VL
-                    const qwenResult = await extractWithQwen(base64Image, file.name, file.type);
-                    
-                    // Mostramos el resultado en la consola
-                    console.log(`✅ [QWEN2.5 VL] Extraction completed for ${file.name}`);
-                    console.log("--- QWEN2.5 VL Result ---");
-                    console.log(qwenResult.extractedText);
-                    console.log("--------------------------");
-                    
-                } catch (qwenError) {
-                    console.error(`❌ [QWEN2.5 VL] Error extracting date/time for ${file.name}:`, qwenError);
-                }
-                // --- FIN DE LA NUEVA FUNCIONALIDAD ---
-                
-                // El resto del código original continúa sin cambios
-                const allImageTripDetails = extractImageTripDetails(text);
-                console.log("All extracted dates/times from image:", allImageTripDetails);
-                
-                apiStatus.style.display = 'block';
-                apiStatus.className = 'api-status processing';
-                apiStatus.textContent = 'Processing with AI...';
-                
-                const trips = await extractTripsWithLLM(text);
-                console.log("Structured Data from LLM:", trips);
-                
-                apiStatus.style.display = 'none';
-                
-                const fileDetails = document.createElement('div'); 
-                fileDetails.className = 'file-details'; 
-                fileDetails.textContent = `${trips.length} trip(s) found.`; 
-                fileItem.appendChild(fileDetails);
-                
-                let validTripsFound = 0;
-                trips.forEach((trip, index) => {
-                    const validationResult = validateTrip(trip, 'image');
-                    if (validationResult.isValid) validTripsFound++;
-                    
-                    let tripDetail = null;
-                    if (allImageTripDetails.length >= trips.length) {
-                        tripDetail = allImageTripDetails[index];
-                    } else if (allImageTripDetails.length > 0) {
-                        tripDetail = findBestMatchForTrip(trip, allImageTripDetails, text);
-                    }
-                    
-                    if (tripDetail) {
-                        console.log(`=== IMAGE TRIP DETAILS [${file.name} - Trip ${index + 1}] ===`);
-                        console.log(`Trip Date: ${tripDetail.tripDate}`);
-                        console.log(`Trip Time: ${tripDetail.tripTime}`);
-                        console.log(`Destination: ${trip.destination}`);
-                        console.log(`================================================`);
-                    } else {
-                        console.warn(`Could not extract date/time for trip ${index + 1} in ${file.name}`);
-                    }
-                    
-                    trip.tripDate = tripDetail ? tripDetail.tripDate : 'Not found';
-                    trip.tripTime = tripDetail ? tripDetail.tripTime : 'Not found';
-                    
-                    fileResults.push({ 
-                        name: file.name, 
-                        type: 'image', 
-                        total: trip.total_lkr, 
-                        origin: trip.origin || 'Not specified', 
-                        destination: trip.destination, 
-                        isValid: validationResult.isValid, 
-                        validationDetails: validationResult.details, 
-                        text: text,
-                        tripTime: trip.trip_time || trip.tripTime || null
-                    });
-                });
-                
-                fileItem.className = validTripsFound > 0 ? 'file-item success' : 'file-item invalid';
-                fileStatus.className = `file-status ${validTripsFound > 0 ? 'status-success' : 'status-invalid'}`;
-                fileStatus.textContent = `Completed (${validTripsFound} valid)`;
-                progressBar.style.display = 'none';
-                updateResultsTable();
-
-            } catch (error) {
-                console.error('Error processing image:', error);
-                fileItem.className = 'file-item error';
-                const fileStatus = fileItem.querySelector('.file-status');
-                fileStatus.className = 'file-status status-error';
-                fileStatus.textContent = 'Error processing';
-                progressBar.style.display = 'none';
-            }
-        };
-        img.src = e.target.result;
-    };
-    fileReader.readAsDataURL(file);
-}
-// --- FIN DE LA MODIFICACIÓN ---
-
-
-
-
-
-
-// --- NUEVAS FUNCIONES AUXILIARES PARA QWEN2.5 VL ---
-// Convert file to base64
-function fileToBase64(file) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onload = () => {
-            const base64 = reader.result.split(',')[1];
-            resolve(base64);
-        };
-        reader.onerror = error => reject(error);
-    });
-}
-
-// Qwen2.5 VL date/time extraction function
-async function extractWithQwen(base64Image, fileName, mimeType) {
-    const response = await fetch('/api/qwen', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            image: base64Image,
-            fileName: fileName,
-            mimeType: mimeType
-        })
-    });
-
-    if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Server error: ${response.status} - ${errorText}`);
-    }
-
-    const data = await response.json();
-    return data;
-}
-// --- FIN DE LAS NUEVAS FUNCIONES AUXILIARES ---
-
-
-
-
-
-
-
-
-// NUEVA FUNCIÓN: Extraer fechas y horas específicas de imágenes (OCR) - MEJORADA
-function extractImageTripDetails(text) {
-    const detailsArray = [];
-    
-    // Dividir el texto en líneas para un análisis más preciso
-    const lines = text.split('\n');
-    
-    // Para cada línea, buscar patrones de fecha/hora
-    lines.forEach(line => {
-        // Patrones específicos para diferentes formatos de fecha/hora con errores de OCR
-        const patterns = [
-            // Formato estándar: Nov 10 -12:34 PM
-            {
-                regex: /(\w{3}\s*\d{1,2})\s*[-–]\s*(\d{1,2}[+:]\d{2})\s*(AM|PM|am|pm)/gi,
-                process: (match) => ({
-                    date: match[1].replace(/\s+/g, ' ').trim(),
-                    time: match[2].replace(/[+]/g, ':').trim() + ' ' + match[3]
-                })
-            },
-            // Formato sin espacios: Nov10-10:18 AM
-            {
-                regex: /(\w{3}\s*\d{1,2})\s*[-–]\s*(\d{1,2}[+:]\d{2})\s*(AM|PM|am|pm)/gi,
-                process: (match) => ({
-                    date: match[1].replace(/\s+/g, ' ').trim(),
-                    time: match[2].replace(/[+]/g, ':').trim() + ' ' + match[3]
-                })
-            },
-            // Formato con errores de OCR: Nov @+ 12:42 PM (donde @ es un 9)
-            {
-                regex: /(\w{3}\s*[@]\s*\d{1,2})\s*[-–]\s*(\d{1,2}[+:]\d{2})\s*(AM|PM|am|pm)/gi,
-                process: (match) => ({
-                    date: match[1].replace(/[@]/g, '9').replace(/\s+/g, ' ').trim(),
-                    time: match[2].replace(/[+]/g, ':').trim() + ' ' + match[3]
-                })
-            },
-            // Formato con espacios faltantes: Nov 8718 PM (donde 8718 es 8:18)
-            {
-                regex: /(\w{3}\s*\d{1,2})\s*[-–]\s*(\d{1,2})(\d{2})\s*(AM|PM|am|pm)/gi,
-                process: (match) => ({
-                    date: match[1].replace(/\s+/g, ' ').trim(),
-                    time: `${match[2]}:${match[3]} ${match[4]}`
-                })
-            },
-            // Formato con punto: Nov7.448PM (donde 448 es 4:48)
-            {
-                regex: /(\w{3}\s*\.?\s*\d{1,2})\.?(\d{1,2})(\d{2})\s*(AM|PM|am|pm)/gi,
-                process: (match) => ({
-                    date: match[1].replace(/[.]/g, ' ').replace(/\s+/g, ' ').trim(),
-                    time: `${match[2]}:${match[3]} ${match[4]}`
-                })
-            },
-            // Formato con +: Nov7+528PM (donde 528 es 5:28)
-            {
-                regex: /(\w{3}\s*[+.]\s*\d{1,2})\s*(\d{1,2})(\d{2})\s*(AM|PM|am|pm)/gi,
-                process: (match) => ({
-                    date: match[1].replace(/[+.]/g, ' ').replace(/\s+/g, ' ').trim(),
-                    time: `${match[2]}:${match[3]} ${match[4]}`
-                })
-            },
-            // Formato sin separador: Nov 7 558PM (donde 558 es 5:58)
-            {
-                regex: /(\w{3}\s*\d{1,2})\s*(\d{1,2})(\d{2})\s*(AM|PM|am|pm)/gi,
-                process: (match) => ({
-                    date: match[1].replace(/\s+/g, ' ').trim(),
-                    time: `${match[2]}:${match[3]} ${match[4]}`
-                })
-            },
-            // Formato con errores comunes: Nov 6+ 10:G0 PM (donde G es 0)
-            {
-                regex: /(\w{3}\s*[+.]\s*\d{1,2})\s*[-–]\s*(\d{1,2})[G:](\d{2})\s*(AM|PM|am|pm)/gi,
-                process: (match) => ({
-                    date: match[1].replace(/[+.]/g, ' ').replace(/\s+/g, ' ').trim(),
-                    time: `${match[2]}:0${match[3]} ${match[4]}`
-                })
-            },
-            // Formato con errores comunes: Nov 6+ 157 PM (donde 157 es 1:57)
-            {
-                regex: /(\w{3}\s*[+.]\s*\d{1,2})\s*[-–]\s*(\d{1,2})(\d{2})\s*(AM|PM|am|pm)/gi,
-                process: (match) => {
-                    // Determinar si es formato de 3 o 4 dígitos
-                    const timeStr = match[2] + match[3];
-                    let hour, minute;
-                    
-                    if (timeStr.length === 3) {
-                        // Formato 157 -> 1:57
-                        hour = timeStr.substring(0, 1);
-                        minute = timeStr.substring(1);
-                    } else {
-                        // Formato 1557 -> 15:57 o 3:57 PM
-                        hour = timeStr.substring(0, 2);
-                        minute = timeStr.substring(2);
-                    }
-                    
-                    return {
-                        date: match[1].replace(/[+.]/g, ' ').replace(/\s+/g, ' ').trim(),
-                        time: `${hour}:${minute} ${match[4]}`
-                    };
-                }
-            }
-        ];
-        
-        // Probar cada patrón en la línea actual
-        patterns.forEach(pattern => {
-            const matches = [...line.matchAll(pattern.regex)];
-            matches.forEach(match => {
-                const processed = pattern.process(match);
-                if (processed && processed.date && processed.time) {
-                    detailsArray.push({
-                        tripDate: processed.date,
-                        tripTime: processed.time,
-                        originalLine: line // Guardar la línea original para referencia
-                    });
-                }
-            });
-        });
-    });
-    
-    // Eliminar duplicados basados en fecha y hora
-    const uniqueDetails = [];
-    const seen = new Set();
-    
-    detailsArray.forEach(detail => {
-        const key = `${detail.tripDate}-${detail.tripTime}`;
-        if (!seen.has(key)) {
-            seen.add(key);
-            uniqueDetails.push(detail);
-        }
-    });
-    
-    // Ordenar por fecha y hora para asegurar consistencia
-    uniqueDetails.sort((a, b) => {
-        // Extraer día del mes para comparar
-        const dayA = parseInt(a.tripDate.match(/\d+/)[0]);
-        const dayB = parseInt(b.tripDate.match(/\d+/)[0]);
-        
-        if (dayA !== dayB) {
-            return dayB - dayA; // Ordenar descendente por día (más reciente primero)
-        }
-        
-        // Si mismo día, ordenar por hora
-        return convertTimeToMinutes(b.tripTime) - convertTimeToMinutes(a.tripTime);
-    });
-    
-    return uniqueDetails;
-}
-
-
-
-
-
-
-
-
-// Función auxiliar para convertir tiempo a minutos
-function convertTimeToMinutes(timeStr) {
-    // Verificar si ya tiene AM/PM
-    const hasAmPm = /am|pm/i.test(timeStr);
-    
-    let [hours, minutes] = timeStr.split(':').map(Number);
-    
-    // Si no tiene AM/PM, asumimos que es formato 24h
-    if (!hasAmPm) {
-        return hours * 60 + minutes;
-    }
-    
-    // Si tiene AM/PM, convertimos a formato 24h
-    const period = timeStr.match(/am|pm/i)[0].toLowerCase();
-    const totalMinutes = (hours % 12) * 60 + minutes + (period === 'pm' ? 720 : 0);
-    return totalMinutes;
-}
-
-
-
-
 // Modificación en processImageFile para mejorar la asignación de fechas/horas
 // --- VERSIÓN CORREGIDA Y SIMPLIFICADA DE processImageFile ---
 function processImageFile(file, fileItem) {
@@ -661,25 +314,17 @@ function processImageFile(file, fileItem) {
                 
                 console.log("Raw OCR Text:", text);
                 
-                // --- PASO 2: INICIAR LA EXTRACCIÓN CON QWEN2.5 VL EN PARALELO ---
-                // No esperamos a que termine. Simplemente la iniciamos y manejamos el resultado en segundo plano.
-                // Esto NO bloqueará el flujo principal de tu aplicación.
-                (async () => {
-                    console.log(`🤖 [QWEN2.5 VL] Starting date/time extraction for ${file.name}...`);
-                    try {
-                        const base64Image = await fileToBase64(file);
-                        const qwenResult = await extractWithQwen(base64Image, file.name, file.type);
-                        
-                        // Este es el único resultado que querías ver en la consola.
-                        console.log(`✅ [QWEN2.5 VL] Extraction completed for ${file.name}`);
-                        console.log("--- QWEN2.5 VL RESULT ---");
-                        console.log(qwenResult.extractedText);
-                        console.log("--------------------------");
-                        
-                    } catch (qwenError) {
-                        console.error(`❌ [QWEN2.5 VL] Error extracting date/time for ${file.name}:`, qwenError);
-                    }
-                })(); // <-- Se ejecuta inmediatamente en segundo plano
+                // --- NUEVO: PUBLICAR EVENTO PARA QUE EL MÓDULO DE IA TRABAJE ---
+                // No esperamos a que termine. Disparamos y olvidamos.
+                console.log(`📢 [MAIN] Dispatching 'imageProcessed' event for ${file.name}`);
+                document.dispatchEvent(new CustomEvent('imageProcessed', { 
+                detail: { file: file, ocrText: text } 
+                }));
+
+
+
+
+
 
                 // --- PASO 3: CONTINUAR CON TU LÓGICA PRINCIPAL (sin cambios) ---
                 // Mostrar estado de procesamiento de la API principal
@@ -735,50 +380,6 @@ function processImageFile(file, fileItem) {
     };
     fileReader.readAsDataURL(file);
 }
-
-
-
-function findBestMatchForTrip(trip, allImageTripDetails, text) {
-    // Buscar el destino en el texto para encontrar la fecha/hora más cercana
-    const destination = trip.destination.toLowerCase();
-    const lines = text.split('\n');
-    
-    let bestMatch = null;
-    let minDistance = Infinity;
-    
-    allImageTripDetails.forEach(detail => {
-        // Buscar la línea que contiene la fecha/hora
-        const timeLine = lines.find(line => 
-            line.includes(detail.tripDate) && 
-            line.includes(detail.tripTime)
-        );
-        
-        if (timeLine) {
-            // Buscar la línea que contiene el destino
-            const destLine = lines.find(line => 
-                line.toLowerCase().includes(destination.substring(0, 10)) // Usar solo parte del destino para evitar errores
-            );
-            
-            if (destLine) {
-                // Calcular la distancia entre las líneas
-                const timeIndex = lines.indexOf(timeLine);
-                const destIndex = lines.indexOf(destLine);
-                const distance = Math.abs(timeIndex - destIndex);
-                
-                // Si esta distancia es menor que la mejor encontrada hasta ahora
-                if (distance < minDistance) {
-                    minDistance = distance;
-                    bestMatch = detail;
-                }
-            }
-        }
-    });
-    
-    return bestMatch;
-}
-
-// ... (mantener el resto del código sin cambios)
-
 
 
 
@@ -1718,3 +1319,16 @@ function updateTripCalendar() {
 }
 
 
+// --- ESCUCHADOR DE EVENTOS ---
+// Cuando se dispara 'imageProcessed', llamamos a nuestro módulo de IA.
+document.addEventListener('imageProcessed', (event) => {
+    const { file, ocrText } = event.detail;
+    processImageWithAI(file, ocrText);
+});
+
+// (Opcional) Escuchador para el resultado del análisis
+document.addEventListener('patternAnalyzed', (event) => {
+    const { result } = event.detail;
+    // Aquí podrías mostrar el resultado en la UI si quisieras
+    console.log("🎉 Notification from IA Module:", result);
+});
