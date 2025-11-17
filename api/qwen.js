@@ -1,9 +1,9 @@
 export default async function handler(req, res) {
   try {
     console.log("🚀 Starting Qwen2.5 VL analysis");
-    
-    if (req.method !== 'POST') {
-      return res.status(405).json({ error: 'Method Not Allowed' });
+
+    if (req.method !== "POST") {
+      return res.status(405).json({ error: "Method Not Allowed" });
     }
 
     let body = {};
@@ -14,42 +14,48 @@ export default async function handler(req, res) {
     }
 
     const { image, fileName, mimeType } = body;
-    console.log("📁 File info:", { fileName, mimeType, imageSize: image?.length });
-    
+    console.log("📁 File info:", {
+      fileName,
+      mimeType,
+      imageSize: image?.length,
+    });
+
     if (!image) {
-      return res.status(400).json({ error: 'Missing image data' });
+      return res.status(400).json({ error: "Missing image data" });
     }
 
     // Check for OpenRouter API key
     const openRouterKey = process.env.OPENROUTER_API_KEY;
     console.log("🔑 API key check:", openRouterKey ? "Present" : "Missing");
-    
+
     if (!openRouterKey) {
       console.error("❌ No OPENROUTER_API_KEY found");
-      return res.status(500).json({ error: 'Missing OpenRouter API key' });
+      return res.status(500).json({ error: "Missing OpenRouter API key" });
     }
 
-    const dataUrl = `data:${mimeType || 'image/jpeg'};base64,${image}`;
+    const dataUrl = `data:${mimeType || "image/jpeg"};base64,${image}`;
     console.log("🖼️ Data URL created, length:", dataUrl.length);
 
     console.log("📡 Calling OpenRouter API with Qwen2.5 VL...");
-    
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${openRouterKey}`,
-        "HTTP-Referer": "https://raidclaim-geminis.vercel.app"
-      },
-      body: JSON.stringify({
-        model: "qwen/qwen2.5-vl-32b-instruct:free",
-        messages: [
-          {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: `Extract ALL trip information from this receipt image. This appears to be a ride-sharing or transport receipt with multiple trips.
+
+    const response = await fetch(
+      "https://openrouter.ai/api/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${openRouterKey}`,
+          "HTTP-Referer": "https://raidclaim-geminis.vercel.app",
+        },
+        body: JSON.stringify({
+          model: "qwen/qwen2.5-vl-32b-instruct:free",
+          messages: [
+            {
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: `Extract ALL trip information from this receipt image. This appears to be a ride-sharing or transport receipt with multiple trips.
 
 Please extract:
 1. Destination/Location names for ALL trips visible
@@ -75,33 +81,37 @@ Return in this JSON format:
   ]
 }
 
-Extract ALL visible trips, not just the first one. Be thorough and capture every journey shown in the receipt.`
-              },
-              {
-                type: "image_url",
-                image_url: {
-                  url: dataUrl
-                }
-              }
-            ]
-        ],
-        temperature: 0.1,
-        max_tokens: 1000
-      }),
-    });
+Extract ALL visible trips, not just the first one. Be thorough and capture every journey shown in the receipt.`,
+                },
+                {
+                  type: "image_url",
+                  image_url: {
+                    url: dataUrl,
+                  },
+                },
+              ],
+            },
+          ], // <-- ESTA LLAVE FALTABA CERRAR
+          temperature: 0.1,
+          max_tokens: 1000,
+        }),
+      }
+    );
 
     console.log("📡 OpenRouter response status:", response.status);
 
     if (!response.ok) {
       const errorText = await response.text();
       console.error("❌ OpenRouter API Error:", errorText);
-      return res.status(response.status).json({ error: `OpenRouter API error: ${errorText}` });
+      return res
+        .status(response.status)
+        .json({ error: `OpenRouter API error: ${errorText}` });
     }
 
     const result = await response.json();
     console.log("📄 OpenRouter raw response:", result);
-    
-    const extractedText = result.choices?.[0]?.message?.content || '';
+
+    const extractedText = result.choices?.[0]?.message?.content || "";
     console.log("✅ Text extracted successfully, length:", extractedText.length);
 
     // Parse the JSON response
@@ -117,15 +127,17 @@ Extract ALL visible trips, not just the first one. Be thorough and capture every
     } catch (e) {
       console.warn("⚠️ Could not parse JSON response, using fallback");
       // Fallback parsing if JSON fails
-      tripsData = [{
-        destination: "Unknown",
-        date: "Unknown",
-        time: "Unknown",
-        amount: "0",
-        currency: "LKR",
-        status: "Completed",
-        type: "ride"
-      }];
+      tripsData = [
+        {
+          destination: "Unknown",
+          date: "Unknown",
+          time: "Unknown",
+          amount: "0",
+          currency: "LKR",
+          status: "Completed",
+          type: "ride",
+        },
+      ];
     }
 
     console.log("🎯 Parsed trips:", tripsData);
@@ -135,15 +147,14 @@ Extract ALL visible trips, not just the first one. Be thorough and capture every
       success: true,
       fileName: fileName,
       trips: tripsData,
-      extractedText: extractedText
+      extractedText: extractedText,
     });
-
   } catch (err) {
     console.error("💥 Server error:", err);
     console.error("💥 Error stack:", err.stack);
-    return res.status(500).json({ 
+    return res.status(500).json({
       error: err.message,
-      stack: err.stack 
+      stack: err.stack,
     });
   }
 }
