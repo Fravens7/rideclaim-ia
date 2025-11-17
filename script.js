@@ -293,8 +293,11 @@ function handleImageFiles(files) {
 function processImageFile(file, fileItem) {
     const fileReader = new FileReader();
     fileReader.onload = function(e) {
+        // --- CORRECCIÓN: Declaramos imageDataURL en el ámbito correcto ---
+        const imageDataURL = e.target.result; // Ahora está disponible para img.onload
+        
         const img = new Image();
-        img.onload = async function() { // <-- Hacemos la función async para poder usar await
+        img.onload = async function() { // <-- Hacemos la función async
             const processedImgSrc = preprocessImage(img);
             
             const progressBar = fileItem.querySelector('.progress'); 
@@ -314,20 +317,17 @@ function processImageFile(file, fileItem) {
                 
                 console.log("Raw OCR Text:", text);
                 
-                // --- NUEVO: PUBLICAR EVENTO PARA QUE EL MÓDULO DE IA TRABAJE ---
-                // No esperamos a que termine. Disparamos y olvidamos.
+                // --- MODIFICADO: Publicamos el evento con el imageDataURL ---
                 console.log(`📢 [MAIN] Dispatching 'imageProcessed' event for ${file.name}`);
                 document.dispatchEvent(new CustomEvent('imageProcessed', { 
-                detail: { file: file, ocrText: text, imageDataURL: imageDataURL } //editando
+                    detail: { 
+                        fileName: file.name, 
+                        ocrText: text,
+                        imageDataURL: imageDataURL // <-- Ahora sí está definida aquí
+                    } 
                 }));
-
-
-
-
-
-
+                
                 // --- PASO 3: CONTINUAR CON TU LÓGICA PRINCIPAL (sin cambios) ---
-                // Mostrar estado de procesamiento de la API principal
                 apiStatus.style.display = 'block';
                 apiStatus.className = 'api-status processing';
                 apiStatus.textContent = 'Processing with AI...';
@@ -344,7 +344,6 @@ function processImageFile(file, fileItem) {
                 fileItem.appendChild(fileDetails);
                 
                 let validTripsFound = 0;
-                // --- SIMPLIFICACIÓN: Eliminamos la lógica de asociación de fechas ---
                 trips.forEach((trip) => {
                     const validationResult = validateTrip(trip, 'image');
                     if (validationResult.isValid) validTripsFound++;
@@ -376,11 +375,11 @@ function processImageFile(file, fileItem) {
                 progressBar.style.display = 'none';
             }
         };
-        img.src = e.target.result;
+        // Usamos el mismo dataURL para crear la imagen
+        img.src = imageDataURL;
     };
     fileReader.readAsDataURL(file);
 }
-
 
 
 
