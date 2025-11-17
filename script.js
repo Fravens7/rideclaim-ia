@@ -251,6 +251,10 @@ function handlePdfFileSelect(e) {
     if (e.target.files.length) handlePdfFiles(e.target.files);
 }
 
+
+
+
+
 function handleImageFiles(files) {
     const imageFilesArr = Array.from(files).filter(file => /image\/(png|jpeg|jpg)/.test(file.type));
     if (imageFilesArr.length === 0) {
@@ -261,132 +265,200 @@ function handleImageFiles(files) {
     imageFileList.innerHTML = '';
     
     imageFilesArr.forEach(file => {
-        // --- INICIO DEL LIMPIADOR DE DUPLICADOS ---
         if (processedImageNames.has(file.name)) {
-            // Si la imagen ya fue procesada, la ignora y muestra un aviso
             const duplicateItem = createDuplicateFileItem(file, 'image');
             imageFileList.appendChild(duplicateItem);
-            return; // Detiene el procesamiento para este archivo
+            return;
         }
         
-        // --- CAMBIO CLAVE: AÑADIMOS EL NOMBRE A LA MEMORIA ---
         processedImageNames.add(file.name);
-        // --- FIN DEL CAMBIO ---
 
         const fileItem = createFileItem(file, 'image');
         imageFileList.appendChild(fileItem);
+        
+        // --- NUEVO: PASAMOS EL OBJETO FILE COMPLETO A processImageFile ---
         processImageFile(file, fileItem);
     });
 }
 
-// ... (mantener todo el código anterior)
 
+
+
+
+
+
+
+
+
+// --- INICIO DE LA MODIFICACIÓN EN processImageFile ---
 function processImageFile(file, fileItem) {
     const fileReader = new FileReader();
     fileReader.onload = function(e) {
         const img = new Image();
-        img.onload = function() {
+        img.onload = async function() { // <-- Hacemos la función async
             const processedImgSrc = preprocessImage(img);
             
             const progressBar = fileItem.querySelector('.progress'); 
             const fileStatus = fileItem.querySelector('.file-status');
-            Tesseract.recognize(processedImgSrc, 'eng', {
-                logger: m => {
-                    if (m.status === 'recognizing text') {
-                        const progress = Math.round(m.progress * 100);
-                        progressBar.style.width = `${progress}%`;
-                        fileStatus.textContent = `Processing... ${progress}%`;
+            
+            try {
+                const { data: { text } } = await Tesseract.recognize(processedImgSrc, 'eng', {
+                    logger: m => {
+                        if (m.status === 'recognizing text') {
+                            const progress = Math.round(m.progress * 100);
+                            progressBar.style.width = `${progress}%`;
+                            fileStatus.textContent = `Processing... ${progress}%`;
+                        }
                     }
-                }
-            })
-            .then(({ data: { text } }) => {
+                });
+                
                 console.log("Raw OCR Text:", text);
                 
-                // NUEVO: Extraer todas las fechas y horas del texto de la imagen
+                // --- NUEVO: EXTRAER FECHA/HORA CON QWEN2.5 VL ---
+                console.log(`🤖 [QWEN2.5 VL] Starting date/time extraction for ${file.name}...`);
+                try {
+                    // Convertimos la imagen a base64 para enviarla a la API
+                    const base64Image = await fileToBase64(file);
+                    
+                    // Llamamos a la API de Qwen2.5 VL
+                    const qwenResult = await extractWithQwen(base64Image, file.name, file.type);
+                    
+                    // Mostramos el resultado en la consola
+                    console.log(`✅ [QWEN2.5 VL] Extraction completed for ${file.name}`);
+                    console.log("--- QWEN2.5 VL Result ---");
+                    console.log(qwenResult.extractedText);
+                    console.log("--------------------------");
+                    
+                } catch (qwenError) {
+                    console.error(`❌ [QWEN2.5 VL] Error extracting date/time for ${file.name}:`, qwenError);
+                }
+                // --- FIN DE LA NUEVA FUNCIONALIDAD ---
+                
+                // El resto del código original continúa sin cambios
                 const allImageTripDetails = extractImageTripDetails(text);
                 console.log("All extracted dates/times from image:", allImageTripDetails);
                 
-                // --- NUEVO: Usar LLM para estructurar los datos ---
-                // Mostrar estado de procesamiento de la API
                 apiStatus.style.display = 'block';
                 apiStatus.className = 'api-status processing';
                 apiStatus.textContent = 'Processing with AI...';
                 
-                extractTripsWithLLM(text)
-                    .then(trips => {
-                        console.log("Structured Data from LLM:", trips);
-                        
-                        // Ocultar estado de procesamiento
-                        apiStatus.style.display = 'none';
-                        
-                        const fileDetails = document.createElement('div'); 
-                        fileDetails.className = 'file-details'; 
-                        fileDetails.textContent = `${trips.length} trip(s) found.`; 
-                        fileItem.appendChild(fileDetails);
-                        
-                        let validTripsFound = 0;
-                        trips.forEach((trip, index) => {
-                            const validationResult = validateTrip(trip, 'image');
-                            if (validationResult.isValid) validTripsFound++;
-                            
-                            // NUEVO: Mostrar en consola los detalles de cada viaje encontrado en la imagen
-                            if (allImageTripDetails[index]) {
-                                console.log(`=== IMAGE TRIP DETAILS [${file.name} - Trip ${index + 1}] ===`);
-                                console.log(`Trip Date: ${allImageTripDetails[index].tripDate}`);
-                                console.log(`Trip Time: ${allImageTripDetails[index].tripTime}`);
-                                console.log(`Destination: ${trip.destination}`);
-                                console.log(`================================================`);
-                            } else {
-                                console.warn(`Could not extract date/time for trip ${index + 1} in ${file.name}`);
-                            }
-                            
-                            // Guardar los detalles extraídos en el objeto del viaje
-                            trip.tripDate = allImageTripDetails[index] ? allImageTripDetails[index].tripDate : 'Not found';
-                            trip.tripTime = allImageTripDetails[index] ? allImageTripDetails[index].tripTime : 'Not found';
-                            
-                            fileResults.push({ 
-                                name: file.name, 
-                                type: 'image', 
-                                total: trip.total_lkr, 
-                                origin: trip.origin || 'Not specified', 
-                                destination: trip.destination, 
-                                isValid: validationResult.isValid, 
-                                validationDetails: validationResult.details, 
-                                text: text,
-                                tripTime: trip.trip_time || trip.tripTime || null // Usar la hora extraída si está disponible
-                                // NO se añade tripDate para imágenes
-                            });
-                        });
-                        fileItem.className = validTripsFound > 0 ? 'file-item success' : 'file-item invalid';
-                        fileStatus.className = `file-status ${validTripsFound > 0 ? 'status-success' : 'status-invalid'}`;
-                        fileStatus.textContent = `Completed (${validTripsFound} valid)`;
-                        progressBar.style.display = 'none';
-                        updateResultsTable();
-                    })
-                    .catch(error => {
-                        console.error('Error processing with LLM:', error);
-                        
-                        // Mostrar estado de error
-                        apiStatus.className = 'api-status error';
-                        apiStatus.textContent = `Error processing with AI: ${error.message}`;
-                        
-                        fileItem.className = 'file-item error';
-                        fileStatus.className = 'file-status status-error';
-                        fileStatus.textContent = 'Error processing with AI';
-                        progressBar.style.display = 'none';
+                const trips = await extractTripsWithLLM(text);
+                console.log("Structured Data from LLM:", trips);
+                
+                apiStatus.style.display = 'none';
+                
+                const fileDetails = document.createElement('div'); 
+                fileDetails.className = 'file-details'; 
+                fileDetails.textContent = `${trips.length} trip(s) found.`; 
+                fileItem.appendChild(fileDetails);
+                
+                let validTripsFound = 0;
+                trips.forEach((trip, index) => {
+                    const validationResult = validateTrip(trip, 'image');
+                    if (validationResult.isValid) validTripsFound++;
+                    
+                    let tripDetail = null;
+                    if (allImageTripDetails.length >= trips.length) {
+                        tripDetail = allImageTripDetails[index];
+                    } else if (allImageTripDetails.length > 0) {
+                        tripDetail = findBestMatchForTrip(trip, allImageTripDetails, text);
+                    }
+                    
+                    if (tripDetail) {
+                        console.log(`=== IMAGE TRIP DETAILS [${file.name} - Trip ${index + 1}] ===`);
+                        console.log(`Trip Date: ${tripDetail.tripDate}`);
+                        console.log(`Trip Time: ${tripDetail.tripTime}`);
+                        console.log(`Destination: ${trip.destination}`);
+                        console.log(`================================================`);
+                    } else {
+                        console.warn(`Could not extract date/time for trip ${index + 1} in ${file.name}`);
+                    }
+                    
+                    trip.tripDate = tripDetail ? tripDetail.tripDate : 'Not found';
+                    trip.tripTime = tripDetail ? tripDetail.tripTime : 'Not found';
+                    
+                    fileResults.push({ 
+                        name: file.name, 
+                        type: 'image', 
+                        total: trip.total_lkr, 
+                        origin: trip.origin || 'Not specified', 
+                        destination: trip.destination, 
+                        isValid: validationResult.isValid, 
+                        validationDetails: validationResult.details, 
+                        text: text,
+                        tripTime: trip.trip_time || trip.tripTime || null
                     });
-            }).catch(err => { 
-                console.error('Error processing image:', err); 
-                fileItem.className = 'file-item error'; 
-                fileStatus.className = 'file-status status-error'; 
-                fileStatus.textContent = 'Error processing'; 
-                progressBar.style.display = 'none'; 
-            });
+                });
+                
+                fileItem.className = validTripsFound > 0 ? 'file-item success' : 'file-item invalid';
+                fileStatus.className = `file-status ${validTripsFound > 0 ? 'status-success' : 'status-invalid'}`;
+                fileStatus.textContent = `Completed (${validTripsFound} valid)`;
+                progressBar.style.display = 'none';
+                updateResultsTable();
+
+            } catch (error) {
+                console.error('Error processing image:', error);
+                fileItem.className = 'file-item error';
+                const fileStatus = fileItem.querySelector('.file-status');
+                fileStatus.className = 'file-status status-error';
+                fileStatus.textContent = 'Error processing';
+                progressBar.style.display = 'none';
+            }
         };
         img.src = e.target.result;
     };
     fileReader.readAsDataURL(file);
 }
+// --- FIN DE LA MODIFICACIÓN ---
+
+
+
+
+
+
+// --- NUEVAS FUNCIONES AUXILIARES PARA QWEN2.5 VL ---
+// Convert file to base64
+function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => {
+            const base64 = reader.result.split(',')[1];
+            resolve(base64);
+        };
+        reader.onerror = error => reject(error);
+    });
+}
+
+// Qwen2.5 VL date/time extraction function
+async function extractWithQwen(base64Image, fileName, mimeType) {
+    const response = await fetch('/api/qwen', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            image: base64Image,
+            fileName: fileName,
+            mimeType: mimeType
+        })
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Server error: ${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    return data;
+}
+// --- FIN DE LAS NUEVAS FUNCIONES AUXILIARES ---
+
+
+
+
+
+
 
 
 // NUEVA FUNCIÓN: Extraer fechas y horas específicas de imágenes (OCR) - MEJORADA
