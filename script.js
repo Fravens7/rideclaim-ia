@@ -1660,3 +1660,9 @@ function updateTripCalendar() {
     calendarContainer.appendChild(calendarHeader);
     calendarContainer.appendChild(calendarTable);
 }
+
+
+
+function openQwenAnalysis() {
+    window.open('qwen.html', '_blank');
+}
