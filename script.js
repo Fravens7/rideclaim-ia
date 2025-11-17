@@ -1235,22 +1235,6 @@ function extractTripDetails(text) {
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 /**
  * --- VERSIÓN 2: LÓGICA DE VALIDACIÓN CON SEGUNDA OPORTUNIDAD ---
  * Mantiene la lógica estricta y añade una flexible como respaldo.
@@ -1662,7 +1646,61 @@ function updateTripCalendar() {
 }
 
 
+// Llamar Qwen SOLO para fecha y hora
+const { date, time } = await getDateTimeWithQwen(base64Image, file.name, file.type);
 
-function openQwenAnalysis() {
-    window.open('qwen.html', '_blank');
+console.log("📅 Fecha detectada por Qwen:", date);
+console.log("⏰ Hora detectada por Qwen:", time);
+
+// si quieres agregarlo al resultado final:
+resultado.fecha = date;
+resultado.hora = time;
+
+
+
+async function getDateTimeWithQwen(base64Image, fileName = "image.jpg", mimeType = "image/jpeg") {
+  try {
+    const response = await fetch("/api/qwen", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        image: base64Image,
+        fileName,
+        mimeType
+      })
+    });
+
+    const data = await response.json();
+
+    if (!data.success || !data.extractedText) {
+      console.warn("⚠️ Qwen did not return extracted text.");
+      return { date: null, time: null };
+    }
+
+    // ⬇️ aquí Qwen devuelve TODO en un JSON dentro de extractedText
+    // pero es texto, así que lo parseamos
+    let trips = null;
+    try {
+      trips = JSON.parse(data.extractedText).trips || [];
+    } catch (e) {
+      console.warn("⚠️ Could not parse JSON from Qwen:", e);
+      return { date: null, time: null };
+    }
+
+    if (!trips.length) return { date: null, time: null };
+
+    // Usamos el primer trip (todos tienen fecha/hora)
+    const first = trips[0];
+
+    return {
+      date: first.date || null,
+      time: first.time || null
+    };
+
+  } catch (err) {
+    console.error("❌ Error calling Qwen:", err);
+    return { date: null, time: null };
+  }
 }
+
+

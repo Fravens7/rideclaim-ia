@@ -1,6 +1,6 @@
 export default async function handler(req, res) {
   try {
-    console.log("🚀 Starting Qwen2.5 VL analysis");
+    console.log("🚀 Starting Qwen2.5 VL text extraction");
 
     if (req.method !== "POST") {
       return res.status(405).json({ error: "Method Not Allowed" });
@@ -91,7 +91,7 @@ Extract ALL visible trips, not just the first one. Be thorough and capture every
                 },
               ],
             },
-          ], // <-- ESTA LLAVE FALTABA CERRAR
+          ],
           temperature: 0.1,
           max_tokens: 1000,
         }),
@@ -114,40 +114,10 @@ Extract ALL visible trips, not just the first one. Be thorough and capture every
     const extractedText = result.choices?.[0]?.message?.content || "";
     console.log("✅ Text extracted successfully, length:", extractedText.length);
 
-    // Parse the JSON response
-    let tripsData = [];
-    try {
-      const jsonMatch = extractedText.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        if (parsed.trips && Array.isArray(parsed.trips)) {
-          tripsData = parsed.trips;
-        }
-      }
-    } catch (e) {
-      console.warn("⚠️ Could not parse JSON response, using fallback");
-      // Fallback parsing if JSON fails
-      tripsData = [
-        {
-          destination: "Unknown",
-          date: "Unknown",
-          time: "Unknown",
-          amount: "0",
-          currency: "LKR",
-          status: "Completed",
-          type: "ride",
-        },
-      ];
-    }
-
-    console.log("🎯 Parsed trips:", tripsData);
-    console.log("📊 Total trips detected:", tripsData.length);
-
     return res.status(200).json({
-      success: true,
+      extractedText: extractedText || "No text extracted",
       fileName: fileName,
-      trips: tripsData,
-      extractedText: extractedText,
+      success: true,
     });
   } catch (err) {
     console.error("💥 Server error:", err);
