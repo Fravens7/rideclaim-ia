@@ -1318,17 +1318,26 @@ function updateTripCalendar() {
 }
 
 
-// --- ESCUCHADOR DE EVENTOS ---
-// Cuando se dispara 'imageProcessed', llamamos a nuestro módulo de IA.
+// Al final de script.js
+
+// --- ESCUCHADOR DE EVENTOS (CORREGIDO) ---
 document.addEventListener('imageProcessed', (event) => {
-    const { fileName, ocrText, imageDataURL } = event.detail;
-    // Llamamos a la función con los parámetros correctos
-    processImageWithAI(fileName, ocrText, imageDataURL);
+    // Accedemos a los datos de forma explícita para evitar errores de desestructuración
+    const fileName = event.detail.fileName;
+    const ocrText = event.detail.ocrText;
+    const imageDataURL = event.detail.imageDataURL;
+
+    // Verificamos que todo exista antes de llamar a la función del módulo
+    if (fileName && ocrText && imageDataURL) {
+        console.log(`🎧 [MAIN] Event received. Calling IA module for ${fileName}...`);
+        processImageWithAI(fileName, ocrText, imageDataURL);
+    } else {
+        console.error("❌ [MAIN] 'imageProcessed' event was missing data.", event.detail);
+    }
 });
 
 // (Opcional) Escuchador para el resultado del análisis
 document.addEventListener('patternAnalyzed', (event) => {
     const { result } = event.detail;
-    // Aquí podrías mostrar el resultado en la UI si quisieras
     console.log("🎉 Notification from IA Module:", result);
 });
