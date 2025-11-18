@@ -103,20 +103,39 @@ function analyzeEmployeePatterns() {
 // Esta función será llamada desde script.js
 // images-validation-ia.js
 
+// images-validation-ia.js
+
 export async function processImageWithAI(fileName, ocrText, imageDataURL) {
     console.log(`🤖 [IA-MODULE] Starting AI processing for ${fileName}...`);
     try {
         const base64Image = imageDataURL.split(',')[1];
         const qwenResult = await extractWithQwen(base64Image, fileName, 'image/jpeg');
 
+        // --- PASO 1: El backend nos devuelve un objeto. Tomamos la propiedad 'extractedText', que es un string. ---
+        const rawExtractedText = qwenResult.extractedText;
+
+        // --- PASO 2: Limpiamos el string para quitarle el markdown (```json ... ````) ---
+        const cleanedText = rawExtractedText.replace(/```json\n|\n```/g, '').trim();
+        
+        // --- PASO 3: Parseamos el string limpio a un objeto JSON real ---
+        let tripsData = [];
+        try {
+            const parsedData = JSON.parse(cleanedText);
+            if (parsedData && parsedData.trips && Array.isArray(parsedData.trips)) {
+                tripsData = parsedData.trips;
+            }
+        } catch (parseError) {
+            console.error("❌ [IA-MODULE] Failed to parse cleanedText to JSON:", parseError);
+        }
+
+        // --- PASO 4: Guardamos el array de viajes ya parseado ---
         qwenExtractedData.push({
             fileName: fileName,
-            extractedText: qwenResult.extractedText
+            trips: tripsData // <-- Guardamos el array de objetos, no el string
         });
 
-        // --- SOLUCIÓN: Usamos JSON.stringify para imprimir el objeto completo ---
-        console.log("--- 🤖 QWEN RAW JSON RESULT (STRINGIFIED) ---");
-        console.log(JSON.stringify(qwenResult, null, 2)); // El '2' formatea el JSON para que sea legible
+        console.log("--- 🤖 QWEN PARSED TRIPS (ARRAY DE OBJETOS) ---");
+        console.log(tripsData);
         console.log("-------------------------------------------------");
 
         console.log(`✅ [IA-MODULE] Qwen extraction completed for ${fileName}`);
@@ -126,6 +145,8 @@ export async function processImageWithAI(fileName, ocrText, imageDataURL) {
         console.error(`❌ [IA-MODULE] Error processing ${fileName}:`, qwenError);
     }
 }
+
+
 // Asegúrate de que fileToBase64 esté en este archivo
 function fileToBase64(file) {
     return new Promise((resolve, reject) => {
