@@ -2,13 +2,10 @@
 
 // --- ESTADO PERSISTENTE DEL MÓDULO ---
 const allExtractedTrips = [];
-let processedImagesCount = 0;
+let processedImagesCount = 0; // <-- NUEVO: Contador de imágenes procesadas.
 
-// --- NUEVO: BANDERA PARA CONTROLAR EL PROCESAMIENTO ---
-let isProcessing = false;
-let processingQueue = [];
-
-// --- FUNCIÓN AUXILIAR PARA ENVIAR A LA API QWEN (REVERTIDA A TU VERSIÓN) ---
+// --- FUNCIÓN AUXILIAR PARA ENVIAR A LA API QWEN ---
+// (Sin cambios)
 async function extractWithQwen(base64Image, fileName, mimeType) {
     const response = await fetch('/api/qwen', {
         method: 'POST',
@@ -22,122 +19,44 @@ async function extractWithQwen(base64Image, fileName, mimeType) {
     return await response.json();
 }
 
-// --- FUNCIÓN DE ANÁLISIS (SIN CAMBIOS, LA ÚLTIMA VERSIÓN CORRECTA) ---
-function analyzeWorkSchedule(imageCount) {
-    console.log(`🧠 [PATTERN-DETECTOR] Analyzing patterns from ${allExtractedTrips.length} total trips...`);
-
-    const validStartTimes = {};
-    let validWorkdaysFound = 0;
+// --- FUNCIÓN DE ANÁLISIS (AHORA RECIBE Y USA EL CONTADOR) ---
+function analyzeWorkSchedule(imageCount) { // <-- MODIFICADO: Ahora recibe el contador.
+    console.log(`🧠 [PATTERN-DETECTOR] Analyzing with ${allExtractedTrips.length} total trips from ${imageCount} images...`);
 
     const officeTrips = allExtractedTrips.filter(trip =>
         trip.destination && trip.destination.toLowerCase().includes("mireka tower")
     );
 
-    const homeTrips = allExtractedTrips.filter(trip =>
-        trip.destination && trip.destination.toLowerCase().includes("43b lauries rd")
-    );
-
-    for (const officeTrip of officeTrips) {
-        if (!officeTrip.time || !officeTrip.date) continue;
-
-        const pickupTimeInMinutes = timeToMinutes(officeTrip.time);
-        if (pickupTimeInMinutes === null) continue;
-
-        const arrivalTimeInMinutes = pickupTimeInMinutes + 15;
-        let startHour = Math.floor(arrivalTimeInMinutes / 60) + 1;
-        if (startHour >= 24) startHour = 0;
-        const startTimeInMinutes = startHour * 60;
-        const endTimeInMinutes = startTimeInMinutes + (9 * 60);
-        const startTimeKey = minutesToTime(startTimeInMinutes);
-
-        let matchingHomeTrip = null;
-
-        // --- PASO 1: BUSCAR EN EL MISMO DÍA ---
-        matchingHomeTrip = homeTrips.find(homeTrip => {
-            if (!homeTrip.time || !homeTrip.date) return false;
-            const homePickupTimeInMinutes = timeToMinutes(homeTrip.time);
-            if (homePickupTimeInMinutes < endTimeInMinutes) return false;
-            return homeTrip.date === officeTrip.date;
-        });
-
-        // --- PASO 2: SI NO SE ENCONTRÓ, BUSCAR AL DÍA SIGUIENTE ---
-        if (!matchingHomeTrip) {
-            const officeDate = parseSimpleDate(officeTrip.date);
-            const nextDay = new Date(officeDate);
-            nextDay.setDate(nextDay.getDate() + 1);
-            const nextDayStr = formatDate(nextDay);
-
-            matchingHomeTrip = homeTrips.find(homeTrip => {
-                if (!homeTrip.time || !homeTrip.date) return false;
-                const homePickupTimeInMinutes = timeToMinutes(homeTrip.time);
-                if (homePickupTimeInMinutes < endTimeInMinutes) return false;
-                return homeTrip.date === nextDayStr;
-            });
-        }
-
-        if (matchingHomeTrip) {
-            validWorkdaysFound++;
-            validStartTimes[startTimeKey] = (validStartTimes[startTimeKey] || 0) + 1;
-            console.log(`   -> ✅ Válido: Ida (${officeTrip.date} ${officeTrip.time}) con Vuelta (${matchingHomeTrip.date} ${matchingHomeTrip.time}). Apunta a inicio: ${startTimeKey}`);
-        } else {
-            console.log(`   -> ❌ Inválido: Ida (${officeTrip.date} ${officeTrip.time}). No se encontró vuelta válida.`);
-        }
+    if (officeTrips.length === 0) {
+        console.log("📊 [PATTERN-DETECTOR] No trips to the office found yet.");
+        return;
     }
 
-    let deducedStartTime = null;
-    let maxCount = 0;
+    const arrivalTimesInMinutes = officeTrips.map(trip => {
+        const timeInMinutes = timeToMinutes(trip.time);
+        return timeInMinutes !== null ? timeInMinutes + 15 : null;
+    }).filter(time => time !== null);
 
-    for (const time in validStartTimes) {
-        if (validStartTimes[time] > maxCount) {
-            maxCount = validStartTimes[time];
-            deducedStartTime = time;
-        }
+    if (arrivalTimesInMinutes.length === 0) {
+        console.error("❌ [PATTERN-DETECTOR] Could not parse any valid times from office trips.");
+        return;
     }
 
+    const latestArrival = Math.max(...arrivalTimesInMinutes);
+    const startHour = Math.floor(latestArrival / 60) + (latestArrival % 60 !== 0 ? 1 : 0);
+    const startTimeInMinutes = startHour * 60;
+    const endTimeInMinutes = startTimeInMinutes + (9 * 60);
+
+    // --- MODIFICADO: Imprime el contador antes que nada.
     console.clear();
-    if (!deducedStartTime) {
-        console.log(`(0)`);
-        console.log("No se encontraron jornadas completas y válidas para determinar un patrón.");
-        return;
-    }
-
-    const finalStartTimeInMinutes = timeToMinutes(deducedStartTime);
-    const finalEndTimeInMinutes = finalStartTimeInMinutes + (9 * 60);
-
-    console.log(`(${validWorkdaysFound})`);
-    console.log("Start time: " + deducedStartTime);
-    console.log("End time: " + minutesToTime(finalEndTimeInMinutes));
-    console.log(`(Pattern based on ${validWorkdaysFound} complete workdays)`);
+    console.log(`(${imageCount})`);
+    console.log("Start time: " + minutesToTime(startTimeInMinutes));
+    console.log("End time: " + minutesToTime(endTimeInMinutes));
 }
 
-
-// --- FUNCIÓN PRINCIPAL DEL MÓDULO (CON LÓGICA DE COLA) ---
+// --- FUNCIÓN PRINCIPAL DEL MÓDULO (AHORA INCREMENTA EL CONTADOR) ---
 export async function processImageWithAI(fileName, ocrText, imageDataURL) {
-    // Añadimos la imagen a la cola de procesamiento.
-    processingQueue.push({ fileName, ocrText, imageDataURL });
-
-    // Si ya se está procesando una imagen, no hacemos nada más.
-    // La cola se encargará de procesar las demás cuando termine la actual.
-    if (isProcessing) {
-        console.log(`🕐 [IA-MODULE] ${fileName} added to queue. Current queue length: ${processingQueue.length}`);
-        return;
-    }
-
-    // Iniciamos el procesamiento de la cola.
-    processQueue();
-}
-
-// --- NUEVA FUNCIÓN PARA PROCESAR LA COLA ---
-async function processQueue() {
-    if (processingQueue.length === 0) {
-        isProcessing = false; // No hay más nada que procesar.
-        return;
-    }
-
-    isProcessing = true;
-    const { fileName, ocrText, imageDataURL } = processingQueue.shift(); // Tomamos la primera imagen de la cola.
-
-    console.log(`🤖 [IA-MODULE] Processing ${fileName}... (Queue: ${processingQueue.length} remaining)`);
+    console.log(`🤖 [IA-MODULE] Processing ${fileName}...`);
     try {
         const base64Image = imageDataURL.split(',')[1];
         const qwenResult = await extractWithQwen(base64Image, fileName, 'image/jpeg');
@@ -154,41 +73,18 @@ async function processQueue() {
             data.trips.forEach(trip => {
                 allExtractedTrips.push(trip);
             });
-            processedImagesCount++;
+            
+            // <-- NUEVO: Incrementa el contador solo si se extrajeron viajes válidos.
+            processedImagesCount++; 
+            console.log(`✅ [IA-MODULE] Added ${data.trips.length} trips. Total accumulated: ${allExtractedTrips.length}. Images processed: ${processedImagesCount}`);
         }
 
+        // <-- MODIFICADO: Pasa el contador actual a la función de análisis.
         analyzeWorkSchedule(processedImagesCount);
 
     } catch (error) {
         console.error(`❌ [IA-MODULE] Error processing ${fileName}:`, error);
-    } finally {
-        // Pequeña pausa antes de procesar la siguiente imagen para evitar el bloqueo.
-        setTimeout(() => {
-            processQueue(); // Llamada recursiva para procesar la siguiente en la cola.
-        }, 1500); // 1.5 segundos de pausa.
     }
-}
-
-// --- FUNCIONES AUXILIARES ---
-
-// Convierte "Nov 10" a un objeto de fecha real (año actual por defecto).
-function parseSimpleDate(dateStr) {
-    if (!dateStr) return null;
-    const parts = dateStr.split(' ');
-    if (parts.length !== 2) return null;
-    const month = parts[0].toLowerCase();
-    const day = parseInt(parts[1], 10);
-    const monthMap = { 'jan': 0, 'feb': 1, 'mar': 2, 'apr': 3, 'may': 4, 'jun': 5, 'jul': 6, 'aug': 7, 'sep': 8, 'oct': 9, 'nov': 10, 'dec': 11 };
-    const monthNum = monthMap[month.substring(0, 3)];
-    if (monthNum === undefined || isNaN(day)) return null;
-    return new Date(new Date().getFullYear(), monthNum, day);
-}
-
-// Formatea un objeto Date a "Nov 10".
-function formatDate(dateObj) {
-    if (!dateObj) return null;
-    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    return `${months[dateObj.getMonth()]} ${dateObj.getDate()}`;
 }
 
 // --- FUNCIONES AUXILIARES DE TIEMPO ---
