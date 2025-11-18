@@ -1,20 +1,15 @@
 // images-validation-ia.js
 
 // --- ESTADO LOCAL DEL MÓDULO ---
-// Este array solo existe dentro de este archivo, manteniéndolo aislado.
+// Reutilizamos este array, pero ahora guardaremos objetos de viaje en lugar de texto crudo.
 const qwenExtractedData = [];
 
 // --- FUNCIÓN AUXILIAR PARA ENVIAR A LA API QWEN ---
-// Nota: Las funciones fetch deben estar dentro del módulo que las usa.
-// images-validation-ia.js
-
-// --- FUNCIÓN AUXILIAR PARA ENVIAR A LA API QWEN (VERSIÓN SIMPLE) ---
-// Esta función envía los datos que tu backend espera.
+// (Sin cambios)
 async function extractWithQwen(base64Image, fileName, mimeType) {
     const response = await fetch('/api/qwen', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // --- CUERPO SIMPLE: Enviamos solo lo que el backend espera ---
         body: JSON.stringify({
             image: base64Image,
             fileName: fileName,
@@ -31,111 +26,119 @@ async function extractWithQwen(base64Image, fileName, mimeType) {
     return data;
 }
 
-// --- FUNCIÓN AUXILIAR PARA ANALIZAR PATRONES ---
-// images-validation-ia.js
-
-// images-validation-ia.js
-
-// --- FUNCIÓN AUXILIAR PARA ANALIZAR PATRONES ---
-function analyzeEmployeePatterns() {
-    console.log("🧠 [IA-MODULE] Starting analysis with accumulated data...");
-    console.log("📊 [IA-MODULE] Total data points:", qwenExtractedData.length);
-
-    if (qwenExtractedData.length === 0) return;
-
-    // --- LÓGICA FUTURA: Extraer y clasificar viajes (Home-to-Office vs Office-to-Home) ---
-    // Para un análisis preciso, necesitaríamos:
-    // 1. El destino de cada viaje (ej. "Mireka Tower" o "43b Lauries Rd").
-    // 2. La hora de cada viaje.
-    // 3. Clasificar cada viaje como "home_to_office" (mañana) u "office_to_home" (tarde).
-    // 4. Calcular el rango horario para cada tipo de viaje por separado.
-    // Ejemplo de resultado futuro: "Your typical Home-to-Office schedule is from 8:30 AM to 9:00 AM, and Office-to-Home from 6:15 PM to 6:45 PM."
-
-    // Por ahora, solo extraemos la hora como prueba de concepto.
-    const extractedTimes = [];
-    qwenExtractedData.forEach(data => {
-        const timeMatch = data.extractedText.match(/(\d{1,2}:\d{2}\s*(?:AM|PM))/i);
-        if (timeMatch) {
-            extractedTimes.push(timeMatch[1]);
-        }
-    });
-
-    if (extractedTimes.length === 0) {
-        console.warn("⚠️ [IA-MODULE] Could not extract any times.");
-        return;
-    }
-
-    console.log("🕒 [IA-MODULE] Extracted times:", extractedTimes);
-
-    // --- LÓGICA TEMPORAL: Calculamos un rango simple (sin clasificar viajes) ---
-    const timesInMinutes = extractedTimes.map(timeStr => {
-        const [time, period] = timeStr.split(' ');
-        let [hours, minutes] = time.split(':').map(Number);
-        if (period.toUpperCase() === 'PM' && hours !== 12) hours += 12;
-        return hours * 60 + minutes;
-    });
-
-    const earliestTime = Math.min(...timesInMinutes);
-    const latestTime = Math.max(...timesInMinutes);
-
-    const formatTime = (minutes) => {
-        const period = minutes >= 720 ? 'PM' : 'AM';
-        let displayHour = Math.floor(minutes / 60);
-        if (displayHour > 12) displayHour -= 12;
-        if (displayHour === 0) displayHour = 12;
-        const displayMinute = minutes % 60;
-        return `${displayHour}:${displayMinute.toString().padStart(2, '0')} ${period}`;
-    };
-
-    // Mensaje provisional
-    const result = `Working on it... Current data shows a range from ${formatTime(earliestTime)} to ${formatTime(latestTime)}.`;
-    console.log(`🎯 [IA-MODULE] RESULT: ${result}`);
-
-    // --- PUBLICAR EL RESULTADO DEL ANÁLISIS ---
-    document.dispatchEvent(new CustomEvent('patternAnalyzed', { detail: { result } }));
-}
-
-
-
 // --- FUNCIÓN PRINCIPAL DEL MÓDULO ---
-// Esta función será llamada desde script.js
-// --- FUNCIÓN PRINCIPAL DEL MÓDULO ---
-// Esta función será llamada desde script.js
-// images-validation-ia.js
-
-// images-validation-ia.js
-
+// Modificada para parsear el JSON y llamar al análisis.
 export async function processImageWithAI(fileName, ocrText, imageDataURL) {
     console.log(`🤖 [IA-MODULE] Starting AI processing for ${fileName}...`);
     try {
         const base64Image = imageDataURL.split(',')[1];
         const qwenResult = await extractWithQwen(base64Image, fileName, 'image/jpeg');
 
-        // --- DEPURACIÓN: Imprimimos el contenido exacto de 'extractedText' ---
-        console.log("--- 🔍 DEPURACIÓN: CONTENIDO CRUDO DE 'extractedText' ---");
-        console.log(typeof qwenResult.extractedText); // ¿Es un string?
-        console.log(qwenResult.extractedText); // El contenido sin modificar
-        console.log("----------------------------------------------------");
+        // --- NUEVO: INTENTAR PARSEAR LA RESPUESTA COMO JSON ---
+        let parsedTrips;
+        try {
+            // Qwen debería devolver un JSON válido. Lo parseamos.
+            parsedTrips = JSON.parse(qwenResult.extractedText);
+        } catch (e) {
+            console.error(`❌ [IA-MODULE] Failed to parse JSON from AI for ${fileName}. Raw text:`, qwenResult.extractedText);
+            // Si no es JSON, no podemos procesarlo. Salimos de la función.
+            return;
+        }
 
-        // --- DEPURACIÓN: Imprimimos el objeto completo para ver la estructura ---
-        console.log("--- 🔍 DEPURACIÓN: OBJETO COMPLETO 'qwenResult' ---");
-        console.log(qwenResult);
-        console.log("----------------------------------------------------");
+        // --- NUEVO: GUARDAR LOS DATOS ESTRUCTURADOS ---
+        if (parsedTrips && Array.isArray(parsedTrips.trips)) {
+            parsedTrips.trips.forEach(trip => {
+                qwenExtractedData.push({
+                    destination: trip.destination,
+                    time: trip.time,
+                    date: trip.date,
+                    sourceFile: fileName // Guardamos el archivo de origen para referencia
+                });
+            });
+            console.log(`✅ [IA-MODULE] Extracted ${parsedTrips.trips.length} trips from ${fileName}. Total trips in memory: ${qwenExtractedData.length}`);
+        } else {
+            console.warn(`⚠️ [IA-MODULE] No 'trips' array found in AI response for ${fileName}.`);
+        }
 
-        // --- GUARDAMOS LOS DATOS COMO ANTES (SIN PARSEAR) ---
-        qwenExtractedData.push({
-            fileName: fileName,
-            extractedText: qwenResult.extractedText // Guardamos el string crudo
-        });
-
-        console.log(`✅ [IA-MODULE] Qwen extraction completed for ${fileName}`);
-        analyzeEmployeePatterns(); // Esta función fallará, pero es para ver qué pasa
+        // --- NUEVO: DISPARAR EL ANÁLISIS DESPUÉS DE CADA RESPUESTA EXITOSA ---
+        analyzeWorkSchedule();
 
     } catch (qwenError) {
         console.error(`❌ [IA-MODULE] Error processing ${fileName}:`, qwenError);
     }
 }
 
+// --- NUEVA FUNCIÓN DE ANÁLISIS (SALIDA LIMPIA EN CONSOLA) ---
+function analyzeWorkSchedule() {
+    // Si no hay suficientes datos, no hacemos nada.
+    if (qwenExtractedData.length < 2) {
+        return; // Necesitamos al menos un par de datos para empezar a ver un patrón.
+    }
+
+    // 1. Filtrar viajes "Casa -> Oficina"
+    const homeToOfficeTrips = qwenExtractedData.filter(trip =>
+        trip.destination && trip.destination.toLowerCase().includes("mireka tower")
+    );
+
+    if (homeToOfficeTrips.length === 0) return;
+
+    // 2. Calcular horas de llegada a la oficina (pickup + 15 min)
+    const ESTIMATED_TRAVEL_TIME_MINUTES = 15;
+    const arrivalTimesInMinutes = homeToOfficeTrips.map(trip => {
+        const timeInMinutes = timeToMinutes(trip.time);
+        return timeInMinutes !== null ? timeInMinutes + ESTIMATED_TRAVEL_TIME_MINUTES : null;
+    }).filter(time => time !== null);
+
+    if (arrivalTimesInMinutes.length === 0) return;
+
+    // 3. Deducir hora de inicio (siguiente hora en punto después de la llegada más tardía)
+    const latestArrivalInMinutes = Math.max(...arrivalTimesInMinutes);
+    let startHour = Math.floor(latestArrivalInMinutes / 60);
+    if (latestArrivalInMinutes % 60 !== 0) {
+        startHour += 1;
+    }
+    const startTimeInMinutes = startHour * 60;
+
+    // 4. Calcular hora de fin (+9 horas)
+    const WORK_HOURS_DURATION = 9;
+    const endTimeInMinutes = startTimeInMinutes + (WORK_HOURS_DURATION * 60);
+
+    // 5. IMPRIMIR RESULTADO LIMPIO EN CONSOLA
+    console.clear(); // Limpia la consola para no saturarla con logs anteriores.
+    console.log("Start time: " + minutesToTime(startTimeInMinutes));
+    console.log("End time: " + minutesToTime(endTimeInMinutes));
+}
+
+// --- FUNCIONES AUXILIARES DE TIEMPO (NUEVAS) ---
+
+// Convierte "HH:MM AM/PM" a minutos desde medianoche.
+function timeToMinutes(timeStr) {
+    if (!timeStr || typeof timeStr !== 'string') return null;
+    const match = timeStr.trim().match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+    if (!match) return null;
+
+    let [, hours, minutes, period] = match;
+    hours = parseInt(hours, 10);
+    minutes = parseInt(minutes, 10);
+    period = period.toUpperCase();
+
+    if (period === 'PM' && hours !== 12) hours += 12;
+    if (period === 'AM' && hours === 12) hours = 0;
+
+    return hours * 60 + minutes;
+}
+
+// Convierte minutos desde medianoche a "HH:MM AM/PM".
+function minutesToTime(minutes) {
+    if (minutes >= 24 * 60) minutes -= 24 * 60; // Ajuste por si pasa de medianoche
+
+    const period = minutes >= 12 * 60 ? 'PM' : 'AM';
+    let displayHour = Math.floor(minutes / 60);
+    if (displayHour > 12) displayHour -= 12;
+    if (displayHour === 0) displayHour = 12;
+    const displayMinute = minutes % 60;
+    return `${displayHour}:${displayMinute.toString().padStart(2, '0')} ${period}`;
+}
 // Asegúrate de que fileToBase64 esté en este archivo
 function fileToBase64(file) {
     return new Promise((resolve, reject) => {
