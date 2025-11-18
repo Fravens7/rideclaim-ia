@@ -315,7 +315,7 @@ function processImageFile(file, fileItem) {
                     }
                 });
                 
-                console.log("Raw OCR Text:", text);
+                //console.log("Raw OCR Text:", text);
                 
                 // --- MODIFICADO: Publicamos el evento con el imageDataURL ---
                 console.log(`📢 [MAIN] Dispatching 'imageProcessed' event for ${file.name}`);

@@ -113,10 +113,10 @@ Extract ALL visible trips, not just the first one. Be thorough and capture every
     console.log("📄 OpenRouter raw response:", result);
 
     const extractedText = result.choices?.[0]?.message?.content || "";
-    console.log("✅ Text extracted successfully, length:", extractedText.length);
+    const cleanedExtractedText = extractedText.split('### Explanation of Extraction:')[0].trim();
 
     return res.status(200).json({
-      extractedText: extractedText || "No text extracted",
+      extractedText: cleanedExtractedText, // <-- DEVOLVEMOS EL TEXTO LIMPIO
       fileName: fileName,
       success: true,
     });
