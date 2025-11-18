@@ -23,6 +23,8 @@ async function extractWithQwen(base64Image, fileName, mimeType) {
 // --- FUNCIÓN AUXILIAR PARA ANALIZAR PATRONES ---
 // images-validation-ia.js
 
+// images-validation-ia.js
+
 // --- FUNCIÓN AUXILIAR PARA ANALIZAR PATRONES ---
 function analyzeEmployeePatterns() {
     console.log("🧠 [IA-MODULE] Starting analysis with accumulated data...");
@@ -81,6 +83,9 @@ function analyzeEmployeePatterns() {
     // --- PUBLICAR EL RESULTADO DEL ANÁLISIS ---
     document.dispatchEvent(new CustomEvent('patternAnalyzed', { detail: { result } }));
 }
+
+
+
 // --- FUNCIÓN PRINCIPAL DEL MÓDULO ---
 // Esta función será llamada desde script.js
 // --- FUNCIÓN PRINCIPAL DEL MÓDULO ---
