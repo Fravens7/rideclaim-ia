@@ -1,4 +1,4 @@
-// --- qwen.js corregido para usar la nueva URL de Hugging Face ---
+// --- qwen.js con la URL correcta para el endpoint compatible con OpenAI ---
 
 export default async function handler(req, res) {
   try {
@@ -34,8 +34,8 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: "Missing Hugging Face API key" });
     }
 
-    // --- ¡CAMBIO CLAVE! Usamos la nueva URL actualizada de Hugging Face ---
-    const hfUrl = "https://router.huggingface.co/hf-inference";
+    // --- ¡CAMBIO CLAVE! Usamos la ruta estándar para modelos compatibles con OpenAI ---
+    const hfUrl = "https://router.huggingface.co/v1/chat/completions";
 
     console.log("📡 Calling Hugging Face API with Qwen2-VL...");
 
@@ -64,7 +64,7 @@ Please extract:
 6. Status of each trip
 7. Type of service (ride, tuktuk, delivery, etc.)
 
-Return ONLY the JSON object. Do not include any explanations, introductory text, or concluding remarks outside of the JSON structure.
+Return ONLY a JSON object. Do not include any explanations, introductory text, or concluding remarks outside of the JSON structure.
 {
   "trips": [
     {
