@@ -1,8 +1,9 @@
 // images-validation-ia.js
 
 // --- ESTADO PERSISTENTE DEL MÓDULO ---
-const allExtractedTrips = [];
-let processedImagesCount = 0; // <-- NUEVO: Contador de imágenes procesadas.
+// Cambiamos a un objeto para agrupar viajes por fecha. Es más ordenado.
+const tripsByDate = {};
+let processedImagesCount = 0;
 
 // --- FUNCIÓN AUXILIAR PARA ENVIAR A LA API QWEN ---
 // (Sin cambios)
@@ -14,47 +15,73 @@ async function extractWithQwen(base64Image, fileName, mimeType) {
     });
     if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`Server error: ${response.status} - ${errorText}`);
+        throw new Error(`Server server: ${response.status} - ${errorText}`);
     }
     return await response.json();
 }
 
-// --- FUNCIÓN DE ANÁLISIS (AHORA RECIBE Y USA EL CONTADOR) ---
-function analyzeWorkSchedule(imageCount) { // <-- MODIFICADO: Ahora recibe el contador.
-    console.log(`🧠 [PATTERN-DETECTOR] Analyzing with ${allExtractedTrips.length} total trips from ${imageCount} images...`);
+// --- FUNCIÓN DE ANÁLISIS INTELIGENTE (NUEVA LÓGICA) ---
+function analyzeWorkSchedule(imageCount) {
+    console.log(`🧠 [PATTERN-DETECTOR] Analyzing patterns from ${Object.keys(tripsByDate).length} days...`);
 
-    const officeTrips = allExtractedTrips.filter(trip =>
-        trip.destination && trip.destination.toLowerCase().includes("mireka tower")
-    );
+    const startTimeCounts = {}; // Objeto para contar la frecuencia de cada hora de inicio.
 
-    if (officeTrips.length === 0) {
-        console.log("📊 [PATTERN-DETECTOR] No trips to the office found yet.");
+    // 1. ITERAR SOBRE CADA DÍA PARA ENCONTRAR EL PATRÓN
+    for (const date in tripsByDate) {
+        const dailyTrips = tripsByDate[date];
+        
+        // 2. ENCONTRAR EL VIAJE A LA OFICINA DE ESE DÍA
+        const officeTrip = dailyTrips.find(trip =>
+            trip.destination && trip.destination.toLowerCase().includes("mireka tower")
+        );
+
+        if (officeTrip && officeTrip.time) {
+            // 3. CALCULAR LA HORA DE LLEGADA Y LA HORA DE INICIO CORRESPONDIENTE
+            const pickupTimeInMinutes = timeToMinutes(officeTrip.time);
+            if (pickupTimeInMinutes === null) continue; // Ignorar si la hora es inválida
+
+            const arrivalTimeInMinutes = pickupTimeInMinutes + 15; // Sumar tiempo de viaje
+            
+            // La hora de inicio es la siguiente hora en punto DESPUÉS de la llegada.
+            let startHour = Math.floor(arrivalTimeInMinutes / 60) + 1;
+            if (startHour >= 24) startHour = 0; // Ajuste si pasa de medianoche
+            
+            const startTimeKey = minutesToTime(startHour * 60); // Formatear a "1:00 PM"
+
+            // 4. CONTAR ESTA HORA DE INICIO
+            startTimeCounts[startTimeKey] = (startTimeCounts[startTimeKey] || 0) + 1;
+            console.log(`   -> ${date}: Llegada estimada a ${minutesToTime(arrivalTimeInMinutes)}, apunta a hora de inicio: ${startTimeKey}`);
+        }
+    }
+
+    // 5. ENCONTRAR LA HORA DE INICIO MÁS COMÚN (LA MODA)
+    let deducedStartTime = null;
+    let maxCount = 0;
+
+    for (const time in startTimeCounts) {
+        if (startTimeCounts[time] > maxCount) {
+            maxCount = startTimeCounts[time];
+            deducedStartTime = time;
+        }
+    }
+
+    if (!deducedStartTime) {
+        console.log("📊 [PATTERN-DETECTOR] No se pudo determinar un patrón de horario.");
         return;
     }
 
-    const arrivalTimesInMinutes = officeTrips.map(trip => {
-        const timeInMinutes = timeToMinutes(trip.time);
-        return timeInMinutes !== null ? timeInMinutes + 15 : null;
-    }).filter(time => time !== null);
-
-    if (arrivalTimesInMinutes.length === 0) {
-        console.error("❌ [PATTERN-DETECTOR] Could not parse any valid times from office trips.");
-        return;
-    }
-
-    const latestArrival = Math.max(...arrivalTimesInMinutes);
-    const startHour = Math.floor(latestArrival / 60) + (latestArrival % 60 !== 0 ? 1 : 0);
-    const startTimeInMinutes = startHour * 60;
+    // 6. CALCULAR HORA DE FIN Y MOSTRAR RESULTADO
+    const startTimeInMinutes = timeToMinutes(deducedStartTime);
     const endTimeInMinutes = startTimeInMinutes + (9 * 60);
 
-    // --- MODIFICADO: Imprime el contador antes que nada.
     console.clear();
     console.log(`(${imageCount})`);
-    console.log("Start time: " + minutesToTime(startTimeInMinutes));
+    console.log("Start time: " + deducedStartTime);
     console.log("End time: " + minutesToTime(endTimeInMinutes));
+    console.log(`(Pattern repeated ${maxCount} times)`);
 }
 
-// --- FUNCIÓN PRINCIPAL DEL MÓDULO (AHORA INCREMENTA EL CONTADOR) ---
+// --- FUNCIÓN PRINCIPAL DEL MÓDULO (AHORA GUARDA POR FECHA) ---
 export async function processImageWithAI(fileName, ocrText, imageDataURL) {
     console.log(`🤖 [IA-MODULE] Processing ${fileName}...`);
     try {
@@ -71,15 +98,19 @@ export async function processImageWithAI(fileName, ocrText, imageDataURL) {
 
         if (data.trips && Array.isArray(data.trips)) {
             data.trips.forEach(trip => {
-                allExtractedTrips.push(trip);
+                // Asegurarnos de que el viaje tenga una fecha para poder agruparlo.
+                if (trip.date) {
+                    if (!tripsByDate[trip.date]) {
+                        tripsByDate[trip.date] = []; // Crear una nueva entrada para esa fecha si no existe.
+                    }
+                    tripsByDate[trip.date].push(trip);
+                }
             });
             
-            // <-- NUEVO: Incrementa el contador solo si se extrajeron viajes válidos.
-            processedImagesCount++; 
-            console.log(`✅ [IA-MODULE] Added ${data.trips.length} trips. Total accumulated: ${allExtractedTrips.length}. Images processed: ${processedImagesCount}`);
+            processedImagesCount++;
+            console.log(`✅ [IA-MODULE] Processed image. Total unique days analyzed: ${Object.keys(tripsByDate).length}`);
         }
 
-        // <-- MODIFICADO: Pasa el contador actual a la función de análisis.
         analyzeWorkSchedule(processedImagesCount);
 
     } catch (error) {
