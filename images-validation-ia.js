@@ -92,15 +92,17 @@ function analyzeEmployeePatterns() {
 // Esta función será llamada desde script.js
 // images-validation-ia.js
 
-export async function processImageWithAI(file, ocrText) {
-    console.log(`🤖 [IA-MODULE] Starting AI processing for ${file.name}...`);
+export async function processImageWithAI(fileName, ocrText, imageDataURL) {
+    console.log(`🤖 [IA-MODULE] Starting AI processing for ${fileName}...`);
     try {
-        // Usamos fileToBase64, que sabemos que funciona
-        const base64Image = await fileToBase64(file);
-        const qwenResult = await extractWithQwen(base64Image, file.name, file.type);
+        // --- CAMBIO CLAVE: Ya no usamos fileToBase64, usamos el imageDataURL directamente ---
+        const base64Image = imageDataURL.split(',')[1];
+        
+        // La API necesita un nombre y un tipo. Usamos los que recibimos.
+        const qwenResult = await extractWithQwen(base64Image, fileName, 'image/jpeg');
 
         qwenExtractedData.push({
-            fileName: file.name,
+            fileName: fileName,
             extractedText: qwenResult.extractedText
         });
 
@@ -109,11 +111,11 @@ export async function processImageWithAI(file, ocrText) {
         console.log(qwenResult);
         console.log("----------------------------------");
 
-        console.log(`✅ [IA-MODULE] Qwen extraction completed for ${file.name}`);
+        console.log(`✅ [IA-MODULE] Qwen extraction completed for ${fileName}`);
         analyzeEmployeePatterns();
 
     } catch (qwenError) {
-        console.error(`❌ [IA-MODULE] Error processing ${file.name}:`, qwenError);
+        console.error(`❌ [IA-MODULE] Error processing ${fileName}:`, qwenError);
     }
 }
 // Asegúrate de que fileToBase64 esté en este archivo
