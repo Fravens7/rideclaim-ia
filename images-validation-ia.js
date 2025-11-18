@@ -95,10 +95,7 @@ function analyzeEmployeePatterns() {
 export async function processImageWithAI(fileName, ocrText, imageDataURL) {
     console.log(`🤖 [IA-MODULE] Starting AI processing for ${fileName}...`);
     try {
-        // --- CAMBIO CLAVE: Ya no usamos fileToBase64, usamos el imageDataURL directamente ---
         const base64Image = imageDataURL.split(',')[1];
-        
-        // La API necesita un nombre y un tipo. Usamos los que recibimos.
         const qwenResult = await extractWithQwen(base64Image, fileName, 'image/jpeg');
 
         qwenExtractedData.push({
@@ -106,10 +103,10 @@ export async function processImageWithAI(fileName, ocrText, imageDataURL) {
             extractedText: qwenResult.extractedText
         });
 
-        // Añadimos el log del JSON completo que querías
-        console.log("--- 🤖 QWEN RAW JSON RESULT ---");
-        console.log(qwenResult);
-        console.log("----------------------------------");
+        // --- SOLUCIÓN: Usamos JSON.stringify para imprimir el objeto completo ---
+        console.log("--- 🤖 QWEN RAW JSON RESULT (STRINGIFIED) ---");
+        console.log(JSON.stringify(qwenResult, null, 2)); // El '2' formatea el JSON para que sea legible
+        console.log("-------------------------------------------------");
 
         console.log(`✅ [IA-MODULE] Qwen extraction completed for ${fileName}`);
         analyzeEmployeePatterns();
