@@ -1,8 +1,8 @@
-// --- qwen.js con la URL correcta para el endpoint compatible con OpenAI ---
+// --- qwen.js con el nombre del modelo correcto y permitido ---
 
 export default async function handler(req, res) {
   try {
-    console.log("🚀 Starting Hugging Face Qwen2-VL text extraction");
+    console.log("🚀 Starting Hugging Face Qwen2.5-VL text extraction");
 
     if (req.method !== "POST") {
       return res.status(405).json({ error: "Method Not Allowed" });
@@ -34,10 +34,9 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: "Missing Hugging Face API key" });
     }
 
-    // --- ¡CAMBIO CLAVE! Usamos la ruta estándar para modelos compatibles con OpenAI ---
     const hfUrl = "https://router.huggingface.co/v1/chat/completions";
 
-    console.log("📡 Calling Hugging Face API with Qwen2-VL...");
+    console.log("📡 Calling Hugging Face API with Qwen2.5-VL...");
 
     const response = await fetch(hfUrl, {
       method: "POST",
@@ -46,7 +45,8 @@ export default async function handler(req, res) {
         Authorization: `Bearer ${hfKey}`,
       },
       body: JSON.stringify({
-        model: "Qwen/Qwen2-VL-7B-Instruct",
+        // --- ¡CAMBIO CLAVE! Usamos el nombre del modelo permitido ---
+        model: "Qwen/Qwen2.5-VL-7B-Instruct",
         messages: [
           {
             role: "user",
