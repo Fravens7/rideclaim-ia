@@ -1,12 +1,14 @@
 // images-validation-ia.js
 
 // --- ESTADO PERSISTENTE DEL MÓDULO ---
-// Usamos un array plano para facilitar la búsqueda en todas las fechas.
 const allExtractedTrips = [];
 let processedImagesCount = 0;
 
-// --- FUNCIÓN AUXILIAR PARA ENVIAR A LA API QWEN ---
-// (Sin cambios)
+// --- NUEVO: BANDERA PARA CONTROLAR EL PROCESAMIENTO ---
+let isProcessing = false;
+let processingQueue = [];
+
+// --- FUNCIÓN AUXILIAR PARA ENVIAR A LA API QWEN (REVERTIDA A TU VERSIÓN) ---
 async function extractWithQwen(base64Image, fileName, mimeType) {
     const response = await fetch('/api/qwen', {
         method: 'POST',
@@ -15,33 +17,29 @@ async function extractWithQwen(base64Image, fileName, mimeType) {
     });
     if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`Server server: ${response.status} - ${errorText}`);
+        throw new Error(`Server error: ${response.status} - ${errorText}`);
     }
     return await response.json();
 }
 
-// --- FUNCIÓN DE ANÁLISIS CON BÚSQUEDA DE PARES CRUZADOS ---
+// --- FUNCIÓN DE ANÁLISIS (SIN CAMBIOS, LA ÚLTIMA VERSIÓN CORRECTA) ---
 function analyzeWorkSchedule(imageCount) {
     console.log(`🧠 [PATTERN-DETECTOR] Analyzing patterns from ${allExtractedTrips.length} total trips...`);
 
-    const validStartTimes = {}; // Contador de horas de inicio válidas.
+    const validStartTimes = {};
     let validWorkdaysFound = 0;
 
-    // 1. OBTENER TODOS LOS VIAJES A LA OFICINA
     const officeTrips = allExtractedTrips.filter(trip =>
         trip.destination && trip.destination.toLowerCase().includes("mireka tower")
     );
 
-    // 2. OBTENER TODOS LOS VIAJES A CASA
     const homeTrips = allExtractedTrips.filter(trip =>
         trip.destination && trip.destination.toLowerCase().includes("43b lauries rd")
     );
 
-    // 3. POR CADA VIAJE A LA OFICINA, BUSCAR SU PAR VÁLIDO
     for (const officeTrip of officeTrips) {
         if (!officeTrip.time || !officeTrip.date) continue;
 
-        // Calcular hora de inicio y fin para este viaje de ida
         const pickupTimeInMinutes = timeToMinutes(officeTrip.time);
         if (pickupTimeInMinutes === null) continue;
 
@@ -52,33 +50,31 @@ function analyzeWorkSchedule(imageCount) {
         const endTimeInMinutes = startTimeInMinutes + (9 * 60);
         const startTimeKey = minutesToTime(startTimeInMinutes);
 
-        // 4. BUSCAR UN VIAJE DE VUELTA QUE CUMPLA LAS REGLAS
-        const matchingHomeTrip = homeTrips.find(homeTrip => {
+        let matchingHomeTrip = null;
+
+        // --- PASO 1: BUSCAR EN EL MISMO DÍA ---
+        matchingHomeTrip = homeTrips.find(homeTrip => {
             if (!homeTrip.time || !homeTrip.date) return false;
-
             const homePickupTimeInMinutes = timeToMinutes(homeTrip.time);
-            if (homePickupTimeInMinutes === null) return false;
-
-            // La hora de pickup a casa debe ser DESPUÉS de la hora de fin del trabajo.
-            if (homePickupTimeInMinutes < endTimeInMinutes) {
-                return false;
-            }
-
-            // --- LÓGICA DE FECHAS FLEXIBLE ---
-            // El viaje de vuelta debe ser el mismo día o el día siguiente.
-            const officeDate = parseSimpleDate(officeTrip.date);
-            const homeDate = parseSimpleDate(homeTrip.date);
-
-            if (!officeDate || !homeDate) return false;
-
-            const timeDifferenceInMs = homeDate.getTime() - officeDate.getTime();
-            const daysDifference = timeDifferenceInMs / (1000 * 60 * 60 * 24);
-
-            // Válido si es el mismo día (diferencia de 0) o el día siguiente (diferencia de 1).
-            return daysDifference === 0 || daysDifference === 1;
+            if (homePickupTimeInMinutes < endTimeInMinutes) return false;
+            return homeTrip.date === officeTrip.date;
         });
 
-        // 5. SI SE ENCUENTRA UN PAR VÁLIDO, CONTARLO
+        // --- PASO 2: SI NO SE ENCONTRÓ, BUSCAR AL DÍA SIGUIENTE ---
+        if (!matchingHomeTrip) {
+            const officeDate = parseSimpleDate(officeTrip.date);
+            const nextDay = new Date(officeDate);
+            nextDay.setDate(nextDay.getDate() + 1);
+            const nextDayStr = formatDate(nextDay);
+
+            matchingHomeTrip = homeTrips.find(homeTrip => {
+                if (!homeTrip.time || !homeTrip.date) return false;
+                const homePickupTimeInMinutes = timeToMinutes(homeTrip.time);
+                if (homePickupTimeInMinutes < endTimeInMinutes) return false;
+                return homeTrip.date === nextDayStr;
+            });
+        }
+
         if (matchingHomeTrip) {
             validWorkdaysFound++;
             validStartTimes[startTimeKey] = (validStartTimes[startTimeKey] || 0) + 1;
@@ -88,7 +84,6 @@ function analyzeWorkSchedule(imageCount) {
         }
     }
 
-    // 6. ENCONTRAR LA HORA DE INICIO MÁS COMÚN
     let deducedStartTime = null;
     let maxCount = 0;
 
@@ -99,28 +94,50 @@ function analyzeWorkSchedule(imageCount) {
         }
     }
 
+    console.clear();
     if (!deducedStartTime) {
-        console.clear();
         console.log(`(0)`);
         console.log("No se encontraron jornadas completas y válidas para determinar un patrón.");
         return;
     }
 
-    // 7. MOSTRAR RESULTADO FINAL
     const finalStartTimeInMinutes = timeToMinutes(deducedStartTime);
     const finalEndTimeInMinutes = finalStartTimeInMinutes + (9 * 60);
 
-    console.clear();
-    console.log(`(${validWorkdaysFound})`); // Contador de jornadas válidas.
+    console.log(`(${validWorkdaysFound})`);
     console.log("Start time: " + deducedStartTime);
     console.log("End time: " + minutesToTime(finalEndTimeInMinutes));
     console.log(`(Pattern based on ${validWorkdaysFound} complete workdays)`);
 }
 
 
-// --- FUNCIÓN PRINCIPAL DEL MÓDULO (AHORA USA UN ARRAY PLANO) ---
+// --- FUNCIÓN PRINCIPAL DEL MÓDULO (CON LÓGICA DE COLA) ---
 export async function processImageWithAI(fileName, ocrText, imageDataURL) {
-    console.log(`🤖 [IA-MODULE] Processing ${fileName}...`);
+    // Añadimos la imagen a la cola de procesamiento.
+    processingQueue.push({ fileName, ocrText, imageDataURL });
+
+    // Si ya se está procesando una imagen, no hacemos nada más.
+    // La cola se encargará de procesar las demás cuando termine la actual.
+    if (isProcessing) {
+        console.log(`🕐 [IA-MODULE] ${fileName} added to queue. Current queue length: ${processingQueue.length}`);
+        return;
+    }
+
+    // Iniciamos el procesamiento de la cola.
+    processQueue();
+}
+
+// --- NUEVA FUNCIÓN PARA PROCESAR LA COLA ---
+async function processQueue() {
+    if (processingQueue.length === 0) {
+        isProcessing = false; // No hay más nada que procesar.
+        return;
+    }
+
+    isProcessing = true;
+    const { fileName, ocrText, imageDataURL } = processingQueue.shift(); // Tomamos la primera imagen de la cola.
+
+    console.log(`🤖 [IA-MODULE] Processing ${fileName}... (Queue: ${processingQueue.length} remaining)`);
     try {
         const base64Image = imageDataURL.split(',')[1];
         const qwenResult = await extractWithQwen(base64Image, fileName, 'image/jpeg');
@@ -135,20 +152,22 @@ export async function processImageWithAI(fileName, ocrText, imageDataURL) {
 
         if (data.trips && Array.isArray(data.trips)) {
             data.trips.forEach(trip => {
-                allExtractedTrips.push(trip); // Añadir a la lista global.
+                allExtractedTrips.push(trip);
             });
-            
             processedImagesCount++;
-            console.log(`✅ [IA-MODULE] Processed image. Total trips in memory: ${allExtractedTrips.length}`);
         }
 
         analyzeWorkSchedule(processedImagesCount);
 
     } catch (error) {
         console.error(`❌ [IA-MODULE] Error processing ${fileName}:`, error);
+    } finally {
+        // Pequeña pausa antes de procesar la siguiente imagen para evitar el bloqueo.
+        setTimeout(() => {
+            processQueue(); // Llamada recursiva para procesar la siguiente en la cola.
+        }, 1500); // 1.5 segundos de pausa.
     }
 }
-
 
 // --- FUNCIONES AUXILIARES ---
 
@@ -165,6 +184,12 @@ function parseSimpleDate(dateStr) {
     return new Date(new Date().getFullYear(), monthNum, day);
 }
 
+// Formatea un objeto Date a "Nov 10".
+function formatDate(dateObj) {
+    if (!dateObj) return null;
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    return `${months[dateObj.getMonth()]} ${dateObj.getDate()}`;
+}
 
 // --- FUNCIONES AUXILIARES DE TIEMPO ---
 // (Sin cambios)
