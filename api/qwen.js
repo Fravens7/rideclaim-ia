@@ -1,4 +1,4 @@
-// --- NUEVO qwen.js para usar con Hugging Face ---
+// --- qwen.js corregido para usar la nueva URL de Hugging Face ---
 
 export default async function handler(req, res) {
   try {
@@ -26,7 +26,6 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Missing image data" });
     }
 
-    // Check for Hugging Face API key
     const hfKey = process.env.HUGGINGFACE_API_KEY;
     console.log("🔑 API key check:", hfKey ? "Present" : "Missing");
 
@@ -35,17 +34,15 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: "Missing Hugging Face API key" });
     }
 
-    // --- CAMBIO CLAVE 1: Usamos el endpoint de Hugging Face para el modelo específico ---
-    const hfUrl = "https://api-inference.huggingface.co/models/Qwen/Qwen2-VL-7B-Instruct/v1/chat/completions";
+    // --- ¡CAMBIO CLAVE! Usamos la nueva URL actualizada de Hugging Face ---
+    const hfUrl = "https://router.huggingface.co/hf-inference";
 
     console.log("📡 Calling Hugging Face API with Qwen2-VL...");
 
-    // --- CAMBIO CLAVE 2: La estructura del body es casi idéntica, lo que facilita la transición ---
     const response = await fetch(hfUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        // --- CAMBIO CLAVE 3: La autorización usa tu token de HF ---
         Authorization: `Bearer ${hfKey}`,
       },
       body: JSON.stringify({
@@ -111,7 +108,6 @@ Extract ALL visible trips, not just the first one. Be thorough and capture every
     const result = await response.json();
     console.log("📄 Hugging Face raw response:", result);
 
-    // --- CAMBIO CLAVE 4: La respuesta es idéntica a la de OpenAI, así que no hay que cambiar nada aquí ---
     const extractedText = result.choices?.[0]?.message?.content || "";
     const cleanedExtractedText = extractedText.split('### Explanation of Extraction:')[0].trim();
 
