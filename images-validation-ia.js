@@ -111,41 +111,30 @@ export async function processImageWithAI(fileName, ocrText, imageDataURL) {
         const base64Image = imageDataURL.split(',')[1];
         const qwenResult = await extractWithQwen(base64Image, fileName, 'image/jpeg');
 
-        // --- PASO 1: El backend nos devuelve un objeto. Tomamos la propiedad 'extractedText', que es un string. ---
-        const rawExtractedText = qwenResult.extractedText;
+        // --- DEPURACIÓN: Imprimimos el contenido exacto de 'extractedText' ---
+        console.log("--- 🔍 DEPURACIÓN: CONTENIDO CRUDO DE 'extractedText' ---");
+        console.log(typeof qwenResult.extractedText); // ¿Es un string?
+        console.log(qwenResult.extractedText); // El contenido sin modificar
+        console.log("----------------------------------------------------");
 
-        // --- PASO 2: Limpiamos el string para quitarle el markdown (```json ... ````) ---
-        const cleanedText = rawExtractedText.replace(/```json\n|\n```/g, '').trim();
-        
-        // --- PASO 3: Parseamos el string limpio a un objeto JSON real ---
-        let tripsData = [];
-        try {
-            const parsedData = JSON.parse(cleanedText);
-            if (parsedData && parsedData.trips && Array.isArray(parsedData.trips)) {
-                tripsData = parsedData.trips;
-            }
-        } catch (parseError) {
-            console.error("❌ [IA-MODULE] Failed to parse cleanedText to JSON:", parseError);
-        }
+        // --- DEPURACIÓN: Imprimimos el objeto completo para ver la estructura ---
+        console.log("--- 🔍 DEPURACIÓN: OBJETO COMPLETO 'qwenResult' ---");
+        console.log(qwenResult);
+        console.log("----------------------------------------------------");
 
-        // --- PASO 4: Guardamos el array de viajes ya parseado ---
+        // --- GUARDAMOS LOS DATOS COMO ANTES (SIN PARSEAR) ---
         qwenExtractedData.push({
             fileName: fileName,
-            trips: tripsData // <-- Guardamos el array de objetos, no el string
+            extractedText: qwenResult.extractedText // Guardamos el string crudo
         });
 
-        console.log("--- 🤖 QWEN PARSED TRIPS (ARRAY DE OBJETOS) ---");
-        console.log(tripsData);
-        console.log("-------------------------------------------------");
-
         console.log(`✅ [IA-MODULE] Qwen extraction completed for ${fileName}`);
-        analyzeEmployeePatterns();
+        analyzeEmployeePatterns(); // Esta función fallará, pero es para ver qué pasa
 
     } catch (qwenError) {
         console.error(`❌ [IA-MODULE] Error processing ${fileName}:`, qwenError);
     }
 }
-
 
 // Asegúrate de que fileToBase64 esté en este archivo
 function fileToBase64(file) {
