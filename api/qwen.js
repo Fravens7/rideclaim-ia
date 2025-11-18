@@ -1,6 +1,8 @@
+// --- NUEVO qwen.js para usar con Hugging Face ---
+
 export default async function handler(req, res) {
   try {
-    console.log("🚀 Starting Qwen2.5 VL text extraction");
+    console.log("🚀 Starting Hugging Face Qwen2-VL text extraction");
 
     if (req.method !== "POST") {
       return res.status(405).json({ error: "Method Not Allowed" });
@@ -24,38 +26,37 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Missing image data" });
     }
 
-    // Check for OpenRouter API key
-    const openRouterKey = process.env.OPENROUTER_API_KEY;
-    console.log("🔑 API key check:", openRouterKey ? "Present" : "Missing");
+    // Check for Hugging Face API key
+    const hfKey = process.env.HUGGINGFACE_API_KEY;
+    console.log("🔑 API key check:", hfKey ? "Present" : "Missing");
 
-    if (!openRouterKey) {
-      console.error("❌ No OPENROUTER_API_KEY found");
-      return res.status(500).json({ error: "Missing OpenRouter API key" });
+    if (!hfKey) {
+      console.error("❌ No HUGGINGFACE_API_KEY found");
+      return res.status(500).json({ error: "Missing Hugging Face API key" });
     }
 
-    const dataUrl = `data:${mimeType || "image/jpeg"};base64,${image}`;
-    console.log("🖼️ Data URL created, length:", dataUrl.length);
+    // --- CAMBIO CLAVE 1: Usamos el endpoint de Hugging Face para el modelo específico ---
+    const hfUrl = "https://api-inference.huggingface.co/models/Qwen/Qwen2-VL-7B-Instruct/v1/chat/completions";
 
-    console.log("📡 Calling OpenRouter API with Qwen2.5 VL...");
+    console.log("📡 Calling Hugging Face API with Qwen2-VL...");
 
-    const response = await fetch(
-      "https://openrouter.ai/api/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${openRouterKey}`,
-          "HTTP-Referer": "https://raidclaim-geminis.vercel.app",
-        },
-        body: JSON.stringify({
-          model: "qwen/qwen2.5-vl-32b-instruct:free",
-          messages: [
-            {
-              role: "user",
-              content: [
-                {
-                  type: "text",
-                  text: `Extract ALL trip information from this receipt image. This appears to be a ride-sharing or transport receipt with multiple trips.
+    // --- CAMBIO CLAVE 2: La estructura del body es casi idéntica, lo que facilita la transición ---
+    const response = await fetch(hfUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        // --- CAMBIO CLAVE 3: La autorización usa tu token de HF ---
+        Authorization: `Bearer ${hfKey}`,
+      },
+      body: JSON.stringify({
+        model: "Qwen/Qwen2-VL-7B-Instruct",
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: `Extract ALL trip information from this receipt image. This appears to be a ride-sharing or transport receipt with multiple trips.
 
 Please extract:
 1. Destination/Location names for ALL trips visible
@@ -82,40 +83,40 @@ Return ONLY the JSON object. Do not include any explanations, introductory text,
 }
 
 Extract ALL visible trips, not just the first one. Be thorough and capture every journey shown in the receipt.`,
+              },
+              {
+                type: "image_url",
+                image_url: {
+                  url: `data:${mimeType || "image/jpeg"};base64,${image}`,
                 },
-                {
-                  type: "image_url",
-                  image_url: {
-                    url: dataUrl,
-                  },
-                },
-              ],
-            },
-          ],
-          temperature: 0.1,
-          max_tokens: 1000,
-        }),
-      }
-    );
+              },
+            ],
+          },
+        ],
+        temperature: 0.1,
+        max_tokens: 1000,
+      }),
+    });
 
-    console.log("📡 OpenRouter response status:", response.status);
+    console.log("📡 Hugging Face response status:", response.status);
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("❌ OpenRouter API Error:", errorText);
+      console.error("❌ Hugging Face API Error:", errorText);
       return res
         .status(response.status)
-        .json({ error: `OpenRouter API error: ${errorText}` });
+        .json({ error: `Hugging Face API error: ${errorText}` });
     }
 
     const result = await response.json();
-    console.log("📄 OpenRouter raw response:", result);
+    console.log("📄 Hugging Face raw response:", result);
 
+    // --- CAMBIO CLAVE 4: La respuesta es idéntica a la de OpenAI, así que no hay que cambiar nada aquí ---
     const extractedText = result.choices?.[0]?.message?.content || "";
     const cleanedExtractedText = extractedText.split('### Explanation of Extraction:')[0].trim();
 
     return res.status(200).json({
-      extractedText: cleanedExtractedText, // <-- DEVOLVEMOS EL TEXTO LIMPIO
+      extractedText: cleanedExtractedText,
       fileName: fileName,
       success: true,
     });
