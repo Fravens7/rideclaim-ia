@@ -6,18 +6,29 @@ const qwenExtractedData = [];
 
 // --- FUNCIÓN AUXILIAR PARA ENVIAR A LA API QWEN ---
 // Nota: Las funciones fetch deben estar dentro del módulo que las usa.
+// images-validation-ia.js
+
+// --- FUNCIÓN AUXILIAR PARA ENVIAR A LA API QWEN (VERSIÓN SIMPLE) ---
+// Esta función envía los datos que tu backend espera.
 async function extractWithQwen(base64Image, fileName, mimeType) {
     const response = await fetch('/api/qwen', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: base64Image, fileName, mimeType })
+        // --- CUERPO SIMPLE: Enviamos solo lo que el backend espera ---
+        body: JSON.stringify({
+            image: base64Image,
+            fileName: fileName,
+            mimeType: mimeType
+        })
     });
 
     if (!response.ok) {
         const errorText = await response.text();
         throw new Error(`Server error: ${response.status} - ${errorText}`);
     }
-    return await response.json();
+
+    const data = await response.json();
+    return data;
 }
 
 // --- FUNCIÓN AUXILIAR PARA ANALIZAR PATRONES ---
