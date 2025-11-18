@@ -92,29 +92,36 @@ function analyzeEmployeePatterns() {
 // Esta función será llamada desde script.js
 // images-validation-ia.js
 
-export async function processImageWithAI(fileName, ocrText, imageDataURL) {
-    console.log("🔍 [IA-MODULE] Received data:", { fileName, ocrText, imageDataURL: imageDataURL ? 'present' : 'MISSING' });
-
-    console.log(`🤖 [IA-MODULE] Starting AI processing for ${fileName}...`);
+export async function processImageWithAI(file, ocrText) {
+    console.log(`🤖 [IA-MODULE] Starting AI processing for ${file.name}...`);
     try {
-        const base64Image = imageDataURL.split(',')[1];
-        const qwenResult = await extractWithQwen(base64Image, fileName, 'image/jpeg');
+        // Usamos fileToBase64, que sabemos que funciona
+        const base64Image = await fileToBase64(file);
+        const qwenResult = await extractWithQwen(base64Image, file.name, file.type);
 
-        // --- NUEVO: Imprimir el JSON completo de Qwen ---
+        qwenExtractedData.push({
+            fileName: file.name,
+            extractedText: qwenResult.extractedText
+        });
+
+        // Añadimos el log del JSON completo que querías
         console.log("--- 🤖 QWEN RAW JSON RESULT ---");
         console.log(qwenResult);
         console.log("----------------------------------");
 
-        qwenExtractedData.push({
-            fileName: fileName,
-            extractedText: qwenResult.extractedText
-        });
-
-        console.log(`✅ [IA-MODULE] Qwen extraction completed for ${fileName}`);
+        console.log(`✅ [IA-MODULE] Qwen extraction completed for ${file.name}`);
         analyzeEmployeePatterns();
 
     } catch (qwenError) {
-        console.error(`❌ [IA-MODULE] Error processing ${fileName}:`, qwenError);
+        console.error(`❌ [IA-MODULE] Error processing ${file.name}:`, qwenError);
     }
 }
-
+// Asegúrate de que fileToBase64 esté en este archivo
+function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result.split(',')[1]);
+        reader.onerror = error => reject(error);
+    });
+}

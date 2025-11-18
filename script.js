@@ -1320,20 +1320,11 @@ function updateTripCalendar() {
 
 // Al final de script.js
 
-// --- ESCUCHADOR DE EVENTOS (CORREGIDO) ---
+// Al final de script.js
 document.addEventListener('imageProcessed', (event) => {
-    // Accedemos a los datos de forma explícita para evitar errores de desestructuración
-    const fileName = event.detail.fileName;
-    const ocrText = event.detail.ocrText;
-    const imageDataURL = event.detail.imageDataURL;
-
-    // Verificamos que todo exista antes de llamar a la función del módulo
-    if (fileName && ocrText && imageDataURL) {
-        console.log(`🎧 [MAIN] Event received. Calling IA module for ${fileName}...`);
-        processImageWithAI(fileName, ocrText, imageDataURL);
-    } else {
-        console.error("❌ [MAIN] 'imageProcessed' event was missing data.", event.detail);
-    }
+    const { file, ocrText } = event.detail;
+    // Llamamos a la función con la firma correcta
+    processImageWithAI(file, ocrText);
 });
 
 // (Opcional) Escuchador para el resultado del análisis
