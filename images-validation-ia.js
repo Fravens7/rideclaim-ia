@@ -2,7 +2,7 @@
 
 // --- ESTADO PERSISTENTE DEL MÓDULO ---
 const allExtractedTrips = [];
-let processedImagesCount = 0; // <-- NUEVO: Contador de imágenes procesadas.
+let processedImagesCount = 0;
 
 // --- FUNCIÓN AUXILIAR PARA ENVIAR A LA API QWEN ---
 // (Sin cambios)
@@ -19,10 +19,11 @@ async function extractWithQwen(base64Image, fileName, mimeType) {
     return await response.json();
 }
 
-// --- FUNCIÓN DE ANÁLISIS (AHORA RECIBE Y USA EL CONTADOR) ---
-function analyzeWorkSchedule(imageCount) { // <-- MODIFICADO: Ahora recibe el contador.
-    console.log(`🧠 [PATTERN-DETECTOR] Analyzing with ${allExtractedTrips.length} total trips from ${imageCount} images...`);
+// --- NUEVA FUNCIÓN DE ANÁLISIS BASADA EN FRECUENCIA ---
+function analyzeWorkSchedule(imageCount) {
+    console.log(`🧠 [PATTERN-DETECTOR] Analyzing patterns from ${allExtractedTrips.length} total trips...`);
 
+    // 1. OBTENER TODOS LOS VIAJES A LA OFICINA
     const officeTrips = allExtractedTrips.filter(trip =>
         trip.destination && trip.destination.toLowerCase().includes("mireka tower")
     );
@@ -32,29 +33,52 @@ function analyzeWorkSchedule(imageCount) { // <-- MODIFICADO: Ahora recibe el co
         return;
     }
 
-    const arrivalTimesInMinutes = officeTrips.map(trip => {
-        const timeInMinutes = timeToMinutes(trip.time);
-        return timeInMinutes !== null ? timeInMinutes + 15 : null;
-    }).filter(time => time !== null);
+    // 2. CREAR UN MAPA DE FRECUENCIA PARA LAS HORAS DE INICIO
+    const startTimeFrequency = {};
 
-    if (arrivalTimesInMinutes.length === 0) {
-        console.error("❌ [PATTERN-DETECTOR] Could not parse any valid times from office trips.");
+    officeTrips.forEach(trip => {
+        const timeInMinutes = timeToMinutes(trip.time);
+        if (timeInMinutes === null) return; // Ignorar si la hora es inválida
+
+        // Calcular la hora de llegada y la hora de inicio "en punto" a la que apunta
+        const arrivalTimeInMinutes = timeInMinutes + 15; // Sumar tiempo de viaje
+        const startHour = Math.floor(arrivalTimeInMinutes / 60) + 1;
+        const startTimeInMinutes = startHour * 60;
+        const startTimeKey = minutesToTime(startTimeInMinutes);
+
+        // Incrementar la frecuencia de esta hora de inicio
+        startTimeFrequency[startTimeKey] = (startTimeFrequency[startTimeKey] || 0) + 1;
+        console.log(`   -> Viaje a ${trip.destination} a las ${trip.time} apunta a inicio: ${startTimeKey}`);
+    });
+
+    // 3. ENCONTRAR LA HORA DE INICIO MÁS FRECUENTE (LA MODA)
+    let mostFrequentStartTime = null;
+    let maxCount = 0;
+
+    for (const time in startTimeFrequency) {
+        if (startTimeFrequency[time] > maxCount) {
+            maxCount = startTimeFrequency[time];
+            mostFrequentStartTime = time;
+        }
+    }
+
+    // 4. MOSTRAR RESULTADO FINAL
+    console.clear();
+    if (!mostFrequentStartTime) {
+        console.log(`(0)`);
+        console.log("No se pudo determinar un patrón de horario.");
         return;
     }
 
-    const latestArrival = Math.max(...arrivalTimesInMinutes);
-    const startHour = Math.floor(latestArrival / 60) + (latestArrival % 60 !== 0 ? 1 : 0);
-    const startTimeInMinutes = startHour * 60;
-    const endTimeInMinutes = startTimeInMinutes + (9 * 60);
+    const finalStartTimeInMinutes = timeToMinutes(mostFrequentStartTime);
+    const finalEndTimeInMinutes = finalStartTimeInMinutes + (9 * 60);
 
-    // --- MODIFICADO: Imprime el contador antes que nada.
-    console.clear();
-    console.log(`(${imageCount})`);
-    console.log("Start time: " + minutesToTime(startTimeInMinutes));
-    console.log("End time: " + minutesToTime(endTimeInMinutes));
+    console.log(`(${maxCount})`); // <-- El contador ahora es la frecuencia del patrón.
+    console.log("Start time: " + mostFrequentStartTime);
+    console.log("End time: " + minutesToTime(finalEndTimeInMinutes));
 }
 
-// --- FUNCIÓN PRINCIPAL DEL MÓDULO (AHORA INCREMENTA EL CONTADOR) ---
+// --- FUNCIÓN PRINCIPAL DEL MÓDULO (SIN CAMBIOS) ---
 export async function processImageWithAI(fileName, ocrText, imageDataURL) {
     console.log(`🤖 [IA-MODULE] Processing ${fileName}...`);
     try {
@@ -74,12 +98,10 @@ export async function processImageWithAI(fileName, ocrText, imageDataURL) {
                 allExtractedTrips.push(trip);
             });
             
-            // <-- NUEVO: Incrementa el contador solo si se extrajeron viajes válidos.
-            processedImagesCount++; 
+            processedImagesCount++;
             console.log(`✅ [IA-MODULE] Added ${data.trips.length} trips. Total accumulated: ${allExtractedTrips.length}. Images processed: ${processedImagesCount}`);
         }
 
-        // <-- MODIFICADO: Pasa el contador actual a la función de análisis.
         analyzeWorkSchedule(processedImagesCount);
 
     } catch (error) {
