@@ -165,6 +165,28 @@ function parseSimpleDate(dateStr) {
     return new Date(new Date().getFullYear(), monthNum, day);
 }
 
-// (Las otras funciones timeToMinutes y minutesToTime permanecen igual)
-function timeToMinutes(timeStr) { /* ... */ }
-function minutesToTime(minutes) { /* ... */ }
+
+// --- FUNCIONES AUXILIARES DE TIEMPO ---
+// (Sin cambios)
+function timeToMinutes(timeStr) {
+    if (!timeStr) return null;
+    const match = timeStr.trim().match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+    if (!match) return null;
+    let [, hours, minutes, period] = match;
+    hours = parseInt(hours, 10);
+    minutes = parseInt(minutes, 10);
+    period = period.toUpperCase();
+    if (period === 'PM' && hours !== 12) hours += 12;
+    if (period === 'AM' && hours === 12) hours = 0;
+    return hours * 60 + minutes;
+}
+
+function minutesToTime(minutes) {
+    if (minutes >= 24 * 60) minutes -= 24 * 60;
+    const period = minutes >= 12 * 60 ? 'PM' : 'AM';
+    let displayHour = Math.floor(minutes / 60);
+    if (displayHour > 12) displayHour -= 12;
+    if (displayHour === 0) displayHour = 12;
+    const displayMinute = minutes % 60;
+    return `${displayHour}:${displayMinute.toString().padStart(2, '0')} ${period}`;
+}
