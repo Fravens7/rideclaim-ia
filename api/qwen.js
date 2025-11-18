@@ -66,8 +66,7 @@ Please extract:
 6. Status of each trip
 7. Type of service (ride, tuktuk, delivery, etc.)
 
-
-Return in this JSON format:
+Return ONLY the JSON object. Do not include any explanations, introductory text, or concluding remarks outside of the JSON structure.
 {
   "trips": [
     {
