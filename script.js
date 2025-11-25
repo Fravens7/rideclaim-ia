@@ -598,6 +598,15 @@ function parseTripsWithJS(text) {
         const priceMatch = priceLine.match(priceRegex);
         let total_lkr = priceMatch[1].replace(/Q|O/g, '0').replace(/A/g, '4');
 
+        if (!total_lkr.includes('.') && total_lkr.length > 2) {
+            // Si el número no tiene punto y tiene más de 2 dígitos
+            // Insertamos el punto antes de los últimos 2 dígitos
+            // Ejemplo: "24000" → "240.00"
+            total_lkr = total_lkr.slice(0, -2) + '.' + total_lkr.slice(-2);
+        }
+
+
+
         let status = 'valid';
         if (priceLine.toLowerCase().includes('canceled')) {
             status = 'valid';
