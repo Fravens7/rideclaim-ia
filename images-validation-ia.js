@@ -82,16 +82,26 @@ export async function processImageWithAI(fileName, ocrText, imageDataURL) {
     console.groupCollapsed(`Qwen - 2 level - extract date: ${fileName}`);
     console.log(`🤖 [IA-MODULE] Processing ${fileName}...`);
     try {
+        console.log(`[DEBUG] Extracting base64 from imageDataURL...`);
         const base64Image = imageDataURL.split(',')[1];
+        console.log(`[DEBUG] Base64 length: ${base64Image ? base64Image.length : 0}`);
+        
+        console.log(`[DEBUG] Calling Qwen API...`);
         const qwenResult = await extractWithQwen(base64Image, fileName, 'image/jpeg');
+        console.log(`[DEBUG] Qwen API response received.`);
 
         const rawText = qwenResult.extractedText;
+        console.log(`[DEBUG] Raw text length: ${rawText ? rawText.length : 0}`);
+        
         let cleanedText = rawText.trim();
         if (cleanedText.startsWith('```json')) cleanedText = cleanedText.substring(7);
         if (cleanedText.endsWith('```')) cleanedText = cleanedText.substring(0, cleanedText.length - 3);
         cleanedText = cleanedText.trim();
+        console.log(`[DEBUG] Cleaned text length: ${cleanedText.length}`);
 
+        console.log(`[DEBUG] Parsing JSON...`);
         const data = JSON.parse(cleanedText);
+        console.log(`[DEBUG] JSON parsed successfully.`);
 
         if (data.trips && Array.isArray(data.trips)) {
             data.trips.forEach(trip => {
@@ -107,6 +117,12 @@ export async function processImageWithAI(fileName, ocrText, imageDataURL) {
 
     } catch (error) {
         console.error(`❌ [IA-MODULE] Error processing ${fileName}:`, error);
+        console.error(`[ERROR] Error message: ${error.message}`);
+        console.error(`[ERROR] Error stack:`, error.stack);
+        if (error.response) {
+            console.error(`[ERROR] Response status: ${error.response.status}`);
+            console.error(`[ERROR] Response data:`, error.response.data);
+        }
         console.groupEnd();
     }
 }
