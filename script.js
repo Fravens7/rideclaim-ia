@@ -684,81 +684,45 @@ Text:
 
 function parseLLMStringArray(rawResponse) {
     const attempts = [];
-    const pushCandidate = (label, payload) => {
-        if (payload && payload.trim()) {
-            attempts.push({ label, payload: payload.trim() });
-        }
-    };
-
     const trimmed = rawResponse ? rawResponse.trim() : '';
-    pushCandidate('raw', trimmed);
-
-    // Extraer bloques dentro de fences ``` ```
-    const codeFenceRegex = /```(?:json)?([\s\S]*?)```/gi;
-    let fenceMatch;
-    while ((fenceMatch = codeFenceRegex.exec(rawResponse)) !== null) {
-        pushCandidate('code-block', fenceMatch[1]);
+    if (trimmed) {
+        attempts.push({ label: 'raw', payload: trimmed });
     }
 
     try {
         const normalized = normalizeLLMResponse(rawResponse);
         if (normalized && normalized !== trimmed) {
-            pushCandidate('normalized', normalized);
+            attempts.push({ label: 'normalized', payload: normalized });
         }
     } catch (normError) {
         console.warn('[LLM fallback] No se pudo normalizar la respuesta:', normError.message);
     }
 
-    // Extraer posibles arrays independientes
-    const arraySnippets = extractJsonArrays(rawResponse);
-    arraySnippets.forEach((snippet, idx) => {
-        pushCandidate(`array-${idx + 1}`, snippet);
-    });
-
     let lastError = null;
-    let aggregated = [];
-    let anySuccess = false;
-
     for (const attempt of attempts) {
         try {
-            const cleanedPayload = cleanJsonArrayCandidate(attempt.payload);
-            if (!cleanedPayload) continue;
-            const parsed = JSON.parse(cleanedPayload);
+            const parsed = JSON.parse(attempt.payload);
             if (Array.isArray(parsed)) {
-                anySuccess = true;
-                aggregated = aggregated.concat(parsed);
-                if (attempt.label === 'raw' || attempt.label === 'normalized') {
-                    if (attempt.label !== 'raw') {
-                        console.warn(`[LLM fallback] Respuesta limpiada mediante intento "${attempt.label}".`);
-                    }
-                    return aggregated;
+                if (attempt.label !== 'raw') {
+                    console.warn(`[LLM fallback] Respuesta limpiada mediante intento "${attempt.label}".`);
                 }
+                return parsed;
             }
         } catch (err) {
             lastError = err;
         }
     }
 
-    if (anySuccess) {
-        console.warn('[LLM fallback] Se combinaron múltiples arrays parciales devueltos por la IA.');
-        return aggregated;
-    }
-
     throw lastError || new Error('Both JS parser and LLM fallback failed.');
 }
 
 function normalizeLLMResponse(rawResponse) {
-    const cleaned = cleanJsonArrayCandidate(rawResponse);
-    if (!cleaned || cleaned[0] !== '[') {
-        throw new Error('LLM response missing JSON array.');
+    let cleaned = rawResponse.trim();
+    if (!cleaned) {
+        throw new Error('Empty response from LLM.');
     }
-    return cleaned;
-}
 
-function cleanJsonArrayCandidate(snippet) {
-    if (!snippet) return '';
-    let cleaned = snippet.trim();
-
+    // Remove markdown code fences if present
     if (cleaned.startsWith('```')) {
         const fenceEnd = cleaned.lastIndexOf('```');
         if (fenceEnd > 0) {
@@ -768,56 +732,18 @@ function cleanJsonArrayCandidate(snippet) {
 
     const startIdx = cleaned.indexOf('[');
     const endIdx = cleaned.lastIndexOf(']');
-    if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
-        cleaned = cleaned.substring(startIdx, endIdx + 1);
+    if (startIdx === -1 || endIdx === -1 || endIdx <= startIdx) {
+        throw new Error('LLM response missing JSON array.');
     }
 
-    cleaned = cleaned
+    let arraySegment = cleaned.substring(startIdx, endIdx + 1);
+    // Strip JS-style comments and trailing commas
+    arraySegment = arraySegment
         .replace(/\/\/.*$/gm, '')
         .replace(/\/\*[\s\S]*?\*\//g, '')
-        .replace(/,\s*]/g, ']')
-        .replace(/,\s*}/g, '}');
+        .replace(/,\s*]/g, ']');
 
-    return cleaned.trim();
-}
-
-function extractJsonArrays(text) {
-    if (!text) return [];
-    const results = [];
-    let depth = 0;
-    let start = -1;
-    let inString = false;
-    let stringChar = '';
-
-    for (let i = 0; i < text.length; i++) {
-        const char = text[i];
-
-        if (inString) {
-            if (char === stringChar && text[i - 1] !== '\\') {
-                inString = false;
-            }
-            continue;
-        }
-
-        if (char === '"' || char === "'") {
-            inString = true;
-            stringChar = char;
-            continue;
-        }
-
-        if (char === '[') {
-            if (depth === 0) start = i;
-            depth++;
-        } else if (char === ']') {
-            if (depth > 0) depth--;
-            if (depth === 0 && start !== -1) {
-                results.push(text.slice(start, i + 1));
-                start = -1;
-            }
-        }
-    }
-
-    return results;
+    return arraySegment.trim();
 }
 
 // --- LÓGICA COMPARTIDA (con ajustes menores) ---
