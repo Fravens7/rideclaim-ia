@@ -73,12 +73,13 @@ function analyzeWorkSchedule(imageCount) {
     const finalEndTimeInMinutes = finalStartTimeInMinutes + (9 * 60);
 
     console.log(`[Work Pattern Heuristic] (${maxCount}) trip(s) apuntan a este horario promedio.`);
-    console.log(`[Work Pattern Heuristic] Avg start time (office arrival + buffer): ${mostFrequentStartTime}`);
-    console.log(`[Work Pattern Heuristic] Estimated end time (+9h shift): ${minutesToTime(finalEndTimeInMinutes)}`);
+    console.log(`Start time: ${mostFrequentStartTime}`);
+    console.log(`End shift: ${minutesToTime(finalEndTimeInMinutes)}`);
 }
 
 // --- FUNCIÓN PRINCIPAL DEL MÓDULO (SIN CAMBIOS) ---
 export async function processImageWithAI(fileName, ocrText, imageDataURL) {
+    console.groupCollapsed(`Qwen - 2 level - extract date: ${fileName}`);
     console.log(`🤖 [IA-MODULE] Processing ${fileName}...`);
     try {
         const base64Image = imageDataURL.split(',')[1];
@@ -102,9 +103,11 @@ export async function processImageWithAI(fileName, ocrText, imageDataURL) {
         }
 
         analyzeWorkSchedule(processedImagesCount);
+        console.groupEnd();
 
     } catch (error) {
         console.error(`❌ [IA-MODULE] Error processing ${fileName}:`, error);
+        console.groupEnd();
     }
 }
 
