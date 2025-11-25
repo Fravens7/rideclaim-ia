@@ -654,13 +654,14 @@ Text:
             throw new Error(data.error);
         }
 
-        const llmResponse = data.message;
+        const llmResponse = data.message || '';
         console.log("--- Respuesta del Fallback a la IA ---");
         console.log(llmResponse);
 
         let tripsData = [];
         try {
-            const stringArray = JSON.parse(llmResponse);
+            const normalizedResponse = normalizeLLMResponse(llmResponse);
+            const stringArray = JSON.parse(normalizedResponse);
             if (Array.isArray(stringArray)) {
                 for (const tripString of stringArray) {
                     const parts = tripString.split('|');
@@ -685,6 +686,36 @@ Text:
         console.error('Error en el fallback a la IA:', error);
         throw error;
     }
+}
+
+function normalizeLLMResponse(rawResponse) {
+    let cleaned = rawResponse.trim();
+    if (!cleaned) {
+        throw new Error('Empty response from LLM.');
+    }
+
+    // Remove markdown code fences if present
+    if (cleaned.startsWith('```')) {
+        const fenceEnd = cleaned.lastIndexOf('```');
+        if (fenceEnd > 0) {
+            cleaned = cleaned.substring(cleaned.indexOf('\n') + 1, fenceEnd).trim();
+        }
+    }
+
+    const startIdx = cleaned.indexOf('[');
+    const endIdx = cleaned.lastIndexOf(']');
+    if (startIdx === -1 || endIdx === -1 || endIdx <= startIdx) {
+        throw new Error('LLM response missing JSON array.');
+    }
+
+    let arraySegment = cleaned.substring(startIdx, endIdx + 1);
+    // Strip JS-style comments and trailing commas
+    arraySegment = arraySegment
+        .replace(/\/\/.*$/gm, '')
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/,\s*]/g, ']');
+
+    return arraySegment.trim();
 }
 
 // --- LÓGICA COMPARTIDA (con ajustes menores) ---
