@@ -309,6 +309,11 @@ function processImageFile(file, fileItem) {
             const progressBar = fileItem.querySelector('.progress'); 
             const fileStatus = fileItem.querySelector('.file-status');
 
+            const canGroupLogs = typeof console !== 'undefined' && typeof console.groupCollapsed === 'function';
+            if (canGroupLogs) {
+                console.groupCollapsed(`[Rufus - 1 level - extract all details] ${file.name}`);
+            }
+
             try {
                 // --- PASO 1: Realizar el OCR con Tesseract.js (tu lógica existente) ---
                 const { data: { text } } = await Tesseract.recognize(processedImgSrc, 'eng', {
@@ -386,6 +391,11 @@ function processImageFile(file, fileItem) {
                 fileStatus.className = 'file-status status-error';
                 fileStatus.textContent = 'Error processing';
                 progressBar.style.display = 'none';
+            }
+            finally {
+                if (canGroupLogs) {
+                    console.groupEnd();
+                }
             }
         };
         // Usamos el mismo dataURL para crear la imagen
