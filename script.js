@@ -353,7 +353,7 @@ function processImageFile(file, fileItem) {
                 apiStatus.textContent = 'Processing with AI...';
                 
                 const trips = await extractTripsWithLLM(text);
-                console.log("Structured Data from LLM:", trips);
+                console.log("Structured Data:", trips);
                 
                 // Ocultar estado de procesamiento
                 apiStatus.style.display = 'none';
