@@ -54,12 +54,6 @@ let map = null;
 let processedPdfNames = new Set(); //memory for pdf
 let processedImageNames = new Set(); //memory for png or images
 
-const RUFUS_DEBUG_ENABLED = (typeof window !== 'undefined' && window.__SHOW_RUFUS_LOGS__ === true);
-function logRufus(...args) {
-    if (!RUFUS_DEBUG_ENABLED) return;
-    console.debug('[Rufus - 1 level - extract all details]', ...args);
-}
-
 // Event Listeners
 pdfTab.addEventListener('click', () => {
     pdfTab.classList.add('active');
@@ -309,13 +303,7 @@ function processImageFile(file, fileItem) {
             const progressBar = fileItem.querySelector('.progress'); 
             const fileStatus = fileItem.querySelector('.file-status');
 
-            const canGroupLogs = typeof console !== 'undefined' && typeof console.groupCollapsed === 'function';
-            if (canGroupLogs) {
-                console.groupCollapsed(`[Rufus - 1 level - extract all details] ${file.name}`);
-            }
-
             try {
-                console.log(`[DEBUG] Starting OCR for ${file.name}...`);
                 // --- PASO 1: Realizar el OCR con Tesseract.js (tu lógica existente) ---
                 const { data: { text } } = await Tesseract.recognize(processedImgSrc, 'eng', {
                     logger: m => {
@@ -327,7 +315,7 @@ function processImageFile(file, fileItem) {
                     }
                 });
                 
-                console.log(`[DEBUG] OCR completed for ${file.name}. Text length: ${text.length}`);
+                //console.log("Raw OCR Text:", text);
                 
                 // --- MODIFICADO: Publicamos el evento con el imageDataURL ---
                 console.log(`📢 [MAIN] Dispatching 'imageProcessed' event for ${file.name}`);
@@ -344,17 +332,8 @@ function processImageFile(file, fileItem) {
                 apiStatus.className = 'api-status processing';
                 apiStatus.textContent = 'Processing with AI...';
                 
-                console.log(`[DEBUG] Starting trip extraction for ${file.name}...`);
-                const { trips, source } = await extractTripsWithLLM(text);
-                console.log(`[DEBUG] Trip extraction completed. Found ${trips.length} trips from ${source}.`);
-                if (source === 'rufus') {
-                    logRufus(`${trips.length} trip(s) parsed.`, trips);
-                } else {
-                    console.log('Qwen - 2 level - extract date -> structured trips:');
-                    trips.forEach((trip, index) => {
-                        console.log(`   ${index + 1}. destination: ${trip.destination || 'N/A'} | total LKR: ${trip.total_lkr || '0.00'} | trip time: ${trip.trip_time || 'N/A'}`);
-                    });
-                }
+                const trips = await extractTripsWithLLM(text);
+                console.log("Structured Data from LLM:", trips);
                 
                 // Ocultar estado de procesamiento
                 apiStatus.style.display = 'none';
@@ -389,19 +368,11 @@ function processImageFile(file, fileItem) {
                 updateResultsTable();
 
             } catch (error) {
-                console.error(`[ERROR] Failed processing ${file.name}:`, error);
-                console.error(`[ERROR] Error message: ${error.message}`);
-                console.error(`[ERROR] Error stack:`, error.stack);
+                console.error('Error processing image:', error);
                 fileItem.className = 'file-item error';
                 fileStatus.className = 'file-status status-error';
                 fileStatus.textContent = 'Error processing';
                 progressBar.style.display = 'none';
-                apiStatus.style.display = 'none';
-            }
-            finally {
-                if (canGroupLogs) {
-                    console.groupEnd();
-                }
             }
         };
         // Usamos el mismo dataURL para crear la imagen
@@ -454,17 +425,14 @@ function superviseParsing(text) {
  * AÑADIDO: Si hay inconsistencia, extrae el recibo incompleto y lo añade a los resultados.
  */
 async function extractTripsWithLLM(ocrText) {
-    try {
-        console.log("🚀 Iniciando Parser Híbrido con Supervisión...");
+    console.log("🚀 Iniciando Parser Híbrido con Supervisión...");
 
-        // --- PASO DE SUPERVISIÓN ---
-        const rebookCount = superviseParsing(ocrText);
-        console.log(`🔍 [SUPERVISIÓN] Se encontraron ${rebookCount} palabras "Rebook" en el texto.`);
+    // --- PASO DE SUPERVISIÓN ---
+    const rebookCount = superviseParsing(ocrText);
+    console.log(`🔍 [SUPERVISIÓN] Se encontraron ${rebookCount} palabras "Rebook" en el texto.`);
 
-        // --- PASO 1: PARSER DETERMINISTA DE JAVASCRIPT ---
-        console.log(`[DEBUG] Starting JS parser...`);
-        const jsTrips = parseTripsWithJS(ocrText);
-        console.log(`[DEBUG] JS parser found ${jsTrips.length} trips.`);
+    // --- PASO 1: PARSER DETERMINISTA DE JAVASCRIPT ---
+    const jsTrips = parseTripsWithJS(ocrText);
 
     // --- NUEVO: LÓGICA PARA EXTRAER Y AÑADIR EL INCOMPLETO ---
     if (rebookCount > jsTrips.length) {
@@ -477,23 +445,14 @@ async function extractTripsWithLLM(ocrText) {
         }
     }
 
-        if (jsTrips.length > 0) {
-            logRufus(`✅ Parser JS encontró ${jsTrips.length} viajes (incluyendo posibles incompletos). No se necesita la IA.`);
-            return { trips: jsTrips, source: 'rufus' };
-        }
-
-        // --- PASO 2: FALLBACK A LA IA (si el parser JS falló) ---
-        console.log("[Qwen - 2 level - extract date] El parser JS no encontró viajes. Activando fallback a la IA...");
-        console.log(`[DEBUG] Calling LLM fallback...`);
-        const llmTrips = await parseTripsWithLLM(ocrText);
-        console.log(`[Qwen - 2 level - extract date] ${llmTrips.length} viaje(s) devueltos por la IA.`);
-        return { trips: llmTrips, source: 'qwen' };
-    } catch (error) {
-        console.error(`[ERROR] extractTripsWithLLM failed:`, error);
-        console.error(`[ERROR] Error message: ${error.message}`);
-        console.error(`[ERROR] Error stack:`, error.stack);
-        throw error; // Re-throw para que el catch superior lo capture
+    if (jsTrips.length > 0) {
+        console.log(`✅ Parser JS encontró ${jsTrips.length} viajes (incluyendo posibles incompletos). No se necesita la IA.`);
+        return jsTrips;
     }
+
+    // --- PASO 2: FALLBACK A LA IA (si el parser JS falló) ---
+    console.log("⚠️ El parser JS no encontró viajes. Activando fallback a la IA...");
+    return await parseTripsWithLLM(ocrText);
 }
 
 /**
@@ -1393,23 +1352,10 @@ function updateTripCalendar() {
 // Al final de script.js
 
 // Al final de script.js
-document.addEventListener('imageProcessed', async (event) => {
+document.addEventListener('imageProcessed', (event) => {
     const { fileName, ocrText, imageDataURL } = event.detail;
-    try {
-        console.log(`[DEBUG] Event listener: Processing ${fileName} with AI...`);
-        // Llamamos a la función con la firma correcta
-        await processImageWithAI(fileName, ocrText, imageDataURL);
-        console.log(`[DEBUG] Event listener: Successfully processed ${fileName} with AI.`);
-    } catch (error) {
-        console.error(`[ERROR] Event listener: Failed to process ${fileName} with AI:`, error);
-        console.error(`[ERROR] Error message: ${error.message}`);
-        console.error(`[ERROR] Error stack:`, error.stack);
-        // Asegurar que el estado se oculte incluso si hay error
-        const apiStatus = document.getElementById('apiStatus');
-        if (apiStatus) {
-            apiStatus.style.display = 'none';
-        }
-    }
+    // Llamamos a la función con la firma correcta
+    processImageWithAI(fileName, ocrText, imageDataURL);
 });
 
 // (Opcional) Escuchador para el resultado del análisis
