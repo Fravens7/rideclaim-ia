@@ -188,6 +188,67 @@ input[type="file"] {
     margin-top: 30px;
     display: none;
 }
+.dashboard-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 15px;
+    margin-top: 20px;
+}
+.summary-card {
+    background: #f8fafc;
+    border-radius: 12px;
+    padding: 16px;
+    box-shadow: 0 4px 10px rgba(15, 23, 42, 0.05);
+    border: 1px solid #e2e8f0;
+}
+.summary-label {
+    margin: 0;
+    font-size: 0.85em;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+.summary-value {
+    margin: 8px 0 0;
+    font-size: 1.5em;
+    font-weight: 700;
+    color: #0f172a;
+}
+.results-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 25px;
+}
+.view-toggle {
+    display: inline-flex;
+    background: #f1f5f9;
+    border-radius: 999px;
+    padding: 4px;
+    border: 1px solid #e2e8f0;
+}
+.view-btn {
+    border: none;
+    background: transparent;
+    padding: 8px 18px;
+    border-radius: 999px;
+    font-weight: 600;
+    color: #64748b;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.view-btn.active {
+    background: white;
+    color: #007bff;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15);
+}
+.results-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
 .results-table {
     width: 100%;
     border-collapse: collapse;
@@ -278,6 +339,139 @@ input[type="file"] {
     border-radius: 5px;
     text-align: right;
     font-weight: bold;
+}
+.grouped-results {
+    margin-top: 20px;
+}
+.group-card {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 16px;
+    box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
+    margin-bottom: 15px;
+}
+.group-card-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 18px;
+    align-items: flex-start;
+}
+.group-file-name {
+    margin: 0;
+    font-size: 1.1em;
+    font-weight: 600;
+    color: #0f172a;
+}
+.group-meta {
+    margin: 4px 0 0;
+    font-size: 0.9em;
+    color: #64748b;
+}
+.group-card-meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.group-total {
+    font-weight: 700;
+    color: #111827;
+}
+.group-validity {
+    font-size: 0.8em;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: #e0f2fe;
+    color: #0369a1;
+    font-weight: 600;
+}
+.group-validity.invalid {
+    background: #fdecea;
+    color: #b91c1c;
+}
+.group-toggle {
+    border: 1px solid #cbd5f5;
+    background: white;
+    padding: 6px 14px;
+    border-radius: 999px;
+    font-weight: 600;
+    color: #1d4ed8;
+    cursor: pointer;
+    transition: background 0.2s ease;
+}
+.group-toggle:hover {
+    background: #eff6ff;
+}
+.group-card-body {
+    display: none;
+    border-top: 1px solid #edf2f7;
+    margin-top: 15px;
+    padding-top: 15px;
+}
+.group-card-body.open {
+    display: block;
+}
+.group-trip-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid #f1f5f9;
+}
+.group-trip-row:last-child {
+    border-bottom: none;
+}
+.trip-info {
+    flex: 1;
+}
+.trip-destination {
+    margin: 0;
+    font-weight: 600;
+    color: #0f172a;
+}
+.trip-subline {
+    margin-top: 4px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    font-size: 0.85em;
+    color: #64748b;
+}
+.trip-values {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 6px;
+}
+.trip-amount {
+    font-weight: 600;
+}
+.trip-badge {
+    font-size: 0.75em;
+    padding: 3px 8px;
+    border-radius: 999px;
+}
+.trip-badge.valid {
+    background: #d4edda;
+    color: #155724;
+}
+.trip-badge.invalid {
+    background: #fdecea;
+    color: #b91c1c;
+}
+.table-results {
+    margin-top: 25px;
+}
+.chart-btn {
+    background-color: #17a2b8;
+}
+.chart-btn:hover {
+    background-color: #138496;
+}
+.empty-state {
+    text-align: center;
+    color: #94a3b8;
+    padding: 30px 0;
 }
 .valid-badge {
     display: inline-block;

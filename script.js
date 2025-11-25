@@ -39,6 +39,8 @@ const imageFiles = document.getElementById('imageFiles');
 const pdfFileList = document.getElementById('pdfFileList');
 const imageFileList = document.getElementById('imageFileList');
 const resultsContainer = document.getElementById('resultsContainer');
+const groupedResults = document.getElementById('groupedResults');
+const tableResultsWrapper = document.getElementById('tableResults');
 const resultsBody = document.getElementById('resultsBody');
 const summary = document.getElementById('summary');
 const clearBtn = document.getElementById('clearBtn');
@@ -48,11 +50,21 @@ const modalExtractedText = document.getElementById('modalExtractedText');
 const closeBtn = document.querySelector('#detailsModal .close');
 const apiStatus = document.getElementById('apiStatus');
 const tooltip = document.getElementById('tooltip');
+const groupedViewBtn = document.getElementById('groupedViewBtn');
+const tableViewBtn = document.getElementById('tableViewBtn');
+const summaryTotalSpent = document.getElementById('summaryTotalSpent');
+const summaryTotalRides = document.getElementById('summaryTotalRides');
+const summaryActiveDays = document.getElementById('summaryActiveDays');
+const summaryImages = document.getElementById('summaryImages');
 
 let fileResults = [];
 let map = null;
 let processedPdfNames = new Set(); //memory for pdf
 let processedImageNames = new Set(); //memory for png or images
+let currentResultsView = 'grouped';
+
+setResultsView('grouped');
+updateSummaryCards(0, 0, 0, 0);
 
 // Event Listeners
 pdfTab.addEventListener('click', () => {
@@ -97,6 +109,11 @@ imageUploadArea.addEventListener('drop', (e) => {
     if (e.dataTransfer.files.length) handleImageFiles(e.dataTransfer.files);
 });
 
+if (groupedViewBtn && tableViewBtn) {
+    groupedViewBtn.addEventListener('click', () => setResultsView('grouped'));
+    tableViewBtn.addEventListener('click', () => setResultsView('table'));
+}
+
 closeBtn.onclick = () => modal.style.display = 'none';
 window.onclick = (event) => {
     if (event.target == modal) modal.style.display = 'none';
@@ -120,6 +137,9 @@ clearBtn.addEventListener('click', () => {
     apiStatus.style.display = 'none';
     processedPdfNames.clear();      //clean pdf memory
     processedImageNames.clear();   //clean image or png memory
+    if (groupedResults) groupedResults.innerHTML = '';
+    updateSummaryCards(0, 0, 0, 0);
+    setResultsView('grouped');
 });
 
 function handlePdfFiles(files) {
@@ -1093,12 +1113,29 @@ function displayMap(fileName, direction) {
 }
 
 function updateResultsTable() {
+    if (!fileResults.length) {
+        if (resultsContainer) resultsContainer.style.display = 'none';
+        if (groupedResults) groupedResults.innerHTML = '';
+        resultsBody.innerHTML = '';
+        summary.innerHTML = '';
+        updateSummaryCards(0, 0, 0, 0);
+        return;
+    }
+
     resultsContainer.style.display = 'block';
+    const totalSpent = fileResults.reduce((sum, result) => sum + (result.isValid ? parseAmount(result.total) : 0), 0);
+    const activeDays = new Set(fileResults.filter(r => r.tripDate).map(r => r.tripDate));
+    const imageSet = new Set(fileResults.filter(r => r.type === 'image').map(r => r.name));
+
+    updateSummaryCards(totalSpent, fileResults.length, activeDays.size, imageSet.size);
+    renderGroupedResults();
+    setResultsView(currentResultsView);
+
     resultsBody.innerHTML = '';
-    let totalSum = 0;
+    let tableSum = 0;
     let validCount = 0;
     let invalidCount = 0;
-    fileResults.forEach((result, index) => {
+    fileResults.forEach((result) => {
         const row = document.createElement('tr');
         const nameCell = document.createElement('td');
         nameCell.textContent = result.name;
@@ -1159,7 +1196,7 @@ function updateResultsTable() {
         resultsBody.appendChild(row);
         
         if (result.total && result.total !== '.' && result.total !== '0.00' && result.isValid) {
-            totalSum += parseFloat(result.total.replace(',', '.'));
+            tableSum += parseAmount(result.total);
         }
         
         if (result.isValid) {
@@ -1168,9 +1205,114 @@ function updateResultsTable() {
             invalidCount++;
         }
     });
-    summary.innerHTML = `<p>Total files processed: ${fileResults.length}</p><p>Valid trips: ${validCount}</p><p>Invalid trips: ${invalidCount}</p><p>Total LKR sum (valid trips): ${totalSum.toFixed(2)} LKR</p>`;
+    summary.innerHTML = `<p>Total trips: ${fileResults.length}</p><p>Valid trips: ${validCount}</p><p>Invalid trips: ${invalidCount}</p><p>Total LKR sum (valid trips): ${tableSum.toFixed(2)} LKR</p>`;
 
     updateTripCalendar();//estamos actualizando esto, antes "updateTripChart();"
+}
+
+function parseAmount(value) {
+    if (value === null || value === undefined) return 0;
+    const sanitized = String(value).replace(/[^\d.,-]/g, '').replace(',', '.');
+    const parsed = parseFloat(sanitized);
+    return isNaN(parsed) ? 0 : parsed;
+}
+
+function formatCurrency(amount) {
+    return `${amount.toFixed(2)} LKR`;
+}
+
+function setResultsView(view) {
+    currentResultsView = view;
+    if (groupedViewBtn) groupedViewBtn.classList.toggle('active', view === 'grouped');
+    if (tableViewBtn) tableViewBtn.classList.toggle('active', view === 'table');
+    if (groupedResults) groupedResults.style.display = (view === 'grouped') ? 'block' : 'none';
+    if (tableResultsWrapper) tableResultsWrapper.style.display = (view === 'table') ? 'block' : 'none';
+}
+
+function updateSummaryCards(totalSpent, totalRides, activeDays, imageCount) {
+    if (summaryTotalSpent) summaryTotalSpent.textContent = formatCurrency(totalSpent);
+    if (summaryTotalRides) summaryTotalRides.textContent = totalRides;
+    if (summaryActiveDays) summaryActiveDays.textContent = activeDays;
+    if (summaryImages) summaryImages.textContent = imageCount;
+}
+
+function renderGroupedResults() {
+    if (!groupedResults) return;
+    groupedResults.innerHTML = '';
+    if (!fileResults.length) {
+        groupedResults.innerHTML = '<p class="empty-state">No files processed yet.</p>';
+        return;
+    }
+
+    const groupedMap = {};
+    fileResults.forEach(result => {
+        const key = `${result.type}-${result.name}`;
+        if (!groupedMap[key]) {
+            groupedMap[key] = {
+                name: result.name,
+                type: result.type,
+                trips: []
+            };
+        }
+        groupedMap[key].trips.push(result);
+    });
+
+    Object.values(groupedMap).forEach(group => {
+        const totalValidAmount = group.trips.reduce((sum, trip) => sum + (trip.isValid ? parseAmount(trip.total) : 0), 0);
+        const validTrips = group.trips.filter(trip => trip.isValid).length;
+
+        const card = document.createElement('div');
+        card.className = 'group-card';
+
+        const header = document.createElement('div');
+        header.className = 'group-card-header';
+        header.innerHTML = `
+            <div>
+                <p class="group-file-name">${group.name}</p>
+                <p class="group-meta">${group.trips.length} trip(s) • ${group.type === 'pdf' ? 'PDF' : 'Image'}</p>
+            </div>
+            <div class="group-card-meta">
+                <span class="group-total">${formatCurrency(totalValidAmount)}</span>
+                <span class="group-validity ${validTrips > 0 ? 'valid' : 'invalid'}">${validTrips} valid</span>
+                <button class="group-toggle" type="button">Expand</button>
+            </div>
+        `;
+
+        const body = document.createElement('div');
+        body.className = 'group-card-body';
+
+        group.trips.forEach(trip => {
+            const row = document.createElement('div');
+            row.className = 'group-trip-row';
+            const dateLabel = trip.tripDate || '';
+            const timeLabel = trip.tripTime || '';
+            row.innerHTML = `
+                <div class="trip-info">
+                    <p class="trip-destination">${trip.destination || 'Destination not specified'}</p>
+                    <div class="trip-subline">
+                        ${dateLabel ? `<span>${dateLabel}</span>` : ''}
+                        ${timeLabel ? `<span>${timeLabel}</span>` : ''}
+                    </div>
+                </div>
+                <div class="trip-values">
+                    <span class="trip-amount">${formatCurrency(parseAmount(trip.total))}</span>
+                    <span class="trip-badge ${trip.isValid ? 'valid' : 'invalid'}">${trip.isValid ? 'Valid' : 'Invalid'}</span>
+                </div>
+            `;
+            body.appendChild(row);
+        });
+
+        card.appendChild(header);
+        card.appendChild(body);
+
+        const toggleBtn = header.querySelector('.group-toggle');
+        toggleBtn.addEventListener('click', () => {
+            const isOpen = body.classList.toggle('open');
+            toggleBtn.textContent = isOpen ? 'Collapse' : 'Expand';
+        });
+
+        groupedResults.appendChild(card);
+    });
 }
 
 // --- LÓGICA PARA EL GRÁFICO DE VIAJES ---

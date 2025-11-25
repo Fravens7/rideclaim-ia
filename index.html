@@ -97,25 +97,56 @@
             
             <div class="results-container" id="resultsContainer">
                 <h2>Results</h2>
-                <table class="results-table" id="resultsTable">
-                    <thead>
-                        <tr>
-                            <th>File</th>
-                            <th>Type</th>
-                            <th>Origin</th>
-                            <th>Destination</th>
-                            <th>Total LKR</th>
-                            <th>Validation</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="resultsBody"></tbody>
-                </table>
-                <div class="summary" id="summary"></div>
-                <button class="clear-btn" id="clearBtn">Clear results</button>
-                <button class="clear-btn" id="viewChartBtn" style="background-color: #17a2b8; margin-left: 10px;">View Trip Chart</button>
-                
-                
+
+                <div class="dashboard-summary" id="dashboardSummary">
+                    <div class="summary-card">
+                        <p class="summary-label">Total Spent</p>
+                        <p class="summary-value" id="summaryTotalSpent">0 LKR</p>
+                    </div>
+                    <div class="summary-card">
+                        <p class="summary-label">Total Rides</p>
+                        <p class="summary-value" id="summaryTotalRides">0</p>
+                    </div>
+                    <div class="summary-card">
+                        <p class="summary-label">Active Days</p>
+                        <p class="summary-value" id="summaryActiveDays">0</p>
+                    </div>
+                    <div class="summary-card">
+                        <p class="summary-label">Images</p>
+                        <p class="summary-value" id="summaryImages">0</p>
+                    </div>
+                </div>
+
+                <div class="results-actions">
+                    <div class="view-toggle">
+                        <button class="view-btn active" id="groupedViewBtn">Grouped View</button>
+                        <button class="view-btn" id="tableViewBtn">Table View</button>
+                    </div>
+                    <div class="results-buttons">
+                        <button class="clear-btn" id="clearBtn">Clear results</button>
+                        <button class="clear-btn chart-btn" id="viewChartBtn">View Trip Chart</button>
+                    </div>
+                </div>
+
+                <div id="groupedResults" class="grouped-results"></div>
+
+                <div id="tableResults" class="table-results">
+                    <table class="results-table" id="resultsTable">
+                        <thead>
+                            <tr>
+                                <th>File</th>
+                                <th>Type</th>
+                                <th>Origin</th>
+                                <th>Destination</th>
+                                <th>Total LKR</th>
+                                <th>Validation</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="resultsBody"></tbody>
+                    </table>
+                    <div class="summary" id="summary"></div>
+                </div>
             </div>
 
 
