@@ -658,26 +658,20 @@ Text:
         console.log("--- Respuesta del Fallback a la IA ---");
         console.log(llmResponse);
 
-        let tripsData = [];
-        try {
-            const normalizedResponse = normalizeLLMResponse(llmResponse);
-            const stringArray = JSON.parse(normalizedResponse);
-            if (Array.isArray(stringArray)) {
-                for (const tripString of stringArray) {
-                    const parts = tripString.split('|');
-                    if (parts.length >= 3) {
-                        tripsData.push({
-                            destination: parts[0].trim(),
-                            total_lkr: parts[1].trim(),
-                            status: parts[2].trim(),
-                            trip_time: parts[3] ? parts[3].trim() : null
-                        });
-                    }
+        const stringArray = parseLLMStringArray(llmResponse);
+        const tripsData = [];
+        if (Array.isArray(stringArray)) {
+            for (const tripString of stringArray) {
+                const parts = tripString.split('|');
+                if (parts.length >= 3) {
+                    tripsData.push({
+                        destination: parts[0].trim(),
+                        total_lkr: parts[1].trim(),
+                        status: parts[2].trim(),
+                        trip_time: parts[3] ? parts[3].trim() : null
+                    });
                 }
             }
-        } catch (e) {
-            console.error("❌ El fallback de la IA también falló.");
-            throw new Error('Both JS parser and LLM fallback failed.');
         }
         
         return tripsData;
@@ -686,6 +680,40 @@ Text:
         console.error('Error en el fallback a la IA:', error);
         throw error;
     }
+}
+
+function parseLLMStringArray(rawResponse) {
+    const attempts = [];
+    const trimmed = rawResponse ? rawResponse.trim() : '';
+    if (trimmed) {
+        attempts.push({ label: 'raw', payload: trimmed });
+    }
+
+    try {
+        const normalized = normalizeLLMResponse(rawResponse);
+        if (normalized && normalized !== trimmed) {
+            attempts.push({ label: 'normalized', payload: normalized });
+        }
+    } catch (normError) {
+        console.warn('[LLM fallback] No se pudo normalizar la respuesta:', normError.message);
+    }
+
+    let lastError = null;
+    for (const attempt of attempts) {
+        try {
+            const parsed = JSON.parse(attempt.payload);
+            if (Array.isArray(parsed)) {
+                if (attempt.label !== 'raw') {
+                    console.warn(`[LLM fallback] Respuesta limpiada mediante intento "${attempt.label}".`);
+                }
+                return parsed;
+            }
+        } catch (err) {
+            lastError = err;
+        }
+    }
+
+    throw lastError || new Error('Both JS parser and LLM fallback failed.');
 }
 
 function normalizeLLMResponse(rawResponse) {
