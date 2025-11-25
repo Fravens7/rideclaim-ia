@@ -1393,10 +1393,23 @@ function updateTripCalendar() {
 // Al final de script.js
 
 // Al final de script.js
-document.addEventListener('imageProcessed', (event) => {
+document.addEventListener('imageProcessed', async (event) => {
     const { fileName, ocrText, imageDataURL } = event.detail;
-    // Llamamos a la función con la firma correcta
-    processImageWithAI(fileName, ocrText, imageDataURL);
+    try {
+        console.log(`[DEBUG] Event listener: Processing ${fileName} with AI...`);
+        // Llamamos a la función con la firma correcta
+        await processImageWithAI(fileName, ocrText, imageDataURL);
+        console.log(`[DEBUG] Event listener: Successfully processed ${fileName} with AI.`);
+    } catch (error) {
+        console.error(`[ERROR] Event listener: Failed to process ${fileName} with AI:`, error);
+        console.error(`[ERROR] Error message: ${error.message}`);
+        console.error(`[ERROR] Error stack:`, error.stack);
+        // Asegurar que el estado se oculte incluso si hay error
+        const apiStatus = document.getElementById('apiStatus');
+        if (apiStatus) {
+            apiStatus.style.display = 'none';
+        }
+    }
 });
 
 // (Opcional) Escuchador para el resultado del análisis
