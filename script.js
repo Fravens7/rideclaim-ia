@@ -54,6 +54,12 @@ let map = null;
 let processedPdfNames = new Set(); //memory for pdf
 let processedImageNames = new Set(); //memory for png or images
 
+const RUFUS_DEBUG_ENABLED = (typeof window !== 'undefined' && window.__SHOW_RUFUS_LOGS__ === true);
+function logRufus(...args) {
+    if (!RUFUS_DEBUG_ENABLED) return;
+    console.debug('[Rufus - 1 level - extract all details]', ...args);
+}
+
 // Event Listeners
 pdfTab.addEventListener('click', () => {
     pdfTab.classList.add('active');
@@ -332,8 +338,15 @@ function processImageFile(file, fileItem) {
                 apiStatus.className = 'api-status processing';
                 apiStatus.textContent = 'Processing with AI...';
                 
-                const trips = await extractTripsWithLLM(text);
-                console.log("Structured Data from LLM:", trips);
+                const { trips, source } = await extractTripsWithLLM(text);
+                if (source === 'rufus') {
+                    logRufus(`${trips.length} trip(s) parsed.`, trips);
+                } else {
+                    console.log('Qwen - 2 level - extract date -> structured trips:');
+                    trips.forEach((trip, index) => {
+                        console.log(`   ${index + 1}. destination: ${trip.destination || 'N/A'} | total LKR: ${trip.total_lkr || '0.00'} | trip time: ${trip.trip_time || 'N/A'}`);
+                    });
+                }
                 
                 // Ocultar estado de procesamiento
                 apiStatus.style.display = 'none';
@@ -446,13 +459,15 @@ async function extractTripsWithLLM(ocrText) {
     }
 
     if (jsTrips.length > 0) {
-        console.log(`✅ Parser JS encontró ${jsTrips.length} viajes (incluyendo posibles incompletos). No se necesita la IA.`);
-        return jsTrips;
+        logRufus(`✅ Parser JS encontró ${jsTrips.length} viajes (incluyendo posibles incompletos). No se necesita la IA.`);
+        return { trips: jsTrips, source: 'rufus' };
     }
 
     // --- PASO 2: FALLBACK A LA IA (si el parser JS falló) ---
-    console.log("⚠️ El parser JS no encontró viajes. Activando fallback a la IA...");
-    return await parseTripsWithLLM(ocrText);
+    console.log("[Qwen - 2 level - extract date] El parser JS no encontró viajes. Activando fallback a la IA...");
+    const llmTrips = await parseTripsWithLLM(ocrText);
+    console.log(`[Qwen - 2 level - extract date] ${llmTrips.length} viaje(s) devueltos por la IA.`);
+    return { trips: llmTrips, source: 'qwen' };
 }
 
 /**

@@ -21,7 +21,7 @@ async function extractWithQwen(base64Image, fileName, mimeType) {
 
 // --- NUEVA FUNCIÓN DE ANÁLISIS BASADA EN FRECUENCIA ---
 function analyzeWorkSchedule(imageCount) {
-    console.log(`🧠 [PATTERN-DETECTOR] Analyzing patterns from ${allExtractedTrips.length} total trips...`);
+    console.log(`🧠 [PATTERN-DETECTOR] Analyzing patterns from ${allExtractedTrips.length} total trips (heuristic work-schedule guess)...`);
 
     // 1. OBTENER TODOS LOS VIAJES A LA OFICINA
     const officeTrips = allExtractedTrips.filter(trip =>
@@ -72,9 +72,9 @@ function analyzeWorkSchedule(imageCount) {
     const finalStartTimeInMinutes = timeToMinutes(mostFrequentStartTime);
     const finalEndTimeInMinutes = finalStartTimeInMinutes + (9 * 60);
 
-    console.log(`(${maxCount})`); // <-- El contador ahora es la frecuencia del patrón.
-    console.log("Start time: " + mostFrequentStartTime);
-    console.log("End time: " + minutesToTime(finalEndTimeInMinutes));
+    console.log(`[Work Pattern Heuristic] (${maxCount}) trip(s) apuntan a este horario promedio.`);
+    console.log(`[Work Pattern Heuristic] Avg start time (office arrival + buffer): ${mostFrequentStartTime}`);
+    console.log(`[Work Pattern Heuristic] Estimated end time (+9h shift): ${minutesToTime(finalEndTimeInMinutes)}`);
 }
 
 // --- FUNCIÓN PRINCIPAL DEL MÓDULO (SIN CAMBIOS) ---
