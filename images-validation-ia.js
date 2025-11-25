@@ -62,8 +62,7 @@ function analyzeWorkSchedule(imageCount) {
         }
     }
 
-    // 4. MOSTRAR RESULTADO FINAL
-    console.clear();
+    // 4. MOSTRAR RESULTADO FINAL (sin limpiar consola para mantener el histórico)
     if (!mostFrequentStartTime) {
         console.log(`(0)`);
         console.log("No se pudo determinar un patrón de horario.");
