@@ -117,6 +117,33 @@
                     </div>
                 </div>
 
+                <!-- Schedule Validation Configuration -->
+                <div id="scheduleConfig" class="schedule-config" style="display: none;">
+                    <h3>⏰ Work Schedule Validation (Optional)</h3>
+                    <p class="schedule-description">Validate trips based on your work hours for higher precision</p>
+                    
+                    <div class="schedule-inputs">
+                        <div class="input-group">
+                            <label for="startTime">Start Time (24h)</label>
+                            <input type="number" id="startTime" min="0" max="23" placeholder="13" />
+                        </div>
+                        <div class="input-group">
+                            <label for="endTime">End Time (24h)</label>
+                            <input type="number" id="endTime" min="0" max="23" placeholder="22" />
+                        </div>
+                        <button class="apply-schedule-btn" id="applySchedule">Apply Schedule</button>
+                    </div>
+                    
+                    <div class="policy-rules">
+                        <p class="policy-title">📋 Validation Rules:</p>
+                        <ul>
+                            <li><strong>To Office (Mireka Tower):</strong> Valid from <span class="highlight">(START - 40min)</span> to <span class="highlight">START</span></li>
+                            <li><strong>To Home (43b Lauries Rd):</strong> Valid from <span class="highlight">END</span> to <span class="highlight">(END + 50min)</span></li>
+                        </ul>
+                    </div>
+                </div>
+
+
                 <div class="results-actions">
                     <div class="view-toggle">
                         <button class="view-btn active" id="groupedViewBtn">Grouped View</button>
