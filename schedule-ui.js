@@ -1,3 +1,5 @@
+import { validateTripBySchedule } from './validation-schedule.js';
+
 // ============================================
 // SCHEDULE UI - Event Listeners & Integration
 // This file handles the UI logic for schedule validation
@@ -36,6 +38,7 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log('✅ Schedule set:', workSchedule);
 
         // Access fileResults from global scope (defined in script.js)
+        const fileResults = window.fileResults;
         if (typeof fileResults === 'undefined') {
             console.error('❌ fileResults not found!');
             return;
@@ -77,9 +80,9 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log(`✅ Revalidated ${count} trips`);
 
         // Refresh display (setResultsView from script.js)
-        if (typeof setResultsView !== 'undefined' && typeof currentResultsView !== 'undefined') {
-            console.log('Refreshing view:', currentResultsView);
-            setResultsView(currentResultsView);
+        if (typeof window.setResultsView !== 'undefined' && typeof window.currentResultsView !== 'undefined') {
+            console.log('Refreshing view:', window.currentResultsView);
+            window.setResultsView(window.currentResultsView);
         } else {
             console.warn('⚠️ setResultsView not available');
         }
@@ -179,6 +182,10 @@ window.updateTripResultsFromAI = function (fileName, aiTrips) {
         window.updateResultsTable();
     } else {
         console.warn('⚠️ updateResultsTable not found on window');
+    }
+
+    if (typeof window.renderGroupedResults === 'function') {
+        window.renderGroupedResults();
     }
 
     // Show toast/notification
