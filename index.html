@@ -1,18 +1,18 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Rideclaim - M1 division</title>
-    
+
     <!-- Referencia al archivo CSS externo -->
     <link rel="stylesheet" href="styles.css">
-    
+
     <!-- Leaflet CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" 
-          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" 
-          crossorigin=""/>
-    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
     <!-- Tesseract.js para OCR -->
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
@@ -47,13 +47,16 @@
                     <span>Office to Home</span>
                 </div>
                 <div style="display: flex; align-items: center;">
-                    <div style="width: 20px; height: 20px; background-color: #f8f9fa; border: 1px solid #ddd; margin-right: 8px;"></div>
+                    <div
+                        style="width: 20px; height: 20px; background-color: #f8f9fa; border: 1px solid #ddd; margin-right: 8px;">
+                    </div>
                     <span>No Trip</span>
                 </div>
             </div>
         </div>
     </div>
 </head>
+
 <body>
     <!-- Contenedor principal -->
     <div class="main-content">
@@ -64,16 +67,16 @@
                 <div class="logo-container">
                     <img src="logo.png" alt="Rideclaim Logo">
                 </div>
-                
+
                 <!-- Título a la derecha -->
                 <h1>Rideclaim - M1 division</h1>
             </div>
-            
+
             <div class="tabs">
                 <div class="tab" id="pdf-tab">PDF</div>
                 <div class="tab active" id="image-tab">Image</div>
             </div>
-            
+
             <div id="pdf-content" class="tab-content">
                 <div class="upload-area" id="pdfUploadArea">
                     <label for="pdfFiles" class="upload-label">Select PDFs</label>
@@ -82,7 +85,7 @@
                 </div>
                 <div class="file-list" id="pdfFileList"></div>
             </div>
-            
+
             <div id="image-content" class="tab-content active">
                 <div class="upload-area" id="imageUploadArea">
                     <label for="imageFiles" class="upload-label">Select Images</label>
@@ -92,9 +95,9 @@
                 <div class="file-list" id="imageFileList"></div>
                 <div id="apiStatus" class="api-status" style="display: none;"></div>
             </div>
-            
+
             <div id="map-container" class="map-container"></div>
-            
+
             <div class="results-container" id="resultsContainer">
                 <h2>Results</h2>
 
@@ -121,7 +124,7 @@
                 <div id="scheduleConfig" class="schedule-config" style="display: none;">
                     <h3>⏰ Work Schedule Validation (Optional)</h3>
                     <p class="schedule-description">Validate trips based on your work hours for higher precision</p>
-                    
+
                     <div class="schedule-inputs">
                         <div class="input-group">
                             <label for="startTime">Start Time (24h)</label>
@@ -133,12 +136,14 @@
                         </div>
                         <button class="apply-schedule-btn" id="applySchedule">Apply Schedule</button>
                     </div>
-                    
+
                     <div class="policy-rules">
                         <p class="policy-title">📋 Validation Rules:</p>
                         <ul>
-                            <li><strong>To Office (Mireka Tower):</strong> Valid from <span class="highlight">(START - 40min)</span> to <span class="highlight">START</span></li>
-                            <li><strong>To Home (43b Lauries Rd):</strong> Valid from <span class="highlight">END</span> to <span class="highlight">(END + 50min)</span></li>
+                            <li><strong>To Office (Mireka Tower):</strong> Valid from <span class="highlight">(START -
+                                    40min)</span> to <span class="highlight">START</span></li>
+                            <li><strong>To Home (43b Lauries Rd):</strong> Valid from <span class="highlight">END</span>
+                                to <span class="highlight">(END + 50min)</span></li>
                         </ul>
                     </div>
                 </div>
@@ -177,8 +182,8 @@
             </div>
 
 
-            </div>
         </div>
+    </div>
     </div>
 
     <div id="detailsModal" class="modal">
@@ -188,13 +193,212 @@
             <div class="extracted-text" id="modalExtractedText"></div>
         </div>
     </div>
+    <!DOCTYPE html>
+    <html lang="en">
 
-    <!-- Tooltip para mostrar la hora del viaje -->
-    <div id="tooltip" class="tooltip"></div>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Rideclaim - M1 division</title>
 
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-    
-    <!-- Referencia al archivo JavaScript externo -->
-    <script type="module" src="script.js"></script>
-</body>
-</html>
+        <!-- Referencia al archivo CSS externo -->
+        <link rel="stylesheet" href="styles.css">
+
+        <!-- Leaflet CSS -->
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+            integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+        <!-- Tesseract.js para OCR -->
+        <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+
+        <!--chart.js para graficos-->
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+
+
+        <!-- Añade esto en el <head> o antes de tu script tag -->
+        <script src="https://cdn.jsdelivr.net/npm/paddleocr-js-web@2.1.0/dist/paddleocr.min.js"></script>
+
+
+
+
+
+        <!-- NUEVA MODAL PARA EL GRÁFICO -->
+        <div id="chartModal" class="modal">
+            <div class="modal-content" style="max-width: 900px;">
+                <span class="close" id="closeChartBtn">&times;</span>
+                <h2>M1 Calendar Analysis</h2>
+                <div style="position: relative; width: 100%; overflow-x: auto;">
+                    <div id="tripCalendar"></div>
+                </div>
+                <div id="calendarLegend" style="display: flex; justify-content: center; margin-top: 15px;">
+                    <div style="display: flex; align-items: center; margin-right: 20px;">
+                        <div style="width: 20px; height: 20px; background-color: #28a745; margin-right: 8px;"></div>
+                        <span>Home to Office</span>
+                    </div>
+                    <div style="display: flex; align-items: center; margin-right: 20px;">
+                        <div style="width: 20px; height: 20px; background-color: #007bff; margin-right: 8px;"></div>
+                        <span>Office to Home</span>
+                    </div>
+                    <div style="display: flex; align-items: center;">
+                        <div
+                            style="width: 20px; height: 20px; background-color: #f8f9fa; border: 1px solid #ddd; margin-right: 8px;">
+                        </div>
+                        <span>No Trip</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </head>
+
+    <body>
+        <!-- Contenedor principal -->
+        <div class="main-content">
+            <div class="container">
+                <!-- Header con logo y título alineados -->
+                <div class="header-container">
+                    <!-- Logo a la izquierda -->
+                    <div class="logo-container">
+                        <img src="logo.png" alt="Rideclaim Logo">
+                    </div>
+
+                    <!-- Título a la derecha -->
+                    <h1>Rideclaim - M1 division</h1>
+                </div>
+
+                <div class="tabs">
+                    <div class="tab" id="pdf-tab">PDF</div>
+                    <div class="tab active" id="image-tab">Image</div>
+                </div>
+
+                <div id="pdf-content" class="tab-content">
+                    <div class="upload-area" id="pdfUploadArea">
+                        <label for="pdfFiles" class="upload-label">Select PDFs</label>
+                        <p>or drag and drop files here</p>
+                        <input type="file" id="pdfFiles" accept="application/pdf" multiple>
+                    </div>
+                    <div class="file-list" id="pdfFileList"></div>
+                </div>
+
+                <div id="image-content" class="tab-content active">
+                    <div class="upload-area" id="imageUploadArea">
+                        <label for="imageFiles" class="upload-label">Select Images</label>
+                        <p>or drag and drop files here (PNG, JPG)</p>
+                        <input type="file" id="imageFiles" accept="image/png, image/jpeg, image/jpg" multiple>
+                    </div>
+                    <div class="file-list" id="imageFileList"></div>
+                    <div id="apiStatus" class="api-status" style="display: none;"></div>
+                </div>
+
+                <div id="map-container" class="map-container"></div>
+
+                <div class="results-container" id="resultsContainer">
+                    <h2>Results</h2>
+
+                    <div class="dashboard-summary" id="dashboardSummary">
+                        <div class="summary-card">
+                            <p class="summary-label">Total Spent</p>
+                            <p class="summary-value" id="summaryTotalSpent">0 LKR</p>
+                        </div>
+                        <div class="summary-card">
+                            <p class="summary-label">Total Rides</p>
+                            <p class="summary-value" id="summaryTotalRides">0</p>
+                        </div>
+                        <div class="summary-card">
+                            <p class="summary-label">Active Days</p>
+                            <p class="summary-value" id="summaryActiveDays">0</p>
+                        </div>
+                        <div class="summary-card">
+                            <p class="summary-label">Images</p>
+                            <p class="summary-value" id="summaryImages">0</p>
+                        </div>
+                    </div>
+
+                    <!-- Schedule Validation Configuration -->
+                    <div id="scheduleConfig" class="schedule-config" style="display: none;">
+                        <h3>⏰ Work Schedule Validation (Optional)</h3>
+                        <p class="schedule-description">Validate trips based on your work hours for higher precision</p>
+
+                        <div class="schedule-inputs">
+                            <div class="input-group">
+                                <label for="startTime">Start Time (24h)</label>
+                                <input type="number" id="startTime" min="0" max="23" placeholder="13" />
+                            </div>
+                            <div class="input-group">
+                                <label for="endTime">End Time (24h)</label>
+                                <input type="number" id="endTime" min="0" max="23" placeholder="22" />
+                            </div>
+                            <button class="apply-schedule-btn" id="applySchedule">Apply Schedule</button>
+                        </div>
+
+                        <div class="policy-rules">
+                            <p class="policy-title">📋 Validation Rules:</p>
+                            <ul>
+                                <li><strong>To Office (Mireka Tower):</strong> Valid from <span class="highlight">(START
+                                        - 40min)</span> to <span class="highlight">START</span></li>
+                                <li><strong>To Home (43b Lauries Rd):</strong> Valid from <span
+                                        class="highlight">END</span> to <span class="highlight">(END + 50min)</span>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+
+
+                    <div class="results-actions">
+                        <div class="view-toggle">
+                            <button class="view-btn active" id="groupedViewBtn">Grouped View</button>
+                            <button class="view-btn" id="tableViewBtn">Table View</button>
+                        </div>
+                        <div class="results-buttons">
+                            <button class="clear-btn" id="clearBtn">Clear results</button>
+                            <button class="clear-btn chart-btn" id="viewChartBtn">View Trip Chart</button>
+                        </div>
+                    </div>
+
+                    <div id="groupedResults" class="grouped-results"></div>
+
+                    <div id="tableResults" class="table-results">
+                        <table class="results-table" id="resultsTable">
+                            <thead>
+                                <tr>
+                                    <th>File</th>
+                                    <th>Type</th>
+                                    <th>Origin</th>
+                                    <th>Destination</th>
+                                    <th>Total LKR</th>
+                                    <th>Validation</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="resultsBody"></tbody>
+                        </table>
+                        <div class="summary" id="summary"></div>
+                    </div>
+                </div>
+
+
+            </div>
+        </div>
+        </div>
+
+        <div id="detailsModal" class="modal">
+            <div class="modal-content">
+                <span class="close">&times;</span>
+                <h2>File Details</h2>
+                <div class="extracted-text" id="modalExtractedText"></div>
+            </div>
+        </div>
+
+        <!-- Tooltip para mostrar la hora del viaje -->
+        <div id="tooltip" class="tooltip"></div>
+
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+        <!-- Referencia al archivo JavaScript externo -->
+        <script type="module" src="schedule-ui.js"></script>
+        <script type="module" src="script.js"></script>
+    </body>
+
+    </html>
