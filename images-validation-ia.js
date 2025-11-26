@@ -71,21 +71,6 @@ function analyzeWorkSchedule(imageCount) {
     if (!mostFrequentStartTime) {
         console.log(`(0)`);
         console.log("No se pudo determinar un patrón de horario.");
-        return;
-    }
-
-    const finalStartTimeInMinutes = timeToMinutes(mostFrequentStartTime);
-    const finalEndTimeInMinutes = finalStartTimeInMinutes + (9 * 60);
-
-    console.log(`(${maxCount})`); // <-- El contador ahora es la frecuencia del patrón.
-    console.log("Start time: " + mostFrequentStartTime);
-    console.log("End time: " + minutesToTime(finalEndTimeInMinutes));
-}
-
-// --- FUNCIÓN PRINCIPAL DEL MÓDULO (SIN CAMBIOS) ---
-export async function processImageWithAI(fileName, ocrText, imageDataURL) {
-    console.log(`🤖 [IA-MODULE] Processing ${fileName}...`);
-    try {
         const base64Image = imageDataURL.split(',')[1];
         const qwenResult = await extractWithQwen(base64Image, fileName, 'image/jpeg');
 

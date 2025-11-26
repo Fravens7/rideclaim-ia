@@ -123,51 +123,28 @@ clearBtn.addEventListener('click', () => {
     fileResults = [];
     pdfFileList.innerHTML = '';
     pdfFileList.style.display = 'none';
-    imageFileList.innerHTML = '';
-    imageFileList.style.display = 'none';
-    resultsContainer.style.display = 'none';
-    resultsBody.innerHTML = '';
-    summary.innerHTML = '';
-    mapContainer.innerHTML = '';
-    if (map) {
-        map.remove();
-        map = null;
-    }
-
-    apiStatus.style.display = 'none';
-    processedPdfNames.clear();      //clean pdf memory
-    processedImageNames.clear();   //clean image or png memory
-    if (groupedResults) groupedResults.innerHTML = '';
-    updateSummaryCards(0, 0, 0, 0);
-    setResultsView('grouped');
-});
-
-function handlePdfFiles(files) {
-    const pdfFilesArr = Array.from(files).filter(file => file.type === 'application/pdf');
-    if (pdfFilesArr.length === 0) {
-        alert('Please select at least one valid PDF file.');
-        return;
-    }
+    return;
+}
     pdfFileList.style.display = 'block';
-    pdfFileList.innerHTML = '';
+pdfFileList.innerHTML = '';
 
-    pdfFilesArr.forEach(file => {
-        // --- PASO 1: Revisar si ya fue procesado ---
-        if (processedPdfNames.has(file.name)) {
-            const duplicateItem = createDuplicateFileItem(file, 'pdf');
-            pdfFileList.appendChild(duplicateItem);
-            return; // Detener el procesamiento para este archivo
-        }
+pdfFilesArr.forEach(file => {
+    // --- PASO 1: Revisar si ya fue procesado ---
+    if (processedPdfNames.has(file.name)) {
+        const duplicateItem = createDuplicateFileItem(file, 'pdf');
+        pdfFileList.appendChild(duplicateItem);
+        return; // Detener el procesamiento para este archivo
+    }
 
-        // --- PASO 2: ¡AÑADIR EL NOMBRE A LA MEMORIA! ---
-        // Esta es la línea clave que probablemente te falta o está en el lugar equivocado.
-        processedPdfNames.add(file.name);
+    // --- PASO 2: ¡AÑADIR EL NOMBRE A LA MEMORIA! ---
+    // Esta es la línea clave que probablemente te falta o está en el lugar equivocado.
+    processedPdfNames.add(file.name);
 
-        // --- PASO 3: Procesar el archivo como nuevo ---
-        const fileItem = createFileItem(file, 'pdf');
-        pdfFileList.appendChild(fileItem);
-        processPdfFile(file, fileItem);
-    });
+    // --- PASO 3: Procesar el archivo como nuevo ---
+    const fileItem = createFileItem(file, 'pdf');
+    pdfFileList.appendChild(fileItem);
+    processPdfFile(file, fileItem);
+});
 }
 
 /**
