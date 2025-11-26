@@ -1573,77 +1573,71 @@ document.addEventListener('patternAnalyzed', (event) => {
     console.log("ðŸŽ‰ Notification from IA Module:", result);
 });
 
+
+
+
 // ============================================
-// SCHEDULE VALIDATION INTEGRATION
+// SCHEDULE VALIDATION - INTEGRATION CODE
+// Add this to the END of script.js
 // ============================================
 
-// Schedule state variable
 let workSchedule = null;
-
-// Schedule panel elements
 const applyScheduleBtn = document.getElementById('applySchedule');
 const scheduleConfig = document.getElementById('scheduleConfig');
 
-// Event listener for Apply Schedule button
+console.log('ðŸ” Schedule elements:', { applyScheduleBtn, scheduleConfig });
+
 if (applyScheduleBtn) {
+    console.log('âœ… Apply Schedule button found');
+
     applyScheduleBtn.addEventListener('click', () => {
+        console.log('ðŸ”˜ Button clicked!');
+
         const startHour = parseInt(document.getElementById('startTime').value);
         const endHour = parseInt(document.getElementById('endTime').value);
 
-        if (isNaN(startHour) || isNaN(endHour)) {
+        console.log('Input:', { startHour, endHour });
+
+        if (isNaN(startHour) || isNaN(endHour) || startHour < 0 || startHour > 23 || endHour < 0 || endHour > 23) {
             alert('Please enter valid hours (0-23)');
             return;
         }
 
-        if (startHour < 0 || startHour > 23 || endHour < 0 || endHour > 23) {
-            alert('Hours must be between 0 and 23');
-            return;
-        }
-
         workSchedule = { startHour, endHour };
-        console.log('✅ Schedule set:', startHour + ':00 - ' + endHour + ':00');
-        revalidateAllTripsWithSchedule();
-    });
-}
+        console.log('âœ… Schedule set:', workSchedule);
+        console.log('fileResults count:', fileResults.length);
 
-// Revalidation function
-function revalidateAllTripsWithSchedule() {
-    if (!workSchedule) {
-        console.warn('⚠️ No schedule configured');
-        return;
-    }
+        let count = 0;
+        fileResults.forEach((r, i) => {
+            console.log('Trip ' + i + ':', r.destination, r.tripTime, r.direction, r.isValid);
 
-    let revalidatedCount = 0;
+            if (r.isValid && r.tripTime && r.direction) {
+                const v = validateTripBySchedule(r.tripTime, r.direction, startHour, endHour);
+                console.log('  Result:', v);
 
-    fileResults.forEach(result => {
-        if (result.isValid && result.tripTime && result.direction) {
-            const scheduleValidation = validateTripBySchedule(
-                result.tripTime,
-                result.direction,
-                workSchedule.startHour,
-                workSchedule.endHour
-            );
-
-            if (!scheduleValidation.isValid) {
-                console.warn('⚠️ [SCHEDULE] Invalidating:', result.destination, 'at', result.tripTime);
-                console.warn('   Reason:', scheduleValidation.reason);
-
-                result.isValid = false;
-                result.validationDetails += ' | ' + scheduleValidation.reason;
-                revalidatedCount++;
+                if (!v.isValid) {
+                    r.isValid = false;
+                    r.validationDetails += ' | ' + v.reason;
+                    count++;
+                    console.log('  âŒ INVALIDATED');
+                }
             }
-        }
-    });
+        });
 
-    console.log('✅ Revalidated ' + revalidatedCount + ' trips based on schedule');
-    updateResultsTable();
+        console.log('âœ… Revalidated ' + count + ' trips');
+        console.log('Calling setResultsView with:', currentResultsView);
+
+        setResultsView(currentResultsView);
+
+        console.log('âœ… Done');
+    });
+} else {
+    console.error('âŒ Button NOT found!');
 }
 
-// Show schedule panel when processing images
 document.addEventListener('imageProcessed', () => {
-    if (scheduleConfig) {
-        scheduleConfig.style.display = 'block';
-    }
+    console.log('ðŸ“¸ Image processed event');
+    if (scheduleConfig) scheduleConfig.style.display = 'block';
 });
 
-
+console.log('âœ… Schedule code loaded');
