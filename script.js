@@ -97,39 +97,140 @@ pdfUploadArea.addEventListener('drop', (e) => {
 
 imageFiles.addEventListener('change', handleImageFileSelect);
 imageUploadArea.addEventListener('dragover', (e) => {
-    const typedarray = new Uint8Array(this.result);
-    pdfjsLib.getDocument(typedarray).promise.then(function (pdf) {
-        let totalPages = pdf.numPages;
-        let fullText = '';
-        let pagePromises = [];
-        for (let i = 1; i <= totalPages; i++) {
-            pagePromises.push(pdf.getPage(i).then(function (page) {
-                return page.getTextContent().then(function (textContent) {
-                    let pageText = '';
-                    textContent.items.forEach(function (item) {
-                        pageText += item.str + ' ';
-                    });
-                    return pageText;
-                });
-            }));
-        }
-        Promise.all(pagePromises).then(function (pageTexts) {
-            pageTexts.forEach(function (text) {
-                fullText += text + '\n';
-            });
-            const tripInfo = extractTripInfoFromPdf(fullText);
-            processExtractedText(file, fileItem, fullText, 'pdf', tripInfo);
-        });
-    }).catch(function (error) {
-        console.error('Error processing PDF:', error);
-        fileItem.className = 'file-item error';
-        const fileStatus = fileItem.querySelector('.file-status');
-        fileStatus.className = 'file-status status-error';
-        fileStatus.textContent = 'Error processing';
-        mapContainer.style.display = 'none';
-    });
+    e.preventDefault();
+    imageUploadArea.classList.add('dragover');
+});
+imageUploadArea.addEventListener('dragleave', () => {
+    imageUploadArea.classList.remove('dragover');
+});
+imageUploadArea.addEventListener('drop', (e) => {
+    e.preventDefault();
+    imageUploadArea.classList.remove('dragover');
+    if (e.dataTransfer.files.length) handleImageFiles(e.dataTransfer.files);
+});
+
+if (groupedViewBtn && tableViewBtn) {
+    groupedViewBtn.addEventListener('click', () => setResultsView('grouped'));
+    tableViewBtn.addEventListener('click', () => setResultsView('table'));
+}
+
+closeBtn.onclick = () => modal.style.display = 'none';
+window.onclick = (event) => {
+    if (event.target == modal) modal.style.display = 'none';
 };
-fileReader.readAsArrayBuffer(file);
+
+clearBtn.addEventListener('click', () => {
+    fileResults = [];
+    pdfFileList.innerHTML = '';
+    pdfFileList.style.display = 'none';
+    imageFileList.innerHTML = '';
+    imageFileList.style.display = 'none';
+    resultsContainer.style.display = 'none';
+    resultsBody.innerHTML = '';
+    summary.innerHTML = '';
+    mapContainer.innerHTML = '';
+    if (map) {
+        map.remove();
+        map = null;
+    }
+
+    apiStatus.style.display = 'none';
+    processedPdfNames.clear();
+    processedImageNames.clear();
+    if (groupedResults) groupedResults.innerHTML = '';
+    updateSummaryCards(0, 0, 0, 0);
+    setResultsView('grouped');
+});
+
+document.addEventListener('scheduleUpdated', (e) => {
+    const { startTime, endTime } = e.detail;
+    console.log(`🔔 [MAIN] Schedule update received: ${startTime} - ${endTime}`);
+    revalidateTripsWithSchedule(startTime, endTime);
+});
+
+function handlePdfFiles(files) {
+    const pdfFilesArr = Array.from(files).filter(file => file.type === 'application/pdf');
+    if (pdfFilesArr.length === 0) {
+        alert('Please select at least one valid PDF file.');
+        return;
+    }
+    pdfFileList.style.display = 'block';
+    pdfFileList.innerHTML = '';
+
+    pdfFilesArr.forEach(file => {
+        if (processedPdfNames.has(file.name)) {
+            const duplicateItem = createDuplicateFileItem(file, 'pdf');
+            pdfFileList.appendChild(duplicateItem);
+            return;
+        }
+
+        processedPdfNames.add(file.name);
+
+        const fileItem = createFileItem(file, 'pdf');
+        pdfFileList.appendChild(fileItem);
+        processPdfFile(file, fileItem);
+    });
+}
+
+function createDuplicateFileItem(file, type) {
+    const fileItem = document.createElement('div');
+    fileItem.className = 'file-item invalid';
+    fileItem.id = `file-${type}-${file.name.replace(/\s/g, '-')}`;
+
+    const fileHeader = document.createElement('div');
+    fileHeader.className = 'file-header';
+
+    const fileName = document.createElement('div');
+    fileName.className = 'file-name';
+    fileName.textContent = file.name;
+
+    const fileStatus = document.createElement('div');
+    fileStatus.className = 'file-status status-invalid';
+    fileStatus.textContent = 'Duplicate file ignored';
+
+    fileHeader.appendChild(fileName);
+    fileHeader.appendChild(fileStatus);
+    fileItem.appendChild(fileHeader);
+
+    return fileItem;
+}
+
+function processPdfFile(file, fileItem) {
+    const fileReader = new FileReader();
+    fileReader.onload = function () {
+        const typedarray = new Uint8Array(this.result);
+        pdfjsLib.getDocument(typedarray).promise.then(function (pdf) {
+            let totalPages = pdf.numPages;
+            let fullText = '';
+            let pagePromises = [];
+            for (let i = 1; i <= totalPages; i++) {
+                pagePromises.push(pdf.getPage(i).then(function (page) {
+                    return page.getTextContent().then(function (textContent) {
+                        let pageText = '';
+                        textContent.items.forEach(function (item) {
+                            pageText += item.str + ' ';
+                        });
+                        return pageText;
+                    });
+                }));
+            }
+            Promise.all(pagePromises).then(function (pageTexts) {
+                pageTexts.forEach(function (text) {
+                    fullText += text + '\n';
+                });
+                const tripInfo = extractTripInfoFromPdf(fullText);
+                processExtractedText(file, fileItem, fullText, 'pdf', tripInfo);
+            });
+        }).catch(function (error) {
+            console.error('Error processing PDF:', error);
+            fileItem.className = 'file-item error';
+            const fileStatus = fileItem.querySelector('.file-status');
+            fileStatus.className = 'file-status status-error';
+            fileStatus.textContent = 'Error processing';
+            mapContainer.style.display = 'none';
+        });
+    };
+    fileReader.readAsArrayBuffer(file);
 }
 
 function extractTripInfoFromPdf(text) {
@@ -1650,122 +1751,122 @@ document.addEventListener('imageProcessed', (event) => {
         calendarContainer.appendChild(calendarHeader);
         calendarContainer.appendChild(calendarTable);
     }
+});
 
+// Al final de script.js
 
-    // Al final de script.js
+// Al final de script.js
+document.addEventListener('imageProcessed', (event) => {
+    const { fileName, ocrText, imageDataURL } = event.detail;
+    // Llamamos a la función con la firma correcta
+    processImageWithAI(fileName, ocrText, imageDataURL);
+});
 
-    // Al final de script.js
-    document.addEventListener('imageProcessed', (event) => {
-        const { fileName, ocrText, imageDataURL } = event.detail;
-        // Llamamos a la función con la firma correcta
-        processImageWithAI(fileName, ocrText, imageDataURL);
-    });
+// (Opcional) Escuchador para el resultado del análisis
+document.addEventListener('patternAnalyzed', (event) => {
+    const { result } = event.detail;
+    console.log("🎉 Notification from IA Module:", result);
+});
 
-    // (Opcional) Escuchador para el resultado del análisis
-    document.addEventListener('patternAnalyzed', (event) => {
-        const { result } = event.detail;
-        console.log("🎉 Notification from IA Module:", result);
-    });
+/**
+ * --- NUEVA FUNCIÓN: REVALIDAR VIAJES CON HORARIO ---
+ * Recorre todos los resultados y verifica si la hora del viaje coincide con el horario laboral.
+ */
+function revalidateTripsWithSchedule(startTimeStr, endTimeStr) {
+    const startMinutes = timeToMinutes(startTimeStr);
+    const endMinutes = timeToMinutes(endTimeStr);
 
-    /**
-     * --- NUEVA FUNCIÓN: REVALIDAR VIAJES CON HORARIO ---
-     * Recorre todos los resultados y verifica si la hora del viaje coincide con el horario laboral.
-     */
-    function revalidateTripsWithSchedule(startTimeStr, endTimeStr) {
-        const startMinutes = timeToMinutes(startTimeStr);
-        const endMinutes = timeToMinutes(endTimeStr);
+    if (startMinutes === null || endMinutes === null) return;
 
-        if (startMinutes === null || endMinutes === null) return;
+    let revalidatedCount = 0;
 
-        let revalidatedCount = 0;
+    fileResults.forEach(result => {
+        // Solo revalidamos si el viaje ya era válido por otros criterios (destino, precio)
+        // y si tenemos una hora de viaje extraída.
+        if (result.isValid && result.tripTime) {
+            const tripMinutes = timeToMinutes(result.tripTime);
+            if (tripMinutes === null) return;
 
-        fileResults.forEach(result => {
-            // Solo revalidamos si el viaje ya era válido por otros criterios (destino, precio)
-            // y si tenemos una hora de viaje extraída.
-            if (result.isValid && result.tripTime) {
-                const tripMinutes = timeToMinutes(result.tripTime);
-                if (tripMinutes === null) return;
+            let isTimeValid = true;
+            let timeReason = "";
 
-                let isTimeValid = true;
-                let timeReason = "";
+            const destinationLower = result.destination.toLowerCase();
 
-                const destinationLower = result.destination.toLowerCase();
+            // REGLA 1: Viaje al TRABAJO (Mireka Tower)
+            // Válido solo 50 minutos ANTES del inicio.
+            // Ejemplo: Start 1:00 PM. Válido 12:10 PM - 1:00 PM.
+            if (destinationLower.includes("mireka tower")) {
+                // Rango: [Start - 50, Start]
+                const validStartWindow = startMinutes - 50;
+                const validEndWindow = startMinutes;
 
-                // REGLA 1: Viaje al TRABAJO (Mireka Tower)
-                // Válido solo 50 minutos ANTES del inicio.
-                // Ejemplo: Start 1:00 PM. Válido 12:10 PM - 1:00 PM.
-                if (destinationLower.includes("mireka tower")) {
-                    // Rango: [Start - 50, Start]
-                    const validStartWindow = startMinutes - 50;
-                    const validEndWindow = startMinutes;
-
-                    if (tripMinutes < validStartWindow || tripMinutes > validEndWindow) {
-                        isTimeValid = false;
-                        timeReason = `Outside work start window (${startTimeStr} - 50min)`;
-                    }
-                }
-                // REGLA 2: Viaje a CASA (Lauries Rd)
-                // Válido solo 50 minutos DESPUÉS del fin.
-                // Ejemplo: End 10:00 PM. Válido 10:00 PM - 10:50 PM.
-                else if (destinationLower.includes("lauries rd")) {
-                    // Rango: [End, End + 50]
-                    const validStartWindow = endMinutes;
-                    const validEndWindow = endMinutes + 50;
-
-                    // Manejo simple de cruce de medianoche (si End + 50 > 1440)
-                    // Si el viaje es muy temprano (ej: 00:10) y la ventana cruza medianoche
-                    let adjustedTripMinutes = tripMinutes;
-                    if (validEndWindow >= 1440 && tripMinutes < 180) { // Si ventana cruza y viaje es madrugada
-                        adjustedTripMinutes += 1440;
-                    }
-
-                    if (adjustedTripMinutes < validStartWindow || adjustedTripMinutes > validEndWindow) {
-                        isTimeValid = false;
-                        timeReason = `Outside return window (${endTimeStr} + 50min)`;
-                    }
-                }
-
-                if (!isTimeValid) {
-                    console.warn(`⚠️ [TIME-VALIDATION] Invalidating trip to ${result.destination} at ${result.tripTime}. Reason: ${timeReason}`);
-                    result.isValid = false;
-                    result.validationDetails = (result.validationDetails || []) + ` | Invalid Time: ${timeReason}`;
-
-                    // Actualizar UI visualmente
-                    const fileItem = document.getElementById(`file-${result.type}-${result.name.replace(/\s/g, '-')}`);
-                    if (fileItem) {
-                        fileItem.className = 'file-item invalid';
-                        const fileStatus = fileItem.querySelector('.file-status');
-                        if (fileStatus) {
-                            fileStatus.className = 'file-status status-invalid';
-                            fileStatus.textContent = 'Invalid Time';
-                        }
-                    }
-                    revalidatedCount++;
+                if (tripMinutes < validStartWindow || tripMinutes > validEndWindow) {
+                    isTimeValid = false;
+                    timeReason = `Outside work start window (${startTimeStr} - 50min)`;
                 }
             }
-        });
+            // REGLA 2: Viaje a CASA (Lauries Rd)
+            // Válido solo 50 minutos DESPUÉS del fin.
+            // Ejemplo: End 10:00 PM. Válido 10:00 PM - 10:50 PM.
+            else if (destinationLower.includes("lauries rd")) {
+                // Rango: [End, End + 50]
+                const validStartWindow = endMinutes;
+                const validEndWindow = endMinutes + 50;
 
-        if (revalidatedCount > 0) {
-            console.log(`✅ [MAIN] Revalidated ${revalidatedCount} trips based on new schedule.`);
-            updateResultsTable(); // Refrescar tabla si está visible
-            // Recalcular resumen
-            const validCount = fileResults.filter(r => r.isValid).length;
-            const invalidCount = fileResults.length - validCount;
-            const totalAmount = fileResults.filter(r => r.isValid).reduce((sum, r) => sum + parseFloat(r.total || 0), 0);
-            updateSummaryCards(fileResults.length, validCount, invalidCount, totalAmount);
+                // Manejo simple de cruce de medianoche (si End + 50 > 1440)
+                // Si el viaje es muy temprano (ej: 00:10) y la ventana cruza medianoche
+                let adjustedTripMinutes = tripMinutes;
+                if (validEndWindow >= 1440 && tripMinutes < 180) { // Si ventana cruza y viaje es madrugada
+                    adjustedTripMinutes += 1440;
+                }
+
+                if (adjustedTripMinutes < validStartWindow || adjustedTripMinutes > validEndWindow) {
+                    isTimeValid = false;
+                    timeReason = `Outside return window (${endTimeStr} + 50min)`;
+                }
+            }
+
+            if (!isTimeValid) {
+                console.warn(`⚠️ [TIME-VALIDATION] Invalidating trip to ${result.destination} at ${result.tripTime}. Reason: ${timeReason}`);
+                result.isValid = false;
+                result.validationDetails = (result.validationDetails || []) + ` | Invalid Time: ${timeReason}`;
+
+                // Actualizar UI visualmente
+                const fileItem = document.getElementById(`file-${result.type}-${result.name.replace(/\s/g, '-')}`);
+                if (fileItem) {
+                    fileItem.className = 'file-item invalid';
+                    const fileStatus = fileItem.querySelector('.file-status');
+                    if (fileStatus) {
+                        fileStatus.className = 'file-status status-invalid';
+                        fileStatus.textContent = 'Invalid Time';
+                    }
+                }
+                revalidatedCount++;
+            }
         }
-    }
+    });
 
-    // Reutilizamos la función timeToMinutes de images-validation-ia.js o la duplicamos si no es accesible.
-    function timeToMinutes(timeStr) {
-        if (!timeStr) return null;
-        const match = timeStr.trim().match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
-        if (!match) return null;
-        let [, hours, minutes, period] = match;
-        hours = parseInt(hours, 10);
-        minutes = parseInt(minutes, 10);
-        period = period.toUpperCase();
-        if (period === 'PM' && hours !== 12) hours += 12;
-        if (period === 'AM' && hours === 12) hours = 0;
-        return hours * 60 + minutes;
+    if (revalidatedCount > 0) {
+        console.log(`✅ [MAIN] Revalidated ${revalidatedCount} trips based on new schedule.`);
+        updateResultsTable(); // Refrescar tabla si está visible
+        // Recalcular resumen
+        const validCount = fileResults.filter(r => r.isValid).length;
+        const invalidCount = fileResults.length - validCount;
+        const totalAmount = fileResults.filter(r => r.isValid).reduce((sum, r) => sum + parseFloat(r.total || 0), 0);
+        updateSummaryCards(fileResults.length, validCount, invalidCount, totalAmount);
     }
+}
+
+// Reutilizamos la función timeToMinutes de images-validation-ia.js o la duplicamos si no es accesible.
+function timeToMinutes(timeStr) {
+    if (!timeStr) return null;
+    const match = timeStr.trim().match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+    if (!match) return null;
+    let [, hours, minutes, period] = match;
+    hours = parseInt(hours, 10);
+    minutes = parseInt(minutes, 10);
+    period = period.toUpperCase();
+    if (period === 'PM' && hours !== 12) hours += 12;
+    if (period === 'AM' && hours === 12) hours = 0;
+    return hours * 60 + minutes;
+}
