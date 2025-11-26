@@ -5,7 +5,6 @@ const allExtractedTrips = [];
 let processedImagesCount = 0;
 
 // --- FUNCIÓN AUXILIAR PARA ENVIAR A LA API QWEN ---
-// (Sin cambios)
 async function extractWithQwen(base64Image, fileName, mimeType) {
     const response = await fetch('/api/qwen', {
         method: 'POST',
@@ -82,7 +81,7 @@ function analyzeWorkSchedule(imageCount) {
     console.log("End time: " + minutesToTime(finalEndTimeInMinutes));
 }
 
-// --- FUNCIÓN PRINCIPAL DEL MÓDULO (SIN CAMBIOS) ---
+// --- FUNCIÓN PRINCIPAL DEL MÓDULO ---
 export async function processImageWithAI(fileName, ocrText, imageDataURL) {
     console.log(`🤖 [IA-MODULE] Processing ${fileName}...`);
     try {
@@ -104,6 +103,11 @@ export async function processImageWithAI(fileName, ocrText, imageDataURL) {
 
             processedImagesCount++;
             console.log(`✅ [IA-MODULE] Added ${data.trips.length} trips. Total accumulated: ${allExtractedTrips.length}. Images processed: ${processedImagesCount}`);
+
+            // --- NEW: Update Frontend with AI Results ---
+            if (typeof window !== 'undefined' && window.updateTripResultsFromAI) {
+                window.updateTripResultsFromAI(fileName, data.trips);
+            }
         }
 
         analyzeWorkSchedule(processedImagesCount);
@@ -114,7 +118,6 @@ export async function processImageWithAI(fileName, ocrText, imageDataURL) {
 }
 
 // --- FUNCIONES AUXILIARES DE TIEMPO ---
-// (Sin cambios)
 function timeToMinutes(timeStr) {
     if (!timeStr) return null;
     const match = timeStr.trim().match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);

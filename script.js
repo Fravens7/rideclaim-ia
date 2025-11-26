@@ -1570,6 +1570,108 @@ document.addEventListener('imageProcessed', (event) => {
 // (Opcional) Escuchador para el resultado del anÃ¡lisis
 document.addEventListener('patternAnalyzed', (event) => {
     const { result } = event.detail;
-    console.log("ðŸŽ‰ Notification from IA Module:", result);
+    console.log("🎉 Notification from IA Module:", result);
 });
+
+// ====================================================================
+// AI INTEGRATION: Allow AI module to update results
+// ====================================================================
+window.updateTripResultsFromAI = function (fileName, aiTrips) {
+    console.log(`🤖 [AI-UPDATE] Updating results for ${fileName} with ${aiTrips.length} trips from AI`);
+
+    // 1. Remove existing results for this file
+    const initialLength = fileResults.length;
+    fileResults = fileResults.filter(r => r.fileName !== fileName && r.name !== fileName); // Handle both name properties just in case
+    const removedCount = initialLength - fileResults.length;
+    console.log(`   - Removed ${removedCount} existing OCR results`);
+
+    // 2. Add new AI results
+    aiTrips.forEach(trip => {
+        // Determine direction based on destination keywords
+        let direction = 'Unknown';
+        const destLower = (trip.destination || '').toLowerCase();
+        if (destLower.includes('mireka') || destLower.includes('havelock') || destLower.includes('324')) {
+            direction = 'home-to-office';
+        } else if (destLower.includes('43b') || destLower.includes('43d') || destLower.includes('lauries')) {
+            direction = 'office-to-home';
+        }
+
+        // Basic validation (can be enhanced)
+        let isValid = true;
+        let validationDetails = 'Valid (AI Extracted)';
+
+        // Check destination validity
+        const validDestinations = ['Mireka Tower', '43b Lauries Rd'];
+        const isKnownDest = validDestinations.some(d => trip.destination.includes(d)) ||
+            destLower.includes('mireka') || destLower.includes('lauries');
+
+        if (!isKnownDest) {
+            isValid = false;
+            validationDetails = 'Invalid (Destination unknown)';
+        }
+
+        fileResults.push({
+            fileName: fileName,
+            name: fileName, // Add both for compatibility
+            type: 'Image (AI)',
+            origin: 'Not specified', // AI doesn't usually extract origin, assume unknown
+            destination: trip.destination,
+            price: trip.price || trip.total_lkr, // Handle both field names
+            total: trip.price || trip.total_lkr, // Handle both field names
+            date: trip.date || 'Not specified',
+            tripTime: trip.time || trip.trip_time, // Handle both field names
+            isValid: isValid,
+            validationDetails: validationDetails,
+            direction: direction
+        });
+    });
+
+    // 3. Re-apply schedule validation if active
+    if (window.workSchedule) {
+        if (typeof validateTripBySchedule === 'function') {
+            // Re-run validation logic for these new trips
+            fileResults.forEach(r => {
+                if ((r.fileName === fileName || r.name === fileName) && r.isValid && r.tripTime && r.direction) {
+                    const v = validateTripBySchedule(r.tripTime, r.direction, window.workSchedule.startHour, window.workSchedule.endHour);
+                    if (!v.isValid) {
+                        r.isValid = false;
+                        r.validationDetails += ' | ' + v.reason;
+                    }
+                }
+            });
+        }
+    }
+
+    // 4. Refresh UI
+    updateSummaryCards(
+        calculateTotalSpent(fileResults),
+        fileResults.length,
+        calculateActiveDays(fileResults),
+        new Set(fileResults.map(r => r.fileName || r.name)).size
+    );
+
+    // Update table/grouped view
+    if (typeof setResultsView === 'function') {
+        setResultsView(currentResultsView);
+    } else {
+        // Fallback if setResultsView isn't available
+        renderGroupedResults();
+        updateResultsTable();
+    }
+
+    // Show toast/notification
+    const toast = document.createElement('div');
+    toast.className = 'ai-toast';
+    toast.style.cssText = 'position: fixed; bottom: 20px; right: 20px; background: #10a37f; color: white; padding: 15px; border-radius: 8px; z-index: 1000; box-shadow: 0 4px 6px rgba(0,0,0,0.1); animation: slideIn 0.3s ease-out;';
+    toast.innerHTML = `🤖 AI updated <b>${fileName}</b><br>Found ${aiTrips.length} trips (was ${removedCount})`;
+    document.body.appendChild(toast);
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 300);
+    }, 4000);
+};
+
+// Helper to ensure workSchedule is accessible
+window.workSchedule = window.workSchedule || null;
+
 
