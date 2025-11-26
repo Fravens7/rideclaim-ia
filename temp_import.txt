@@ -1,0 +1,1 @@
+﻿import { timeToMinutes, validateTripBySchedule } from './validation-schedule.js';

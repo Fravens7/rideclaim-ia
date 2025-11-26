@@ -1,3 +1,12 @@
+﻿// Al principio de script.js
+import { processImageWithAI } from './images-validation-ia.js';
+import { timeToMinutes, validateTripBySchedule } from './validation-schedule.js';
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+
+const staticLocations = {
+    home: { lat: 6.89535, lng: 79.85766 }, office: { lat: 6.882986650923001, lng: 79.86809890134177 }
+};
 const zoneKeywords = {
     home: ['43b', '43d', 'lauries'],
     office: ['mireka', 'havelock', '324']
@@ -15,10 +24,10 @@ function findZone(addressText) {
         }
     }
 
-    return null; // No se encontró ninguna zona coincidente
+    return null; // No se encontrÃ³ ninguna zona coincidente
 }
 
-// Inicialización de variables y elementos DOM
+// InicializaciÃ³n de variables y elementos DOM
 const pdfTab = document.getElementById('pdf-tab');
 const imageTab = document.getElementById('image-tab');
 const pdfContent = document.getElementById('pdf-content');
@@ -150,8 +159,8 @@ function handlePdfFiles(files) {
             return; // Detener el procesamiento para este archivo
         }
 
-        // --- PASO 2: ¡AÑADIR EL NOMBRE A LA MEMORIA! ---
-        // Esta es la línea clave que probablemente te falta o está en el lugar equivocado.
+        // --- PASO 2: Â¡AÃ‘ADIR EL NOMBRE A LA MEMORIA! ---
+        // Esta es la lÃ­nea clave que probablemente te falta o estÃ¡ en el lugar equivocado.
         processedPdfNames.add(file.name);
 
         // --- PASO 3: Procesar el archivo como nuevo ---
@@ -162,7 +171,7 @@ function handlePdfFiles(files) {
 }
 
 /**
- * --- FUNCIÓN AUXILIAR: Crea un elemento visual para archivos duplicados ---
+ * --- FUNCIÃ“N AUXILIAR: Crea un elemento visual para archivos duplicados ---
  */
 function createDuplicateFileItem(file, type) {
     const fileItem = document.createElement('div');
@@ -255,7 +264,7 @@ function extractTripInfoFromPdf(text) {
     return { origin, destination, tripTime };
 }
 
-// --- LÓGICA IMAGEN (MODIFICADA) ---
+// --- LÃ“GICA IMAGEN (MODIFICADA) ---
 function handleImageFileSelect(e) {
     if (e.target.files.length) handleImageFiles(e.target.files);
 }
@@ -299,23 +308,23 @@ function handleImageFiles(files) {
 
 
 
-// Modificación en processImageFile para mejorar la asignación de fechas/horas
-// --- VERSIÓN CORREGIDA Y SIMPLIFICADA DE processImageFile ---
+// ModificaciÃ³n en processImageFile para mejorar la asignaciÃ³n de fechas/horas
+// --- VERSIÃ“N CORREGIDA Y SIMPLIFICADA DE processImageFile ---
 function processImageFile(file, fileItem) {
     const fileReader = new FileReader();
     fileReader.onload = function (e) {
-        // --- CORRECCIÓN: Declaramos imageDataURL en el ámbito correcto ---
-        const imageDataURL = e.target.result; // Ahora está disponible para img.onload
+        // --- CORRECCIÃ“N: Declaramos imageDataURL en el Ã¡mbito correcto ---
+        const imageDataURL = e.target.result; // Ahora estÃ¡ disponible para img.onload
 
         const img = new Image();
-        img.onload = async function () { // <-- Hacemos la función async
+        img.onload = async function () { // <-- Hacemos la funciÃ³n async
             const processedImgSrc = preprocessImage(img);
 
             const progressBar = fileItem.querySelector('.progress');
             const fileStatus = fileItem.querySelector('.file-status');
 
             try {
-                // --- PASO 1: Realizar el OCR con Tesseract.js (tu lógica existente) ---
+                // --- PASO 1: Realizar el OCR con Tesseract.js (tu lÃ³gica existente) ---
                 const { data: { text } } = await Tesseract.recognize(processedImgSrc, 'eng', {
                     logger: m => {
                         if (m.status === 'recognizing text') {
@@ -329,7 +338,7 @@ function processImageFile(file, fileItem) {
                 //console.log("Raw OCR Text:", text);
 
                 // --- MODIFICADO: Publicamos el evento con el imageDataURL ---
-                console.log(`📢 [MAIN] Dispatching 'imageProcessed' event for ${file.name}`);
+                console.log(`ðŸ“¢ [MAIN] Dispatching 'imageProcessed' event for ${file.name}`);
                 document.dispatchEvent(new CustomEvent('imageProcessed', {
                     detail: {
                         fileName: file.name, // Pasamos el nombre por separado
@@ -338,7 +347,7 @@ function processImageFile(file, fileItem) {
                     }
                 }));
 
-                // --- PASO 3: CONTINUAR CON TU LÓGICA PRINCIPAL (sin cambios) ---
+                // --- PASO 3: CONTINUAR CON TU LÃ“GICA PRINCIPAL (sin cambios) ---
                 apiStatus.style.display = 'block';
                 apiStatus.className = 'api-status processing';
                 apiStatus.textContent = 'Processing with AI...';
@@ -416,13 +425,13 @@ function preprocessImage(img) {
 }
 
 // ====================================================================
-// NUEVAS FUNCIONES DE SUPERVISIÓN (NO INVASIVAS)
+// NUEVAS FUNCIONES DE SUPERVISIÃ“N (NO INVASIVAS)
 // ====================================================================
 
 /**
- * Cuenta cuántas veces aparece la palabra "Rebook" en el texto.
+ * Cuenta cuÃ¡ntas veces aparece la palabra "Rebook" en el texto.
  * @param {string} text - El texto crudo del OCR.
- * @returns {number} - El número de "Rebooks" encontrados.
+ * @returns {number} - El nÃºmero de "Rebooks" encontrados.
  */
 function superviseParsing(text) {
     const rebookRegex = /rebook/gi;
@@ -431,44 +440,44 @@ function superviseParsing(text) {
 }
 
 /**
- * --- VERSIÓN HÍBRIDA DEFINITIVA: Parser JS + LLM Fallback + Extracción de Incompletos ---
- * Primero usa lógica dura y determinista. La IA es solo un respaldo.
- * AÑADIDO: Si hay inconsistencia, extrae el recibo incompleto y lo añade a los resultados.
+ * --- VERSIÃ“N HÃBRIDA DEFINITIVA: Parser JS + LLM Fallback + ExtracciÃ³n de Incompletos ---
+ * Primero usa lÃ³gica dura y determinista. La IA es solo un respaldo.
+ * AÃ‘ADIDO: Si hay inconsistencia, extrae el recibo incompleto y lo aÃ±ade a los resultados.
  */
 async function extractTripsWithLLM(ocrText) {
-    console.log("🚀 Iniciando Parser Híbrido con Supervisión...");
+    console.log("ðŸš€ Iniciando Parser HÃ­brido con SupervisiÃ³n...");
 
-    // --- PASO DE SUPERVISIÓN ---
+    // --- PASO DE SUPERVISIÃ“N ---
     const rebookCount = superviseParsing(ocrText);
-    console.log(`🔍 [SUPERVISIÓN] Se encontraron ${rebookCount} palabras "Rebook" en el texto.`);
+    console.log(`ðŸ” [SUPERVISIÃ“N] Se encontraron ${rebookCount} palabras "Rebook" en el texto.`);
 
     // --- PASO 1: PARSER DETERMINISTA DE JAVASCRIPT ---
     const jsTrips = parseTripsWithJS(ocrText);
 
-    // --- NUEVO: LÓGICA PARA EXTRAER Y AÑADIR EL INCOMPLETO ---
+    // --- NUEVO: LÃ“GICA PARA EXTRAER Y AÃ‘ADIR EL INCOMPLETO ---
     if (rebookCount > jsTrips.length) {
-        console.warn(`⚠️ [SUPERVISIÓN] ¡Inconsistencia detectada! Se esperaban ${rebookCount} viajes, pero el parser solo extrajo ${jsTrips.length}.`);
+        console.warn(`âš ï¸ [SUPERVISIÃ“N] Â¡Inconsistencia detectada! Se esperaban ${rebookCount} viajes, pero el parser solo extrajo ${jsTrips.length}.`);
 
         const incompleteTrip = extractIncompleteTrip(ocrText);
         if (incompleteTrip) {
-            jsTrips.push(incompleteTrip); // <-- ¡Añadimos el viaje incompleto al array!
-            console.log(`✅ [SUPERVISIÓN] Recibo incompleto procesado y añadido a los resultados.`);
+            jsTrips.push(incompleteTrip); // <-- Â¡AÃ±adimos el viaje incompleto al array!
+            console.log(`âœ… [SUPERVISIÃ“N] Recibo incompleto procesado y aÃ±adido a los resultados.`);
         }
     }
 
     if (jsTrips.length > 0) {
-        console.log(`✅ Parser JS encontró ${jsTrips.length} viajes (incluyendo posibles incompletos). No se necesita la IA.`);
+        console.log(`âœ… Parser JS encontrÃ³ ${jsTrips.length} viajes (incluyendo posibles incompletos). No se necesita la IA.`);
         return jsTrips;
     }
 
-    // --- PASO 2: FALLBACK A LA IA (si el parser JS falló) ---
-    console.log("⚠️ El parser JS no encontró viajes. Activando fallback a la IA...");
+    // --- PASO 2: FALLBACK A LA IA (si el parser JS fallÃ³) ---
+    console.log("âš ï¸ El parser JS no encontrÃ³ viajes. Activando fallback a la IA...");
     return await parseTripsWithLLM(ocrText);
 }
 
 /**
- * --- NUEVA FUNCIÓN: Extrae un recibo incompleto del texto ---
- * Busca el último "Rebook" que no tenga un precio LKR asociado debajo.
+ * --- NUEVA FUNCIÃ“N: Extrae un recibo incompleto del texto ---
+ * Busca el Ãºltimo "Rebook" que no tenga un precio LKR asociado debajo.
  */
 function extractIncompleteTrip(ocrText) {
     const lines = ocrText.split('\n');
@@ -477,7 +486,7 @@ function extractIncompleteTrip(ocrText) {
     const dateRegex = /\b(\d{1,2}\s+\w{3})\b/i;
     const rebookRegex = /rebook/i;
 
-    // Encontrar todos los índices de las líneas que contienen "Rebook"
+    // Encontrar todos los Ã­ndices de las lÃ­neas que contienen "Rebook"
     const rebookIndices = [];
     lines.forEach((line, index) => {
         if (rebookRegex.test(line)) {
@@ -485,11 +494,11 @@ function extractIncompleteTrip(ocrText) {
         }
     });
 
-    // Iterar hacia atrás para encontrar el último "Rebook" incompleto
+    // Iterar hacia atrÃ¡s para encontrar el Ãºltimo "Rebook" incompleto
     for (let i = rebookIndices.length - 1; i >= 0; i--) {
         const rebookLineIndex = rebookIndices[i];
 
-        // Comprobar si hay un precio en las siguientes 3 líneas
+        // Comprobar si hay un precio en las siguientes 3 lÃ­neas
         let hasPriceNearby = false;
         for (let j = rebookLineIndex + 1; j <= rebookLineIndex + 3 && j < lines.length; j++) {
             if (priceRegex.test(lines[j])) {
@@ -518,19 +527,19 @@ function extractIncompleteTrip(ocrText) {
                 };
 
                 // Log simple y limpio
-                console.log(`⚠️ [RECIBO INCOMPLETO] Destino: "${incompleteTrip.destination}", Hora: "${incompleteTrip.trip_time}"`);
+                console.log(`âš ï¸ [RECIBO INCOMPLETO] Destino: "${incompleteTrip.destination}", Hora: "${incompleteTrip.trip_time}"`);
 
                 return incompleteTrip;
             }
         }
     }
 
-    return null; // No se encontró ningún recibo incompleto
+    return null; // No se encontrÃ³ ningÃºn recibo incompleto
 }
 
 /**
- * --- NUEVA FUNCIÓN: LIMPIADOR DE NOMBRES DE DESTINO ---
- * Usa una lista blanca para limpiar los nombres extraídos por el OCR.
+ * --- NUEVA FUNCIÃ“N: LIMPIADOR DE NOMBRES DE DESTINO ---
+ * Usa una lista blanca para limpiar los nombres extraÃ­dos por el OCR.
  */
 function cleanDestinationName(rawDestination) {
     if (!rawDestination) return '';
@@ -542,24 +551,24 @@ function cleanDestinationName(rawDestination) {
 
     // 2. Eliminar patrones de fecha y hora que suelen aparecer al final
     //    Ej: "Nov 24", "9:34 PM", "Oct 12 - 10:00 AM"
-    //    Buscamos meses abreviados seguidos de dígitos
+    //    Buscamos meses abreviados seguidos de dÃ­gitos
     cleanedText = cleanedText.replace(/\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2}[\s\S]*/i, '');
 
     //    Buscamos horas (ej: 9:34 PM, 10:00am)
     cleanedText = cleanedText.replace(/\d{1,2}:\d{2}\s*(?:am|pm)?[\s\S]*/i, '');
 
     // 3. Limpieza final de caracteres basura al final de la cadena
-    //    Elimina cualquier cosa que no sea letra, número o paréntesis de cierre al final
-    //    Ahora también elimina basura separada por espacios como " ‘t"
+    //    Elimina cualquier cosa que no sea letra, nÃºmero o parÃ©ntesis de cierre al final
+    //    Ahora tambiÃ©n elimina basura separada por espacios como " â€˜t"
     cleanedText = cleanedText.replace(/[^a-zA-Z0-9)]+$/, '');
 
-    //    Limpieza específica para basura común como " ‘t" o " .‘T" que queda tras el OCR
-    cleanedText = cleanedText.replace(/\s+['‘`][a-zA-Z0-9]*$/, '');
+    //    Limpieza especÃ­fica para basura comÃºn como " â€˜t" o " .â€˜T" que queda tras el OCR
+    cleanedText = cleanedText.replace(/\s+['â€˜`][a-zA-Z0-9]*$/, '');
 
     cleanedText = cleanedText.trim();
 
     // --- LISTA BLANCA (WHITELIST) ---
-    // Si después de limpiar coincide con algo conocido, usamos el nombre canónico.
+    // Si despuÃ©s de limpiar coincide con algo conocido, usamos el nombre canÃ³nico.
     const lowerCleaned = cleanedText.toLowerCase();
     const knownDestinations = {
         'mireka tower': 'Mireka Tower',
@@ -582,9 +591,9 @@ function cleanDestinationName(rawDestination) {
         }
     }
 
-    // Si no está en la whitelist, devolvemos el texto limpio "best effort"
+    // Si no estÃ¡ en la whitelist, devolvemos el texto limpio "best effort"
     if (cleanedText.length < 3) {
-        console.warn(`⚠️ Destino demasiado corto tras limpieza: "${rawDestination}" -> "${cleanedText}"`);
+        console.warn(`âš ï¸ Destino demasiado corto tras limpieza: "${rawDestination}" -> "${cleanedText}"`);
         return rawDestination.trim(); // Fallback al original si nos pasamos de limpieza
     }
 
@@ -592,8 +601,8 @@ function cleanDestinationName(rawDestination) {
 }
 
 /**
- * --- FUNCIÓN AUXILIAR: El parser de JavaScript ---
- * Usa regex para encontrar precios y luego lee hacia atrás para encontrar el destino.
+ * --- FUNCIÃ“N AUXILIAR: El parser de JavaScript ---
+ * Usa regex para encontrar precios y luego lee hacia atrÃ¡s para encontrar el destino.
  */
 function parseTripsWithJS(text) {
     const trips = [];
@@ -620,23 +629,23 @@ function parseTripsWithJS(text) {
         let total_lkr = priceMatch[1].replace(/Q|O/g, '0').replace(/A/g, '4').replace(/,/g, '');
 
         if (!total_lkr.includes('.') && total_lkr.length > 2) {
-            // Si el número no tiene punto y tiene más de 2 dígitos
-            // Insertamos el punto antes de los últimos 2 dígitos
-            // Ejemplo: "24000" → "240.00"
+            // Si el nÃºmero no tiene punto y tiene mÃ¡s de 2 dÃ­gitos
+            // Insertamos el punto antes de los Ãºltimos 2 dÃ­gitos
+            // Ejemplo: "24000" â†’ "240.00"
             total_lkr = total_lkr.slice(0, -2) + '.' + total_lkr.slice(-2);
         }
 
-        // Validación de precio mínimo (180 LKR)
+        // ValidaciÃ³n de precio mÃ­nimo (180 LKR)
         const numericPrice = parseFloat(total_lkr);
         let status = 'valid';
 
         if (isNaN(numericPrice) || numericPrice < 180) {
-            console.warn(`⚠️ Precio inválido o muy bajo detectado: ${total_lkr} (Original: ${priceMatch[1]})`);
+            console.warn(`âš ï¸ Precio invÃ¡lido o muy bajo detectado: ${total_lkr} (Original: ${priceMatch[1]})`);
             status = 'invalid';
         }
 
         if (priceLine.toLowerCase().includes('canceled')) {
-            status = 'valid'; // Mantener como válido si es cancelado (según lógica anterior, revisar si debe ser invalid)
+            status = 'valid'; // Mantener como vÃ¡lido si es cancelado (segÃºn lÃ³gica anterior, revisar si debe ser invalid)
         } else if (priceLine.toLowerCase().includes('view store')) {
             status = 'invalid';
         }
@@ -660,13 +669,13 @@ function parseTripsWithJS(text) {
             if (priceRegex.test(lineAbove) || lineAbove.toLowerCase().includes('activity')) {
                 break;
             }
-            if (/\d{1,2}:\d{2}|^[~©¢&]/.test(lineAbove) || lineAbove.length < 2) {
+            if (/\d{1,2}:\d{2}|^[~Â©Â¢&]/.test(lineAbove) || lineAbove.length < 2) {
                 continue;
             }
             destination = lineAbove + ' ' + destination;
         }
 
-        // --- CAMBIO CLAVE: AQUÍ USAMOS EL LIMPIADOR ---
+        // --- CAMBIO CLAVE: AQUÃ USAMOS EL LIMPIADOR ---
         const cleanDestination = cleanDestinationName(destination);
 
         if (cleanDestination) {
@@ -797,7 +806,7 @@ function normalizeLLMResponse(rawResponse) {
     return arraySegment.trim();
 }
 
-// --- LÓGICA COMPARTIDA (con ajustes menores) ---
+// --- LÃ“GICA COMPARTIDA (con ajustes menores) ---
 function createFileItem(file, type) {
     const fileItem = document.createElement('div');
     fileItem.className = 'file-item processing';
@@ -828,10 +837,10 @@ function createFileItem(file, type) {
     return fileItem;
 }
 
-// ... (mantener todo el código anterior hasta la función processExtractedText)
+// ... (mantener todo el cÃ³digo anterior hasta la funciÃ³n processExtractedText)
 
 function processExtractedText(file, fileItem, text, type, tripInfo) {
-    // --- INTENTO 1: Lógica principal para el formato común ---
+    // --- INTENTO 1: LÃ³gica principal para el formato comÃºn ---
     let totalMatch = text.match(/Total\s+([\d,.]+)\s+LKR/i);
     // --- INTENTO 2: Respaldo para formatos inusuales (solo si el primero falla) --
     if (!totalMatch) {
@@ -852,7 +861,7 @@ function processExtractedText(file, fileItem, text, type, tripInfo) {
             fileStatus.className = 'file-status status-success';
             fileStatus.textContent = 'Valid';
 
-            // NUEVO: Extraer información detallada del viaje solo para PDFs válidos
+            // NUEVO: Extraer informaciÃ³n detallada del viaje solo para PDFs vÃ¡lidos
             if (type === 'pdf') {
                 const tripDetails = extractTripDetails(text);
                 console.log(`=== TRIP DETAILS [${file.name}] ===`);
@@ -899,14 +908,14 @@ function processExtractedText(file, fileItem, text, type, tripInfo) {
         validationDetails: validationResult.details,
         text: text,
         tripDate: tripDate,
-        direction: validationResult.direction, // <-- AÑADE LA FECHA AL OBJETO
-        tripTime: tripInfo.tripTime // <-- AÑADE LA HORA AL OBJETO
+        direction: validationResult.direction, // <-- AÃ‘ADE LA FECHA AL OBJETO
+        tripTime: tripInfo.tripTime // <-- AÃ‘ADE LA HORA AL OBJETO
     });
 
     updateResultsTable();
 }
 
-// NUEVA FUNCIÓN: Extraer detalles específicos del viaje
+// NUEVA FUNCIÃ“N: Extraer detalles especÃ­ficos del viaje
 function extractTripDetails(text) {
     const tripDetails = {
         tripDate: 'Not found',
@@ -937,7 +946,7 @@ function extractTripDetails(text) {
         /Trip details\s+(Tuk|Zip)/i,
         /(Tuk|Zip)\s+\d+.\d+\s+kilometers/i,
         /Detalles del viaje\s+(Tuk|Zip)/i,
-        /(Tuk|Zip)\s+\d+.\d+\s+kilómetros/i
+        /(Tuk|Zip)\s+\d+.\d+\s+kilÃ³metros/i
     ];
 
     for (const pattern of transportPatterns) {
@@ -948,7 +957,7 @@ function extractTripDetails(text) {
         }
     }
 
-    // Extraer direcciones con horas - método mejorado y más flexible
+    // Extraer direcciones con horas - mÃ©todo mejorado y mÃ¡s flexible
     // Primero intentamos con el formato que incluye AM/PM
     let timeLocationPattern = /(\d{1,2}:\d{2}\s*(?:AM|PM|am|pm))\s+([A-Za-z0-9\s,]+Sri Lanka)/g;
     let matches = [...text.matchAll(timeLocationPattern)];
@@ -995,7 +1004,7 @@ function extractTripDetails(text) {
 
     return tripDetails;
 }
-// ... (mantener el resto del código sin cambios)
+// ... (mantener el resto del cÃ³digo sin cambios)
 
 
 
@@ -1018,11 +1027,11 @@ function extractTripDetails(text) {
 
 
 /**
- * --- VERSIÓN 2: LÓGICA DE VALIDACIÓN CON SEGUNDA OPORTUNIDAD ---
- * Mantiene la lógica estricta y añade una flexible como respaldo.
+ * --- VERSIÃ“N 2: LÃ“GICA DE VALIDACIÃ“N CON SEGUNDA OPORTUNIDAD ---
+ * Mantiene la lÃ³gica estricta y aÃ±ade una flexible como respaldo.
  */
 function validateTrip(tripInfo, type) {
-    // --- CAMINO 1: LÓGICA PARA IMÁGENES (sin cambios) ---
+    // --- CAMINO 1: LÃ“GICA PARA IMÃGENES (sin cambios) ---
     if (type === 'image') {
         if (tripInfo.status === 'invalid') {
             return { isValid: false, details: 'Invalid: Classified as Food/Delivery by AI.', direction: null };
@@ -1035,7 +1044,7 @@ function validateTrip(tripInfo, type) {
             const validPatterns = [/^43b/, /^43d/, /^mireka/];
             const isDestinationValidByPattern = validPatterns.some(pattern => pattern.test(destinationText));
             if (isDestinationValidByPattern) {
-                // Determinar la dirección basada en el destino
+                // Determinar la direcciÃ³n basada en el destino
                 let direction = null;
                 if (destinationText.includes('43b') || destinationText.includes('43d') || destinationText.includes('lauries')) {
                     direction = 'office-to-home'; // Si va a casa, es oficina a casa
@@ -1053,7 +1062,7 @@ function validateTrip(tripInfo, type) {
         }
     }
 
-    // --- CAMINO 2: LÓGICA PARA PDFs (CON SEGUNDA OPORTUNIDAD) ---
+    // --- CAMINO 2: LÃ“GICA PARA PDFs (CON SEGUNDA OPORTUNIDAD) ---
     if (type === 'pdf') {
         if (!tripInfo.origin || !tripInfo.destination) {
             return { isValid: false, details: 'Could not extract addresses from PDF.', direction: null };
@@ -1062,7 +1071,7 @@ function validateTrip(tripInfo, type) {
         const originText = tripInfo.origin.trim();
         const destinationText = tripInfo.destination.trim().toLowerCase();
 
-        // --- PRIMERA VALIDACIÓN (Lógica Estricta Actual) ---
+        // --- PRIMERA VALIDACIÃ“N (LÃ³gica Estricta Actual) ---
         const isHome = (address) => address.startsWith('43');
         const isOffice = (address) => {
             const addr = address.toLowerCase();
@@ -1081,8 +1090,8 @@ function validateTrip(tripInfo, type) {
             return { isValid: true, details: 'Valid: Office -> Home route.', direction: 'office-to-home' };
         }
 
-        // --- SEGUNDA VALIDACIÓN (Lógica Flexible por Palabras Clave) ---
-        // Solo se ejecuta si la primera validación falló.
+        // --- SEGUNDA VALIDACIÃ“N (LÃ³gica Flexible por Palabras Clave) ---
+        // Solo se ejecuta si la primera validaciÃ³n fallÃ³.
         const originZone = findZone(tripInfo.origin);
         const destinationZone = findZone(tripInfo.destination);
 
@@ -1093,7 +1102,7 @@ function validateTrip(tripInfo, type) {
             return { isValid: true, details: 'Valid (by keyword match): Office -> Home route.', direction: 'office-to-home' };
         }
 
-        // --- SI NADA FUNCIONA, ES INVÁLIDO ---
+        // --- SI NADA FUNCIONA, ES INVÃLIDO ---
         return { isValid: false, details: 'Invalid: Addresses do not meet rules after multiple checks.', direction: null };
     }
 
@@ -1300,7 +1309,7 @@ function renderGroupedResults() {
         header.innerHTML = `
             <div>
                 <p class="group-file-name">${group.name}</p>
-                <p class="group-meta">${group.trips.length} trip(s) • ${group.type === 'pdf' ? 'PDF' : 'Image'}</p>
+                <p class="group-meta">${group.trips.length} trip(s) â€¢ ${group.type === 'pdf' ? 'PDF' : 'Image'}</p>
             </div>
             <div class="group-card-meta">
                 <span class="group-total">${formatCurrency(totalValidAmount)}</span>
@@ -1346,7 +1355,7 @@ function renderGroupedResults() {
     });
 }
 
-// --- LÓGICA PARA EL GRÁFICO DE VIAJES ---
+// --- LÃ“GICA PARA EL GRÃFICO DE VIAJES ---
 
 const viewChartBtn = document.getElementById('viewChartBtn');
 const chartModal = document.getElementById('chartModal');
@@ -1365,13 +1374,13 @@ window.onclick = (event) => {
 };
 
 /**
- * --- FUNCIÓN PRINCIPAL: Actualiza y dibuja el calendario de viajes ---
+ * --- FUNCIÃ“N PRINCIPAL: Actualiza y dibuja el calendario de viajes ---
  */
 function updateTripCalendar() {
-    // 1. Filtrar solo los PDFs válidos
+    // 1. Filtrar solo los PDFs vÃ¡lidos
     const validPdfTrips = fileResults.filter(result => result.type === 'pdf' && result.isValid);
 
-    // 2. Agrupar los viajes por día
+    // 2. Agrupar los viajes por dÃ­a
     const tripsByDay = {};
     validPdfTrips.forEach(trip => {
         const day = trip.tripDate;
@@ -1430,7 +1439,7 @@ function updateTripCalendar() {
     const calendarTable = document.createElement('table');
     calendarTable.className = 'calendar-table';
 
-    // 6. Crear el encabezado de la tabla (días de la semana)
+    // 6. Crear el encabezado de la tabla (dÃ­as de la semana)
     const tableHeader = document.createElement('thead');
     const headerRow = document.createElement('tr');
     const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -1447,7 +1456,7 @@ function updateTripCalendar() {
     // 7. Crear el cuerpo de la tabla
     const tableBody = document.createElement('tbody');
 
-    // 8. Obtener el primer día del mes y el número de días en el mes
+    // 8. Obtener el primer dÃ­a del mes y el nÃºmero de dÃ­as en el mes
     const firstDay = new Date(currentYear, currentMonth, 1).getDay();
     const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
 
@@ -1460,10 +1469,10 @@ function updateTripCalendar() {
             const cell = document.createElement('td');
 
             if (i === 0 && j < firstDay) {
-                // Celdas vacías antes del primer día del mes
+                // Celdas vacÃ­as antes del primer dÃ­a del mes
                 cell.textContent = '';
             } else if (date > daysInMonth) {
-                // Celdas vacías después del último día del mes
+                // Celdas vacÃ­as despuÃ©s del Ãºltimo dÃ­a del mes
                 cell.textContent = '';
             } else {
                 // Celdas con fechas
@@ -1476,11 +1485,11 @@ function updateTripCalendar() {
                 const monthAbbrev = monthNames[currentMonth].substring(0, 3).toLowerCase();
                 const dayKey = `${date} ${monthAbbrev}`;
 
-                // Verificar si hay viajes para este día
+                // Verificar si hay viajes para este dÃ­a
                 if (tripsByDay[dayKey]) {
                     const trips = tripsByDay[dayKey];
 
-                    // Crear indicadores para cada dirección
+                    // Crear indicadores para cada direcciÃ³n
                     trips.forEach(trip => {
                         const indicator = document.createElement('div');
                         indicator.className = 'trip-indicator';
@@ -1491,7 +1500,7 @@ function updateTripCalendar() {
                             indicator.classList.add('office-to-home');
                         }
 
-                        // Añadir tooltip con la hora del viaje
+                        // AÃ±adir tooltip con la hora del viaje
                         if (trip.time) {
                             indicator.addEventListener('mouseenter', (e) => {
                                 let formattedTime = trip.time;
@@ -1521,7 +1530,7 @@ function updateTripCalendar() {
                         cell.appendChild(indicator);
                     });
                 } else {
-                    // No hay viajes para este día
+                    // No hay viajes para este dÃ­a
                     const indicator = document.createElement('div');
                     indicator.className = 'trip-indicator no-trip';
                     cell.appendChild(indicator);
@@ -1535,7 +1544,7 @@ function updateTripCalendar() {
 
         tableBody.appendChild(row);
 
-        // Si ya hemos mostrado todos los días del mes, no necesitamos más filas
+        // Si ya hemos mostrado todos los dÃ­as del mes, no necesitamos mÃ¡s filas
         if (date > daysInMonth) {
             break;
         }
@@ -1555,12 +1564,12 @@ function updateTripCalendar() {
 // Al final de script.js
 document.addEventListener('imageProcessed', (event) => {
     const { fileName, ocrText, imageDataURL } = event.detail;
-    // Llamamos a la función con la firma correcta
+    // Llamamos a la funciÃ³n con la firma correcta
     processImageWithAI(fileName, ocrText, imageDataURL);
 });
 
-// (Opcional) Escuchador para el resultado del análisis
+// (Opcional) Escuchador para el resultado del anÃ¡lisis
 document.addEventListener('patternAnalyzed', (event) => {
     const { result } = event.detail;
-    console.log("🎉 Notification from IA Module:", result);
+    console.log("ðŸŽ‰ Notification from IA Module:", result);
 });
