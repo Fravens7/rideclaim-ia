@@ -105,11 +105,8 @@ export async function processImageWithAI(fileName, ocrText, imageDataURL) {
             console.log(`✅ [IA-MODULE] Added ${data.trips.length} trips. Total accumulated: ${allExtractedTrips.length}. Images processed: ${processedImagesCount}`);
 
             // --- NEW: Update Frontend with AI Results ---
-            console.log('🔍 [IA-MODULE] Checking for updateTripResultsFromAI...', typeof window.updateTripResultsFromAI);
             if (typeof window !== 'undefined' && window.updateTripResultsFromAI) {
                 window.updateTripResultsFromAI(fileName, data.trips);
-            } else {
-                console.error('❌ [IA-MODULE] window.updateTripResultsFromAI is NOT defined!');
             }
         }
 

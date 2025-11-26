@@ -1,105 +1,142 @@
-/**
- * Schedule-based validation module
- * Provides secondary validation layer based on work schedule
- */
+// images-validation-ia.js
 
-/**
- * Convert time string to minutes since midnight
- * @param {string} timeStr - "11:38 AM" or "23:45"
- * @returns {number|null} - Minutes since midnight
- */
-export function timeToMinutes(timeStr) {
+// --- ESTADO PERSISTENTE DEL MÓDULO ---
+const allExtractedTrips = [];
+let processedImagesCount = 0;
+
+// --- FUNCIÓN AUXILIAR PARA ENVIAR A LA API QWEN ---
+async function extractWithQwen(base64Image, fileName, mimeType) {
+    const response = await fetch('/api/qwen', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: base64Image, fileName, mimeType })
+    });
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Server error: ${response.status} - ${errorText}`);
+    }
+    return await response.json();
+}
+
+// --- NUEVA FUNCIÓN DE ANÁLISIS BASADA EN FRECUENCIA ---
+function analyzeWorkSchedule(imageCount) {
+    console.log(`🧠 [PATTERN-DETECTOR] Analyzing patterns from ${allExtractedTrips.length} total trips...`);
+
+    // --- NUEVO: LOG DETALLADO DE CADA VIAJE ---
+    allExtractedTrips.forEach((trip, index) => {
+        console.log(`${index + 1}: Destination. ${trip.destination}. Time: ${trip.time}`);
+    });
+
+    // 1. OBTENER TODOS LOS VIAJES A LA OFICINA
+    const officeTrips = allExtractedTrips.filter(trip =>
+        trip.destination && trip.destination.toLowerCase().includes("mireka tower")
+    );
+
+    if (officeTrips.length === 0) {
+        console.log("📊 [PATTERN-DETECTOR] No trips to the office found yet.");
+        return;
+    }
+
+    // 2. CREAR UN MAPA DE FRECUENCIA PARA LAS HORAS DE INICIO
+    const startTimeFrequency = {};
+
+    officeTrips.forEach(trip => {
+        const timeInMinutes = timeToMinutes(trip.time);
+        if (timeInMinutes === null) return; // Ignorar si la hora es inválida
+
+        // Calcular la hora de llegada y la hora de inicio "en punto" a la que apunta
+        const arrivalTimeInMinutes = timeInMinutes + 15; // Sumar tiempo de viaje
+        const startHour = Math.floor(arrivalTimeInMinutes / 60) + 1;
+        const startTimeInMinutes = startHour * 60;
+        const startTimeKey = minutesToTime(startTimeInMinutes);
+
+        // Incrementar la frecuencia de esta hora de inicio
+        startTimeFrequency[startTimeKey] = (startTimeFrequency[startTimeKey] || 0) + 1;
+        console.log(`   -> Viaje a ${trip.destination} a las ${trip.time} apunta a inicio: ${startTimeKey}`);
+    });
+
+    // 3. ENCONTRAR LA HORA DE INICIO MÁS FRECUENTE (LA MODA)
+    let mostFrequentStartTime = null;
+    let maxCount = 0;
+
+    for (const time in startTimeFrequency) {
+        if (startTimeFrequency[time] > maxCount) {
+            maxCount = startTimeFrequency[time];
+            mostFrequentStartTime = time;
+        }
+    }
+
+    // 4. MOSTRAR RESULTADO FINAL (sin limpiar consola para mantener el histórico)
+    if (!mostFrequentStartTime) {
+        console.log(`(0)`);
+        console.log("No se pudo determinar un patrón de horario.");
+        return;
+    }
+
+    const finalStartTimeInMinutes = timeToMinutes(mostFrequentStartTime);
+    const finalEndTimeInMinutes = finalStartTimeInMinutes + (9 * 60);
+
+    console.log(`(${maxCount})`); // <-- El contador ahora es la frecuencia del patrón.
+    console.log("Start time: " + mostFrequentStartTime);
+    console.log("End time: " + minutesToTime(finalEndTimeInMinutes));
+}
+
+// --- FUNCIÓN PRINCIPAL DEL MÓDULO ---
+export async function processImageWithAI(fileName, ocrText, imageDataURL) {
+    console.log(`🤖 [IA-MODULE] Processing ${fileName}...`);
+    try {
+        const base64Image = imageDataURL.split(',')[1];
+        const qwenResult = await extractWithQwen(base64Image, fileName, 'image/jpeg');
+
+        const rawText = qwenResult.extractedText;
+        let cleanedText = rawText.trim();
+        if (cleanedText.startsWith('```json')) cleanedText = cleanedText.substring(7);
+        if (cleanedText.endsWith('```')) cleanedText = cleanedText.substring(0, cleanedText.length - 3);
+        cleanedText = cleanedText.trim();
+
+        const data = JSON.parse(cleanedText);
+
+        if (data.trips && Array.isArray(data.trips)) {
+            data.trips.forEach(trip => {
+                allExtractedTrips.push(trip);
+            });
+
+            processedImagesCount++;
+            console.log(`✅ [IA-MODULE] Added ${data.trips.length} trips. Total accumulated: ${allExtractedTrips.length}. Images processed: ${processedImagesCount}`);
+
+            // --- NEW: Update Frontend with AI Results ---
+            if (typeof window !== 'undefined' && window.updateTripResultsFromAI) {
+                window.updateTripResultsFromAI(fileName, data.trips);
+            }
+        }
+
+        analyzeWorkSchedule(processedImagesCount);
+
+    } catch (error) {
+        console.error(`❌ [IA-MODULE] Error processing ${fileName}:`, error);
+    }
+}
+
+// --- FUNCIONES AUXILIARES DE TIEMPO ---
+function timeToMinutes(timeStr) {
     if (!timeStr) return null;
-
-    // Handle 12-hour format (11:38 AM, 11:38 PM)
-    const match12h = timeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
-    if (match12h) {
-        let hours = parseInt(match12h[1], 10);
-        const minutes = parseInt(match12h[2], 10);
-        const period = match12h[3].toUpperCase();
-
-        if (period === 'PM' && hours !== 12) hours += 12;
-        if (period === 'AM' && hours === 12) hours = 0;
-
-        return hours * 60 + minutes;
-    }
-
-    // Handle 24-hour format (23:45)
-    const match24h = timeStr.match(/(\d{1,2}):(\d{2})/);
-    if (match24h) {
-        const hours = parseInt(match24h[1], 10);
-        const minutes = parseInt(match24h[2], 10);
-        return hours * 60 + minutes;
-    }
-
-    return null;
+    const match = timeStr.trim().match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+    if (!match) return null;
+    let [, hours, minutes, period] = match;
+    hours = parseInt(hours, 10);
+    minutes = parseInt(minutes, 10);
+    period = period.toUpperCase();
+    if (period === 'PM' && hours !== 12) hours += 12;
+    if (period === 'AM' && hours === 12) hours = 0;
+    return hours * 60 + minutes;
 }
 
-/**
- * Format minutes to HH:MM string
- * @param {number} minutes - Minutes since midnight
- * @returns {string} - Formatted time "HH:MM"
- */
-function formatMinutes(minutes) {
-    const h = Math.floor(minutes / 60) % 24;
-    const m = minutes % 60;
-    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-}
-
-/**
- * Validate trip based on work schedule
- * @param {string} tripTime - "11:38 AM"
- * @param {string} direction - "home-to-office" or "office-to-home"
- * @param {number} startHour - Work start hour (24h format)
- * @param {number} endHour - Work end hour (24h format)
- * @returns {object} - {isValid, reason}
- */
-export function validateTripBySchedule(tripTime, direction, startHour, endHour) {
-    const tripMinutes = timeToMinutes(tripTime);
-
-    if (tripMinutes === null) {
-        return { isValid: true, reason: 'No time available for validation' };
-    }
-
-    const startMinutes = startHour * 60;
-    const endMinutes = endHour * 60;
-
-    if (direction === 'home-to-office') {
-        // Valid window: 40 minutes before start to start time
-        const windowStart = startMinutes - 40;
-        const windowEnd = startMinutes;
-
-        if (tripMinutes >= windowStart && tripMinutes <= windowEnd) {
-            return { isValid: true, reason: 'Within office arrival window' };
-        } else {
-            return {
-                isValid: false,
-                reason: `Outside office window (${formatMinutes(windowStart)} - ${formatMinutes(windowEnd)})`
-            };
-        }
-    }
-
-    if (direction === 'office-to-home') {
-        // Valid window: from end time to 50 minutes after
-        const windowStart = endMinutes;
-        const windowEnd = endMinutes + 50;
-
-        // Handle midnight crossover (e.g., work ends at 23:00, valid until 23:50)
-        let adjustedTripMinutes = tripMinutes;
-        if (windowEnd >= 1440 && tripMinutes < 180) {
-            // If window crosses midnight and trip is in early morning (before 3 AM)
-            adjustedTripMinutes += 1440;
-        }
-
-        if (adjustedTripMinutes >= windowStart && adjustedTripMinutes <= windowEnd) {
-            return { isValid: true, reason: 'Within home departure window' };
-        } else {
-            return {
-                isValid: false,
-                reason: `Outside home window (${formatMinutes(windowStart)} - ${formatMinutes(windowEnd)})`
-            };
-        }
-    }
-
-    return { isValid: true, reason: 'No direction specified' };
+function minutesToTime(minutes) {
+    if (minutes >= 24 * 60) minutes -= 24 * 60;
+    const period = minutes >= 12 * 60 ? 'PM' : 'AM';
+    let displayHour = Math.floor(minutes / 60);
+    if (displayHour > 12) displayHour -= 12;
+    if (displayHour === 0) displayHour = 12;
+    const displayMinute = minutes % 60;
+    return `${displayHour}:${displayMinute.toString().padStart(2, '0')} ${period}`;
 }
