@@ -133,7 +133,7 @@ clearBtn.addEventListener('click', () => {
         map.remove();
         map = null;
     }
-    
+
     apiStatus.style.display = 'none';
     processedPdfNames.clear();      //clean pdf memory
     processedImageNames.clear();   //clean image or png memory
@@ -150,7 +150,7 @@ function handlePdfFiles(files) {
     }
     pdfFileList.style.display = 'block';
     pdfFileList.innerHTML = '';
-    
+
     pdfFilesArr.forEach(file => {
         // --- PASO 1: Revisar si ya fue procesado ---
         if (processedPdfNames.has(file.name)) {
@@ -158,7 +158,7 @@ function handlePdfFiles(files) {
             pdfFileList.appendChild(duplicateItem);
             return; // Detener el procesamiento para este archivo
         }
-        
+
         // --- PASO 2: ¡AÑADIR EL NOMBRE A LA MEMORIA! ---
         // Esta es la línea clave que probablemente te falta o está en el lugar equivocado.
         processedPdfNames.add(file.name);
@@ -198,31 +198,31 @@ function createDuplicateFileItem(file, type) {
 
 function processPdfFile(file, fileItem) {
     const fileReader = new FileReader();
-    fileReader.onload = function() {
+    fileReader.onload = function () {
         const typedarray = new Uint8Array(this.result);
-        pdfjsLib.getDocument(typedarray).promise.then(function(pdf) {
+        pdfjsLib.getDocument(typedarray).promise.then(function (pdf) {
             let totalPages = pdf.numPages;
             let fullText = '';
             let pagePromises = [];
             for (let i = 1; i <= totalPages; i++) {
-                pagePromises.push(pdf.getPage(i).then(function(page) {
-                    return page.getTextContent().then(function(textContent) {
+                pagePromises.push(pdf.getPage(i).then(function (page) {
+                    return page.getTextContent().then(function (textContent) {
                         let pageText = '';
-                        textContent.items.forEach(function(item) {
+                        textContent.items.forEach(function (item) {
                             pageText += item.str + ' ';
                         });
                         return pageText;
                     });
                 }));
             }
-            Promise.all(pagePromises).then(function(pageTexts) {
-                pageTexts.forEach(function(text) {
+            Promise.all(pagePromises).then(function (pageTexts) {
+                pageTexts.forEach(function (text) {
                     fullText += text + '\n';
                 });
                 const tripInfo = extractTripInfoFromPdf(fullText);
                 processExtractedText(file, fileItem, fullText, 'pdf', tripInfo);
             });
-        }).catch(function(error) {
+        }).catch(function (error) {
             console.error('Error processing PDF:', error);
             fileItem.className = 'file-item error';
             const fileStatus = fileItem.querySelector('.file-status');
@@ -238,14 +238,14 @@ function extractTripInfoFromPdf(text) {
     let origin = null;
     let destination = null;
     let tripTime = null;
-    
+
     const timePattern = /(\d{1,2}:\d{2})\s+([a-zA-Z0-9\s,]+Sri Lanka)/g;
     let match;
     const addresses = [];
     while ((match = timePattern.exec(text)) !== null) {
         addresses.push({ time: match[1], address: match[2].trim() });
     }
-    
+
     if (addresses.length >= 2) {
         origin = addresses[0].address;
         destination = addresses[1].address;
@@ -286,19 +286,19 @@ function handleImageFiles(files) {
     }
     imageFileList.style.display = 'block';
     imageFileList.innerHTML = '';
-    
+
     imageFilesArr.forEach(file => {
         if (processedImageNames.has(file.name)) {
             const duplicateItem = createDuplicateFileItem(file, 'image');
             imageFileList.appendChild(duplicateItem);
             return;
         }
-        
+
         processedImageNames.add(file.name);
 
         const fileItem = createFileItem(file, 'image');
         imageFileList.appendChild(fileItem);
-        
+
         // --- NUEVO: PASAMOS EL OBJETO FILE COMPLETO A processImageFile ---
         processImageFile(file, fileItem);
     });
@@ -312,15 +312,15 @@ function handleImageFiles(files) {
 // --- VERSIÓN CORREGIDA Y SIMPLIFICADA DE processImageFile ---
 function processImageFile(file, fileItem) {
     const fileReader = new FileReader();
-    fileReader.onload = function(e) {
+    fileReader.onload = function (e) {
         // --- CORRECCIÓN: Declaramos imageDataURL en el ámbito correcto ---
         const imageDataURL = e.target.result; // Ahora está disponible para img.onload
-        
+
         const img = new Image();
-        img.onload = async function() { // <-- Hacemos la función async
+        img.onload = async function () { // <-- Hacemos la función async
             const processedImgSrc = preprocessImage(img);
-            
-            const progressBar = fileItem.querySelector('.progress'); 
+
+            const progressBar = fileItem.querySelector('.progress');
             const fileStatus = fileItem.querySelector('.file-status');
 
             try {
@@ -334,53 +334,53 @@ function processImageFile(file, fileItem) {
                         }
                     }
                 });
-                
+
                 //console.log("Raw OCR Text:", text);
-                
+
                 // --- MODIFICADO: Publicamos el evento con el imageDataURL ---
                 console.log(`📢 [MAIN] Dispatching 'imageProcessed' event for ${file.name}`);
-                document.dispatchEvent(new CustomEvent('imageProcessed', { 
-                    detail: { 
+                document.dispatchEvent(new CustomEvent('imageProcessed', {
+                    detail: {
                         fileName: file.name, // Pasamos el nombre por separado
                         ocrText: text,
                         imageDataURL: imageDataURL // <-- PASAMOS EL DATAURL
-                    } 
+                    }
                 }));
-                
+
                 // --- PASO 3: CONTINUAR CON TU LÓGICA PRINCIPAL (sin cambios) ---
                 apiStatus.style.display = 'block';
                 apiStatus.className = 'api-status processing';
                 apiStatus.textContent = 'Processing with AI...';
-                
+
                 const trips = await extractTripsWithLLM(text);
                 console.log("Structured Data:", trips);
-                
+
                 // Ocultar estado de procesamiento
                 apiStatus.style.display = 'none';
-                
-                const fileDetails = document.createElement('div'); 
-                fileDetails.className = 'file-details'; 
-                fileDetails.textContent = `${trips.length} trip(s) found.`; 
+
+                const fileDetails = document.createElement('div');
+                fileDetails.className = 'file-details';
+                fileDetails.textContent = `${trips.length} trip(s) found.`;
                 fileItem.appendChild(fileDetails);
-                
+
                 let validTripsFound = 0;
                 trips.forEach((trip) => {
                     const validationResult = validateTrip(trip, 'image');
                     if (validationResult.isValid) validTripsFound++;
-                    
-                    fileResults.push({ 
-                        name: file.name, 
-                        type: 'image', 
-                        total: trip.total_lkr, 
-                        origin: trip.origin || 'Not specified', 
-                        destination: trip.destination, 
-                        isValid: validationResult.isValid, 
-                        validationDetails: validationResult.details, 
+
+                    fileResults.push({
+                        name: file.name,
+                        type: 'image',
+                        total: trip.total_lkr,
+                        origin: trip.origin || 'Not specified',
+                        destination: trip.destination,
+                        isValid: validationResult.isValid,
+                        validationDetails: validationResult.details,
                         text: text,
                         tripTime: trip.trip_time || null
                     });
                 });
-                
+
                 fileItem.className = validTripsFound > 0 ? 'file-item success' : 'file-item invalid';
                 fileStatus.className = `file-status ${validTripsFound > 0 ? 'status-success' : 'status-invalid'}`;
                 fileStatus.textContent = `Completed (${validTripsFound} valid)`;
@@ -457,7 +457,7 @@ async function extractTripsWithLLM(ocrText) {
     // --- NUEVO: LÓGICA PARA EXTRAER Y AÑADIR EL INCOMPLETO ---
     if (rebookCount > jsTrips.length) {
         console.warn(`⚠️ [SUPERVISIÓN] ¡Inconsistencia detectada! Se esperaban ${rebookCount} viajes, pero el parser solo extrajo ${jsTrips.length}.`);
-        
+
         const incompleteTrip = extractIncompleteTrip(ocrText);
         if (incompleteTrip) {
             jsTrips.push(incompleteTrip); // <-- ¡Añadimos el viaje incompleto al array!
@@ -497,7 +497,7 @@ function extractIncompleteTrip(ocrText) {
     // Iterar hacia atrás para encontrar el último "Rebook" incompleto
     for (let i = rebookIndices.length - 1; i >= 0; i--) {
         const rebookLineIndex = rebookIndices[i];
-        
+
         // Comprobar si hay un precio en las siguientes 3 líneas
         let hasPriceNearby = false;
         for (let j = rebookLineIndex + 1; j <= rebookLineIndex + 3 && j < lines.length; j++) {
@@ -525,10 +525,10 @@ function extractIncompleteTrip(ocrText) {
                     trip_time: timeMatch ? timeMatch[1] : null,
                     trip_date: dateMatch ? dateMatch[1] : null
                 };
-                
+
                 // Log simple y limpio
                 console.log(`⚠️ [RECIBO INCOMPLETO] Destino: "${incompleteTrip.destination}", Hora: "${incompleteTrip.trip_time}"`);
-                
+
                 return incompleteTrip;
             }
         }
@@ -536,7 +536,6 @@ function extractIncompleteTrip(ocrText) {
 
     return null; // No se encontró ningún recibo incompleto
 }
-
 /**
  * --- NUEVA FUNCIÓN: LIMPIADOR DE NOMBRES DE DESTINO ---
  * Usa una lista blanca para limpiar los nombres extraídos por el OCR.
@@ -544,9 +543,28 @@ function extractIncompleteTrip(ocrText) {
 function cleanDestinationName(rawDestination) {
     if (!rawDestination) return '';
 
-    const cleanedText = rawDestination.toLowerCase().trim();
+    let cleanedText = rawDestination.trim();
 
-    // Lista blanca de destinos conocidos y sus nombres limpios
+    // 1. Eliminar "Rebook" y todo lo que siga (case insensitive)
+    cleanedText = cleanedText.replace(/rebook[\s\S]*/i, '');
+
+    // 2. Eliminar patrones de fecha y hora que suelen aparecer al final
+    //    Ej: "Nov 24", "9:34 PM", "Oct 12 - 10:00 AM"
+    //    Buscamos meses abreviados seguidos de dígitos
+    cleanedText = cleanedText.replace(/\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2}[\s\S]*/i, '');
+
+    //    Buscamos horas (ej: 9:34 PM, 10:00am)
+    cleanedText = cleanedText.replace(/\d{1,2}:\d{2}\s*(?:am|pm)?[\s\S]*/i, '');
+
+    // 3. Limpieza final de caracteres basura al final de la cadena
+    //    Elimina cualquier cosa que no sea letra, número o paréntesis de cierre al final
+    cleanedText = cleanedText.replace(/[^a-zA-Z0-9)]+$/, '');
+
+    cleanedText = cleanedText.trim();
+
+    // --- LISTA BLANCA (WHITELIST) ---
+    // Si después de limpiar coincide con algo conocido, usamos el nombre canónico.
+    const lowerCleaned = cleanedText.toLowerCase();
     const knownDestinations = {
         'mireka tower': 'Mireka Tower',
         '43b lauries rd': '43b Lauries Rd',
@@ -556,26 +574,27 @@ function cleanDestinationName(rawDestination) {
         'ar exotics': 'AR Exotics Marine',
         'get u fit': 'Get U Fit Gym',
         'keells': 'Keells - Lauries',
-        'jungle juice': 'Jungle Juice Bar'
+        'jungle juice': 'Jungle Juice Bar',
+        'resistance gym': 'Resistance Gym',
+        'colombo bandaranaike international airport': 'Colombo Bandaranaike International Airport'
     };
 
-    // Busca si el texto sucio contiene alguno de nuestros destinos conocidos
     for (const keyword in knownDestinations) {
-        if (cleanedText.includes(keyword)) {
+        if (lowerCleaned.includes(keyword)) {
             return knownDestinations[keyword];
         }
     }
 
-    // Si no se encuentra en la lista blanca, devuelve el texto original.
-    // La validación posterior se encargará de marcarlo como inválido.
-    console.warn(`⚠️ No se pudo limpiar el destino: "${rawDestination}"`);
-    return rawDestination.trim();
-}
+    // Si no está en la whitelist, devolvemos el texto limpio "best effort"
+    // Esto permite nombres largos como el del aeropuerto si no estaba en la lista,
+    // o nombres nuevos, pero sin la basura de "Rebook", fechas, etc.
+    if (cleanedText.length < 3) {
+        console.warn(`⚠️ Destino demasiado corto tras limpieza: "${rawDestination}" -> "${cleanedText}"`);
+        return rawDestination.trim(); // Fallback al original si nos pasamos de limpieza
+    }
 
-/**
- * --- FUNCIÓN AUXILIAR: El parser de JavaScript ---
- * Usa regex para encontrar precios y luego lee hacia atrás para encontrar el destino.
- */
+    return cleanedText;
+}
 function parseTripsWithJS(text) {
     const trips = [];
     const lines = text.split('\n');
@@ -594,7 +613,7 @@ function parseTripsWithJS(text) {
     for (let i = 0; i < relevantPriceLines.length; i++) {
         const priceLineIndex = relevantPriceLines[i];
         const priceLine = lines[priceLineIndex];
-        
+
         const priceMatch = priceLine.match(priceRegex);
         let total_lkr = priceMatch[1].replace(/Q|O/g, '0').replace(/A/g, '4');
 
@@ -616,7 +635,7 @@ function parseTripsWithJS(text) {
 
         let destination = '';
         let tripTime = null;
-        
+
         // Extraer la hora del viaje
         for (let j = priceLineIndex - 5; j <= priceLineIndex + 5; j++) {
             if (j >= 0 && j < lines.length) {
@@ -627,7 +646,7 @@ function parseTripsWithJS(text) {
                 }
             }
         }
-        
+
         for (let j = priceLineIndex - 1; j >= 0; j--) {
             const lineAbove = lines[j].trim();
             if (priceRegex.test(lineAbove) || lineAbove.toLowerCase().includes('activity')) {
@@ -638,15 +657,15 @@ function parseTripsWithJS(text) {
             }
             destination = lineAbove + ' ' + destination;
         }
-        
+
         // --- CAMBIO CLAVE: AQUÍ USAMOS EL LIMPIADOR ---
         const cleanDestination = cleanDestinationName(destination);
-        
+
         if (cleanDestination) {
             trips.push({ destination: cleanDestination, total_lkr, status, trip_time: tripTime });
         }
     }
-    
+
     return trips;
 }
 
@@ -702,7 +721,7 @@ Text:
                 }
             }
         }
-        
+
         return tripsData;
 
     } catch (error) {
@@ -812,7 +831,7 @@ function processExtractedText(file, fileItem, text, type, tripInfo) {
     // --- INTENTO 1: Lógica principal para el formato común ---
     let totalMatch = text.match(/Total\s+([\d,.]+)\s+LKR/i);
     // --- INTENTO 2: Respaldo para formatos inusuales (solo si el primero falla) --
-    if(!totalMatch){
+    if (!totalMatch) {
         totalMatch = text.match(/Total\s+LKR\s*([\d,.]+)/i);
     }
     const total = totalMatch ? totalMatch[1] : null;
@@ -829,7 +848,7 @@ function processExtractedText(file, fileItem, text, type, tripInfo) {
             fileItem.className = 'file-item success';
             fileStatus.className = 'file-status status-success';
             fileStatus.textContent = 'Valid';
-            
+
             // NUEVO: Extraer información detallada del viaje solo para PDFs válidos
             if (type === 'pdf') {
                 const tripDetails = extractTripDetails(text);
@@ -841,14 +860,14 @@ function processExtractedText(file, fileItem, text, type, tripInfo) {
                 console.log(`Origin: ${tripDetails.origin}`);
                 console.log(`Destination: ${tripDetails.destination}`);
                 console.log(`=======================================`);
-                
+
                 // Guardar detalles del viaje en el objeto de resultados para validaciones futuras
                 const resultIndex = fileResults.findIndex(result => result.name === file.name);
                 if (resultIndex !== -1) {
                     fileResults[resultIndex].tripDetails = tripDetails;
                 }
             }
-            
+
             if (type === 'pdf' && validationResult.direction) displayMap(file.name, validationResult.direction);
         } else {
             fileItem.className = 'file-item invalid';
@@ -901,7 +920,7 @@ function extractTripDetails(text) {
         /(\d{1,2}\s+\w{3}\s+\d{4})/,    // 9 nov 2025
         /(\d{1,2}\/\d{1,2}\/\d{2,4})/    // 11/16/25
     ];
-    
+
     for (const pattern of datePatterns) {
         const match = text.match(pattern);
         if (match) {
@@ -917,7 +936,7 @@ function extractTripDetails(text) {
         /Detalles del viaje\s+(Tuk|Zip)/i,
         /(Tuk|Zip)\s+\d+.\d+\s+kilómetros/i
     ];
-    
+
     for (const pattern of transportPatterns) {
         const match = text.match(pattern);
         if (match) {
@@ -930,41 +949,41 @@ function extractTripDetails(text) {
     // Primero intentamos con el formato que incluye AM/PM
     let timeLocationPattern = /(\d{1,2}:\d{2}\s*(?:AM|PM|am|pm))\s+([A-Za-z0-9\s,]+Sri Lanka)/g;
     let matches = [...text.matchAll(timeLocationPattern)];
-    
+
     // Si no encontramos suficientes coincidencias, intentamos sin AM/PM
     if (matches.length < 2) {
         timeLocationPattern = /(\d{1,2}:\d{2})\s+([A-Za-z0-9\s,]+Sri Lanka)/g;
         matches = [...text.matchAll(timeLocationPattern)];
     }
-    
+
     if (matches.length >= 2) {
         // Ordenamos las horas para asegurar que startTime < endTime
         const timeData = matches.map(match => ({
             time: match[1],
             location: match[2].trim()
         }));
-        
+
         // Convertimos las horas a minutos para comparar
         const convertToMinutes = (timeStr) => {
             // Verificar si ya tiene AM/PM
             const hasAmPm = /am|pm/i.test(timeStr);
-            
+
             let [hours, minutes] = timeStr.split(':').map(Number);
-            
+
             // Si no tiene AM/PM, asumimos que es formato 24h
             if (!hasAmPm) {
                 return hours * 60 + minutes;
             }
-            
+
             // Si tiene AM/PM, convertimos a formato 24h
             const period = timeStr.match(/am|pm/i)[0].toLowerCase();
             const totalMinutes = (hours % 12) * 60 + minutes + (period === 'pm' ? 720 : 0);
             return totalMinutes;
         };
-        
+
         // Ordenamos por tiempo
         timeData.sort((a, b) => convertToMinutes(a.time) - convertToMinutes(b.time));
-        
+
         tripDetails.startTime = timeData[0].time;
         tripDetails.origin = timeData[0].location;
         tripDetails.endTime = timeData[timeData.length - 1].time;
@@ -1010,7 +1029,7 @@ function validateTrip(tripInfo, type) {
         }
         if (tripInfo.status === 'valid') {
             const destinationText = (tripInfo.destination || '').toLowerCase().trim();
-            const validPatterns = [ /^43b/, /^43d/, /^mireka/ ];
+            const validPatterns = [/^43b/, /^43d/, /^mireka/];
             const isDestinationValidByPattern = validPatterns.some(pattern => pattern.test(destinationText));
             if (isDestinationValidByPattern) {
                 // Determinar la dirección basada en el destino
@@ -1022,7 +1041,7 @@ function validateTrip(tripInfo, type) {
                 }
                 return { isValid: true, details: 'Valid (matches a valid destination pattern)', direction: direction };
             }
-            const staticValidDestinations = [ 'colombo 00400' ];
+            const staticValidDestinations = ['colombo 00400'];
             const isDestinationValidByList = staticValidDestinations.some(validDest => destinationText.includes(validDest));
             if (isDestinationValidByList) {
                 return { isValid: true, details: 'Valid (found in static list)', direction: null };
@@ -1154,7 +1173,7 @@ function updateResultsTable() {
         originCell.textContent = result.origin ? result.origin.substring(0, 50) + (result.origin.length > 50 ? '...' : '') : 'Not found';
         const destCell = document.createElement('td');
         destCell.textContent = result.destination ? result.destination.substring(0, 50) + (result.destination.length > 50 ? '...' : '') : 'Not found';
-        
+
         const totalCell = document.createElement('td');
         if (result.total && result.total !== '.' && result.total !== '.') {
             totalCell.textContent = `${result.total} LKR`;
@@ -1179,22 +1198,22 @@ function updateResultsTable() {
         validationBadge.className = badgeClass;
         validationBadge.textContent = badgeText;
         validationCell.appendChild(validationBadge);
-        
+
         const detailsDiv = document.createElement('div');
         detailsDiv.className = 'validation-details';
         detailsDiv.textContent = result.validationDetails || '';
         validationCell.appendChild(detailsDiv);
-        
+
         const actionsCell = document.createElement('td');
         const viewBtn = document.createElement('button');
         viewBtn.className = 'view-details-btn';
         viewBtn.textContent = 'View details';
-        viewBtn.onclick = function() {
+        viewBtn.onclick = function () {
             modalExtractedText.textContent = result.text;
             modal.style.display = 'block';
         };
         actionsCell.appendChild(viewBtn);
-        
+
         row.appendChild(nameCell);
         row.appendChild(typeCell);
         row.appendChild(originCell);
@@ -1203,11 +1222,11 @@ function updateResultsTable() {
         row.appendChild(validationCell);
         row.appendChild(actionsCell);
         resultsBody.appendChild(row);
-        
+
         if (result.total && result.total !== '.' && result.total !== '0.00' && result.isValid) {
             tableSum += parseAmount(result.total);
         }
-        
+
         if (result.isValid) {
             validCount++;
         } else {
@@ -1348,7 +1367,7 @@ window.onclick = (event) => {
 function updateTripCalendar() {
     // 1. Filtrar solo los PDFs válidos
     const validPdfTrips = fileResults.filter(result => result.type === 'pdf' && result.isValid);
-    
+
     // 2. Agrupar los viajes por día
     const tripsByDay = {};
     validPdfTrips.forEach(trip => {
@@ -1361,16 +1380,16 @@ function updateTripCalendar() {
             time: trip.tripTime
         });
     });
-    
+
     // 3. Generar el calendario HTML
     const calendarContainer = document.getElementById('tripCalendar');
     const monthNames = ["January", "February", "March", "April", "May", "June",
         "July", "August", "September", "October", "November", "December"];
-    
+
     // 4. Crear el encabezado del calendario
     const calendarHeader = document.createElement('div');
     calendarHeader.className = 'calendar-header';
-    
+
     const prevMonthBtn = document.createElement('button');
     prevMonthBtn.className = 'calendar-nav';
     prevMonthBtn.textContent = 'Previous';
@@ -1382,12 +1401,12 @@ function updateTripCalendar() {
         }
         updateTripCalendar();
     };
-    
+
     const monthYearLabel = document.createElement('h3');
     monthYearLabel.textContent = `${monthNames[currentMonth]} ${currentYear}`;
     monthYearLabel.style.textAlign = 'center';
     monthYearLabel.style.margin = '0';
-    
+
     const nextMonthBtn = document.createElement('button');
     nextMonthBtn.className = 'calendar-nav';
     nextMonthBtn.textContent = 'Next';
@@ -1399,44 +1418,44 @@ function updateTripCalendar() {
         }
         updateTripCalendar();
     };
-    
+
     calendarHeader.appendChild(prevMonthBtn);
     calendarHeader.appendChild(monthYearLabel);
     calendarHeader.appendChild(nextMonthBtn);
-    
+
     // 5. Crear la tabla del calendario
     const calendarTable = document.createElement('table');
     calendarTable.className = 'calendar-table';
-    
+
     // 6. Crear el encabezado de la tabla (días de la semana)
     const tableHeader = document.createElement('thead');
     const headerRow = document.createElement('tr');
     const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    
+
     weekDays.forEach(day => {
         const th = document.createElement('th');
         th.textContent = day;
         headerRow.appendChild(th);
     });
-    
+
     tableHeader.appendChild(headerRow);
     calendarTable.appendChild(tableHeader);
-    
+
     // 7. Crear el cuerpo de la tabla
     const tableBody = document.createElement('tbody');
-    
+
     // 8. Obtener el primer día del mes y el número de días en el mes
     const firstDay = new Date(currentYear, currentMonth, 1).getDay();
     const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
-    
+
     // 9. Crear las filas del calendario
     let date = 1;
     for (let i = 0; i < 6; i++) {
         const row = document.createElement('tr');
-        
+
         for (let j = 0; j < 7; j++) {
             const cell = document.createElement('td');
-            
+
             if (i === 0 && j < firstDay) {
                 // Celdas vacías antes del primer día del mes
                 cell.textContent = '';
@@ -1449,26 +1468,26 @@ function updateTripCalendar() {
                 dayNumber.className = 'day-number';
                 dayNumber.textContent = date;
                 cell.appendChild(dayNumber);
-                
+
                 // Obtener la fecha en formato "d mes" (ej. "1 nov")
                 const monthAbbrev = monthNames[currentMonth].substring(0, 3).toLowerCase();
                 const dayKey = `${date} ${monthAbbrev}`;
-                
+
                 // Verificar si hay viajes para este día
                 if (tripsByDay[dayKey]) {
                     const trips = tripsByDay[dayKey];
-                    
+
                     // Crear indicadores para cada dirección
                     trips.forEach(trip => {
                         const indicator = document.createElement('div');
                         indicator.className = 'trip-indicator';
-                        
+
                         if (trip.direction === 'home-to-office') {
                             indicator.classList.add('home-to-office');
                         } else if (trip.direction === 'office-to-home') {
                             indicator.classList.add('office-to-home');
                         }
-                        
+
                         // Añadir tooltip con la hora del viaje
                         if (trip.time) {
                             indicator.addEventListener('mouseenter', (e) => {
@@ -1490,12 +1509,12 @@ function updateTripCalendar() {
                                 tooltip.style.left = e.pageX + 10 + 'px';
                                 tooltip.style.top = e.pageY - 30 + 'px';
                             });
-                            
+
                             indicator.addEventListener('mouseleave', () => {
                                 tooltip.style.display = 'none';
                             });
                         }
-                        
+
                         cell.appendChild(indicator);
                     });
                 } else {
@@ -1504,23 +1523,23 @@ function updateTripCalendar() {
                     indicator.className = 'trip-indicator no-trip';
                     cell.appendChild(indicator);
                 }
-                
+
                 date++;
             }
-            
+
             row.appendChild(cell);
         }
-        
+
         tableBody.appendChild(row);
-        
+
         // Si ya hemos mostrado todos los días del mes, no necesitamos más filas
         if (date > daysInMonth) {
             break;
         }
     }
-    
+
     calendarTable.appendChild(tableBody);
-    
+
     // 10. Limpiar y actualizar el contenedor del calendario
     calendarContainer.innerHTML = '';
     calendarContainer.appendChild(calendarHeader);
