@@ -23,6 +23,11 @@ async function extractWithQwen(base64Image, fileName, mimeType) {
 function analyzeWorkSchedule(imageCount) {
     console.log(`🧠 [PATTERN-DETECTOR] Analyzing patterns from ${allExtractedTrips.length} total trips...`);
 
+    // --- NUEVO: LOG DETALLADO DE CADA VIAJE ---
+    allExtractedTrips.forEach((trip, index) => {
+        console.log(`${index + 1}: Destination. ${trip.destination}. Time: ${trip.time}`);
+    });
+
     // 1. OBTENER TODOS LOS VIAJES A LA OFICINA
     const officeTrips = allExtractedTrips.filter(trip =>
         trip.destination && trip.destination.toLowerCase().includes("mireka tower")
@@ -96,7 +101,7 @@ export async function processImageWithAI(fileName, ocrText, imageDataURL) {
             data.trips.forEach(trip => {
                 allExtractedTrips.push(trip);
             });
-            
+
             processedImagesCount++;
             console.log(`✅ [IA-MODULE] Added ${data.trips.length} trips. Total accumulated: ${allExtractedTrips.length}. Images processed: ${processedImagesCount}`);
         }
