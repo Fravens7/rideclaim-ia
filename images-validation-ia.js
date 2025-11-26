@@ -42,11 +42,11 @@ function analyzeWorkSchedule(imageCount) {
 
     officeTrips.forEach(trip => {
         const timeInMinutes = timeToMinutes(trip.time);
-        if (timeInMinutes === null) return; // Ignorar si la hora es inválida
+        if (timeInMinutes === null) return;
 
         // Calcular la hora de llegada y la hora de inicio "en punto" a la que apunta
         const arrivalTimeInMinutes = timeInMinutes + 15; // Sumar tiempo de viaje
-        const startHour = Math.floor(arrivalTimeInMinutes / 60) + 1;
+        const startHour = Math.round(arrivalTimeInMinutes / 60);
         const startTimeInMinutes = startHour * 60;
         const startTimeKey = minutesToTime(startTimeInMinutes);
 
