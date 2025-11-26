@@ -1557,3 +1557,76 @@ document.addEventListener('patternAnalyzed', (event) => {
     const { result } = event.detail;
     console.log("ðŸŽ‰ Notification from IA Module:", result);
 });
+
+// ============================================
+// SCHEDULE VALIDATION INTEGRATION
+// ============================================
+
+// Schedule state variable
+let workSchedule = null;
+
+// Schedule panel elements
+const applyScheduleBtn = document.getElementById('applySchedule');
+const scheduleConfig = document.getElementById('scheduleConfig');
+
+// Event listener for Apply Schedule button
+if (applyScheduleBtn) {
+    applyScheduleBtn.addEventListener('click', () => {
+        const startHour = parseInt(document.getElementById('startTime').value);
+        const endHour = parseInt(document.getElementById('endTime').value);
+        
+        if (isNaN(startHour) || isNaN(endHour)) {
+            alert('Please enter valid hours (0-23)');
+            return;
+        }
+        
+        if (startHour < 0 || startHour > 23 || endHour < 0 || endHour > 23) {
+            alert('Hours must be between 0 and 23');
+            return;
+        }
+        
+        workSchedule = { startHour, endHour };
+        console.log('✅ Schedule set:', startHour + ':00 - ' + endHour + ':00');
+        revalidateAllTripsWithSchedule();
+    });
+}
+
+// Revalidation function
+function revalidateAllTripsWithSchedule() {
+    if (!workSchedule) {
+        console.warn('⚠️ No schedule configured');
+        return;
+    }
+    
+    let revalidatedCount = 0;
+    
+    fileResults.forEach(result => {
+        if (result.isValid && result.tripTime && result.direction) {
+            const scheduleValidation = validateTripBySchedule(
+                result.tripTime,
+                result.direction,
+                workSchedule.startHour,
+                workSchedule.endHour
+            );
+            
+            if (!scheduleValidation.isValid) {
+                console.warn('⚠️ [SCHEDULE] Invalidating:', result.destination, 'at', result.tripTime);
+                console.warn('   Reason:', scheduleValidation.reason);
+                
+                result.isValid = false;
+                result.validationDetails += ' | ' + scheduleValidation.reason;
+                revalidatedCount++;
+            }
+        }
+    });
+    
+    console.log('✅ Revalidated ' + revalidatedCount + ' trips based on schedule');
+    updateResultsTable();
+}
+
+// Show schedule panel when processing images
+document.addEventListener('imageProcessed', () => {
+    if (scheduleConfig) {
+        scheduleConfig.style.display = 'block';
+    }
+});
