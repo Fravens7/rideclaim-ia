@@ -3,6 +3,8 @@
 // This file handles the UI logic for schedule validation
 // ============================================
 
+import { validateTripBySchedule } from './validation-schedule.js';
+
 // Wait for DOM to be ready
 document.addEventListener('DOMContentLoaded', () => {
     let workSchedule = null;
