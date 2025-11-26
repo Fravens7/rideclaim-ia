@@ -51,6 +51,21 @@ const closeBtn = document.querySelector('#detailsModal .close');
 const apiStatus = document.getElementById('apiStatus');
 const tooltip = document.getElementById('tooltip');
 const groupedViewBtn = document.getElementById('groupedViewBtn');
+const summaryTotalSpent = document.getElementById('summaryTotalSpent');
+const summaryTotalRides = document.getElementById('summaryTotalRides');
+const summaryActiveDays = document.getElementById('summaryActiveDays');
+const summaryImages = document.getElementById('summaryImages');
+
+let fileResults = [];
+let map = null;
+let processedPdfNames = new Set();
+let processedImageNames = new Set();
+let currentResultsView = 'grouped';
+
+setResultsView('grouped');
+updateSummaryCards(0, 0, 0, 0);
+
+// Event Listeners
 pdfTab.addEventListener('click', () => {
     pdfTab.classList.add('active');
     imageTab.classList.remove('active');
@@ -1574,17 +1589,17 @@ if (applyScheduleBtn) {
     applyScheduleBtn.addEventListener('click', () => {
         const startHour = parseInt(document.getElementById('startTime').value);
         const endHour = parseInt(document.getElementById('endTime').value);
-        
+
         if (isNaN(startHour) || isNaN(endHour)) {
             alert('Please enter valid hours (0-23)');
             return;
         }
-        
+
         if (startHour < 0 || startHour > 23 || endHour < 0 || endHour > 23) {
             alert('Hours must be between 0 and 23');
             return;
         }
-        
+
         workSchedule = { startHour, endHour };
         console.log('✅ Schedule set:', startHour + ':00 - ' + endHour + ':00');
         revalidateAllTripsWithSchedule();
@@ -1597,9 +1612,9 @@ function revalidateAllTripsWithSchedule() {
         console.warn('⚠️ No schedule configured');
         return;
     }
-    
+
     let revalidatedCount = 0;
-    
+
     fileResults.forEach(result => {
         if (result.isValid && result.tripTime && result.direction) {
             const scheduleValidation = validateTripBySchedule(
@@ -1608,18 +1623,18 @@ function revalidateAllTripsWithSchedule() {
                 workSchedule.startHour,
                 workSchedule.endHour
             );
-            
+
             if (!scheduleValidation.isValid) {
                 console.warn('⚠️ [SCHEDULE] Invalidating:', result.destination, 'at', result.tripTime);
                 console.warn('   Reason:', scheduleValidation.reason);
-                
+
                 result.isValid = false;
                 result.validationDetails += ' | ' + scheduleValidation.reason;
                 revalidatedCount++;
             }
         }
     });
-    
+
     console.log('✅ Revalidated ' + revalidatedCount + ' trips based on schedule');
     updateResultsTable();
 }
@@ -1630,3 +1645,4 @@ document.addEventListener('imageProcessed', () => {
         scheduleConfig.style.display = 'block';
     }
 });
+
