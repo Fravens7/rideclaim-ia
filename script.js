@@ -536,6 +536,7 @@ function extractIncompleteTrip(ocrText) {
 
     return null; // No se encontró ningún recibo incompleto
 }
+
 /**
  * --- NUEVA FUNCIÓN: LIMPIADOR DE NOMBRES DE DESTINO ---
  * Usa una lista blanca para limpiar los nombres extraídos por el OCR.
@@ -558,7 +559,11 @@ function cleanDestinationName(rawDestination) {
 
     // 3. Limpieza final de caracteres basura al final de la cadena
     //    Elimina cualquier cosa que no sea letra, número o paréntesis de cierre al final
+    //    Ahora también elimina basura separada por espacios como " ‘t"
     cleanedText = cleanedText.replace(/[^a-zA-Z0-9)]+$/, '');
+
+    //    Limpieza específica para basura común como " ‘t" o " .‘T" que queda tras el OCR
+    cleanedText = cleanedText.replace(/\s+['‘`][a-zA-Z0-9]*$/, '');
 
     cleanedText = cleanedText.trim();
 
@@ -573,10 +578,11 @@ function cleanDestinationName(rawDestination) {
         'seylan bank': 'Seylan Bank',
         'ar exotics': 'AR Exotics Marine',
         'get u fit': 'Get U Fit Gym',
+        'get ufitgym': 'Get U Fit Gym', // Variante detectada
         'keells': 'Keells - Lauries',
         'jungle juice': 'Jungle Juice Bar',
         'resistance gym': 'Resistance Gym',
-        'colombo bandaranaike international airport': 'Colombo Bandaranaike International Airport'
+        'colombo bandaranaike international airport': 'Bandaranaike Intl Airport' // Nombre acortado
     };
 
     for (const keyword in knownDestinations) {
@@ -586,8 +592,6 @@ function cleanDestinationName(rawDestination) {
     }
 
     // Si no está en la whitelist, devolvemos el texto limpio "best effort"
-    // Esto permite nombres largos como el del aeropuerto si no estaba en la lista,
-    // o nombres nuevos, pero sin la basura de "Rebook", fechas, etc.
     if (cleanedText.length < 3) {
         console.warn(`⚠️ Destino demasiado corto tras limpieza: "${rawDestination}" -> "${cleanedText}"`);
         return rawDestination.trim(); // Fallback al original si nos pasamos de limpieza
@@ -595,10 +599,16 @@ function cleanDestinationName(rawDestination) {
 
     return cleanedText;
 }
+
+/**
+ * --- FUNCIÓN AUXILIAR: El parser de JavaScript ---
+ * Usa regex para encontrar precios y luego lee hacia atrás para encontrar el destino.
+ */
 function parseTripsWithJS(text) {
     const trips = [];
     const lines = text.split('\n');
-    const priceRegex = /LKR\s*([0-9QOA.]+)/i;
+    // Regex actualizado para aceptar comas en el precio: 3,392.64
+    const priceRegex = /LKR\s*([0-9QOA.,]+)/i;
     const timeRegex = /(\d{1,2}:\d{2}\s*(?:am|pm)?)/i;
 
     const priceLineIndices = [];
@@ -615,7 +625,8 @@ function parseTripsWithJS(text) {
         const priceLine = lines[priceLineIndex];
 
         const priceMatch = priceLine.match(priceRegex);
-        let total_lkr = priceMatch[1].replace(/Q|O/g, '0').replace(/A/g, '4');
+        // Limpiamos OCR errors (Q->0, O->0, A->4) y eliminamos comas
+        let total_lkr = priceMatch[1].replace(/Q|O/g, '0').replace(/A/g, '4').replace(/,/g, '');
 
         if (!total_lkr.includes('.') && total_lkr.length > 2) {
             // Si el número no tiene punto y tiene más de 2 dígitos
@@ -624,11 +635,17 @@ function parseTripsWithJS(text) {
             total_lkr = total_lkr.slice(0, -2) + '.' + total_lkr.slice(-2);
         }
 
-
-
+        // Validación de precio mínimo (180 LKR)
+        const numericPrice = parseFloat(total_lkr);
         let status = 'valid';
+
+        if (isNaN(numericPrice) || numericPrice < 180) {
+            console.warn(`⚠️ Precio inválido o muy bajo detectado: ${total_lkr} (Original: ${priceMatch[1]})`);
+            status = 'invalid';
+        }
+
         if (priceLine.toLowerCase().includes('canceled')) {
-            status = 'valid';
+            status = 'valid'; // Mantener como válido si es cancelado (según lógica anterior, revisar si debe ser invalid)
         } else if (priceLine.toLowerCase().includes('view store')) {
             status = 'invalid';
         }
@@ -668,11 +685,6 @@ function parseTripsWithJS(text) {
 
     return trips;
 }
-
-/**
- * --- FUNCIÓN AUXILIAR: El fallback a la IA (simplificado) ---
- * Solo se llama si el parser JS falló.
- */
 async function parseTripsWithLLM(ocrText) {
     // Usamos el prompt "few-shot" que ya funcionaba bien
     const prompt = `
