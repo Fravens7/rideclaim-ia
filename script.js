@@ -1567,6 +1567,29 @@ document.addEventListener('imageProcessed', (event) => {
     processImageWithAI(fileName, ocrText, imageDataURL);
 });
 
+// Helper functions for summary calculations
+function calculateTotalSpent(results) {
+    return results.reduce((sum, r) => {
+        let val = 0;
+        // Handle both 'total' and 'price' fields, and string/number types
+        const priceStr = (r.total || r.price || '0').toString();
+        val = parseFloat(priceStr.replace(/,/g, ''));
+        return sum + (isNaN(val) ? 0 : val);
+    }, 0);
+}
+
+function calculateActiveDays(results) {
+    const dates = new Set();
+    results.forEach(r => {
+        // Try to find a valid date
+        const dateStr = r.date || r.tripDate;
+        if (dateStr && dateStr !== 'Not specified' && dateStr !== 'Unknown Date') {
+            dates.add(dateStr);
+        }
+    });
+    return dates.size;
+}
+
 // (Opcional) Escuchador para el resultado del anÃ¡lisis
 document.addEventListener('patternAnalyzed', (event) => {
     const { result } = event.detail;
