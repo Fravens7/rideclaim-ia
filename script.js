@@ -1,12 +1,3 @@
-// Al principio de script.js
-import { processImageWithAI } from './images-validation-ia.js';
-
-pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
-
-const staticLocations = {
-    home: { lat: 6.89535, lng: 79.85766 }, office: { lat: 6.882986650923001, lng: 79.86809890134177 }
-};
-
 const zoneKeywords = {
     home: ['43b', '43d', 'lauries'],
     office: ['mireka', 'havelock', '324']
