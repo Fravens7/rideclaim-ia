@@ -1542,97 +1542,88 @@ function updateTripCalendar() {
         // Si ya hemos mostrado todos los días del mes, no necesitamos más filas
         if (date > daysInMonth) {
             break;
-        }
-    }
+            fileResults.forEach(result => {
+                // Solo revalidamos si el viaje ya era válido por otros criterios (destino, precio)
+                // y si tenemos una hora de viaje extraída.
+                if (result.isValid && result.tripTime) {
+                    const tripMinutes = timeToMinutes(result.tripTime);
+                    if (tripMinutes === null) return;
 
-    calendarTable.appendChild(tableBody);
+                    let isTimeValid = true;
+                    let timeReason = "";
+                    const destinationLower = result.destination.toLowerCase();
 
-    const startMinutes = timeToMinutes(startTimeStr);
-    const endMinutes = timeToMinutes(endTimeStr);
+                    // REGLA 1: Viaje al TRABAJO (Mireka Tower)
+                    // Válido solo 60 minutos ANTES del inicio.
+                    if (destinationLower.includes("mireka tower")) {
+                        const validStartWindow = startMinutes - 60;
+                        const validEndWindow = startMinutes;
 
-    if (startMinutes === null || endMinutes === null) return;
+                        if (tripMinutes < validStartWindow || tripMinutes > validEndWindow) {
+                            isTimeValid = false;
+                            timeReason = `Outside work start window (${startTimeStr} - 60min)`;
+                        }
+                    }
+                    // REGLA 2: Viaje a CASA (Lauries Rd)
+                    // Válido solo DESPUÉS del fin.
+                    else if (destinationLower.includes("lauries rd")) {
+                        const validStartWindow = endMinutes;
+                        const validEndWindow = endMinutes + 240; // 4 hours margin
 
-    let revalidatedCount = 0;
+                        let adjustedTripMinutes = tripMinutes;
+                        if (validEndWindow >= 1440 && tripMinutes < 180) {
+                            adjustedTripMinutes += 1440;
+                        }
 
-    fileResults.forEach(result => {
-        // Solo revalidamos si el viaje ya era válido por otros criterios (destino, precio)
-        // y si tenemos una hora de viaje extraída.
-        if (result.isValid && result.tripTime) {
-            const tripMinutes = timeToMinutes(result.tripTime);
-            if (tripMinutes === null) return;
+                        if (adjustedTripMinutes < validStartWindow || adjustedTripMinutes > validEndWindow) {
+                            isTimeValid = false;
+                            timeReason = `Before work end time (${endTimeStr})`;
+                        }
+                    }
 
-            let isTimeValid = true;
-            let timeReason = "";
-            const destinationLower = result.destination.toLowerCase();
+                    if (!isTimeValid) {
+                        console.warn(`⚠️ [TIME-VALIDATION] Invalidating trip to ${result.destination} at ${result.tripTime}. Reason: ${timeReason}`);
+                        result.isValid = false;
+                        result.validationDetails = (result.validationDetails || []) + ` | Invalid Time: ${timeReason}`;
 
-            // REGLA 1: Viaje al TRABAJO (Mireka Tower)
-            // Válido solo 60 minutos ANTES del inicio.
-            if (destinationLower.includes("mireka tower")) {
-                const validStartWindow = startMinutes - 60;
-                const validEndWindow = startMinutes;
-
-                if (tripMinutes < validStartWindow || tripMinutes > validEndWindow) {
-                    isTimeValid = false;
-                    timeReason = `Outside work start window (${startTimeStr} - 60min)`;
-                }
-            }
-            // REGLA 2: Viaje a CASA (Lauries Rd)
-            // Válido solo DESPUÉS del fin.
-            else if (destinationLower.includes("lauries rd")) {
-                const validStartWindow = endMinutes;
-                const validEndWindow = endMinutes + 240; // 4 hours margin
-
-                let adjustedTripMinutes = tripMinutes;
-                if (validEndWindow >= 1440 && tripMinutes < 180) {
-                    adjustedTripMinutes += 1440;
-                }
-
-                if (adjustedTripMinutes < validStartWindow || adjustedTripMinutes > validEndWindow) {
-                    isTimeValid = false;
-                    timeReason = `Before work end time (${endTimeStr})`;
-                }
-            }
-
-            if (!isTimeValid) {
-                console.warn(`⚠️ [TIME-VALIDATION] Invalidating trip to ${result.destination} at ${result.tripTime}. Reason: ${timeReason}`);
-                result.isValid = false;
-                result.validationDetails = (result.validationDetails || []) + ` | Invalid Time: ${timeReason}`;
-
-                // Actualizar UI visualmente
-                const fileItem = document.getElementById(`file-${result.type}-${result.name.replace(/\s/g, '-')}`);
-                if (fileItem) {
-                    fileItem.className = 'file-item invalid';
-                    const fileStatus = fileItem.querySelector('.file-status');
-                    if (fileStatus) {
-                        fileStatus.className = 'file-status status-invalid';
-                        fileStatus.textContent = 'Invalid Time';
+                        // Actualizar UI visualmente
+                        const fileItem = document.getElementById(`file-${result.type}-${result.name.replace(/\s/g, '-')}`);
+                        if (fileItem) {
+                            fileItem.className = 'file-item invalid';
+                            const fileStatus = fileItem.querySelector('.file-status');
+                            if (fileStatus) {
+                                fileStatus.className = 'file-status status-invalid';
+                                fileStatus.textContent = 'Invalid Time';
+                            }
+                        }
+                        revalidatedCount++;
                     }
                 }
-                revalidatedCount++;
+            });
+
+            if (revalidatedCount > 0) {
+                console.log(`✅ [MAIN] Revalidated ${revalidatedCount} trips based on new schedule.`);
+                updateResultsTable(); // Refrescar tabla si está visible
+                // Recalcular resumen
+                const validCount = fileResults.filter(r => r.isValid).length;
+                const invalidCount = fileResults.length - validCount;
+                const totalAmount = fileResults.filter(r => r.isValid).reduce((sum, r) => sum + parseFloat(r.total || 0), 0);
+                updateSummaryCards(fileResults.length, validCount, invalidCount, totalAmount);
             }
         }
-    });
 
-    if (revalidatedCount > 0) {
-        console.log(`✅ [MAIN] Revalidated ${revalidatedCount} trips based on new schedule.`);
-        updateResultsTable(); // Refrescar tabla si está visible
-        // Recalcular resumen
-        const validCount = fileResults.filter(r => r.isValid).length;
-        const invalidCount = fileResults.length - validCount;
-        const totalAmount = fileResults.filter(r => r.isValid).reduce((sum, r) => sum + parseFloat(r.total || 0), 0);
-        updateSummaryCards(fileResults.length, validCount, invalidCount, totalAmount);
+        function timeToMinutes(timeStr) {
+            if (!timeStr) return null;
+            const match = timeStr.trim().match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+            if (!match) return null;
+            let [, hours, minutes, period] = match;
+            hours = parseInt(hours, 10);
+            minutes = parseInt(minutes, 10);
+            period = period.toUpperCase();
+            if (period === 'PM' && hours !== 12) hours += 12;
+            if (period === 'AM' && hours === 12) hours = 0;
+            return hours * 60 + minutes;
+        }
+
     }
-}
-
-function timeToMinutes(timeStr) {
-    if (!timeStr) return null;
-    const match = timeStr.trim().match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
-    if (!match) return null;
-    let [, hours, minutes, period] = match;
-    hours = parseInt(hours, 10);
-    minutes = parseInt(minutes, 10);
-    period = period.toUpperCase();
-    if (period === 'PM' && hours !== 12) hours += 12;
-    if (period === 'AM' && hours === 12) hours = 0;
-    return hours * 60 + minutes;
 }
