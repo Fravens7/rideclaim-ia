@@ -97,118 +97,39 @@ pdfUploadArea.addEventListener('drop', (e) => {
 
 imageFiles.addEventListener('change', handleImageFileSelect);
 imageUploadArea.addEventListener('dragover', (e) => {
-    e.preventDefault();
-    imageUploadArea.classList.add('dragover');
-});
-imageUploadArea.addEventListener('dragleave', () => {
-    imageUploadArea.classList.remove('dragover');
-});
-imageUploadArea.addEventListener('drop', (e) => {
-    e.preventDefault();
-    imageUploadArea.classList.remove('dragover');
-    if (e.dataTransfer.files.length) handleImageFiles(e.dataTransfer.files);
-});
-
-if (groupedViewBtn && tableViewBtn) {
-    groupedViewBtn.addEventListener('click', () => setResultsView('grouped'));
-    tableViewBtn.addEventListener('click', () => setResultsView('table'));
-}
-
-closeBtn.onclick = () => modal.style.display = 'none';
-window.onclick = (event) => {
-    if (event.target == modal) modal.style.display = 'none';
-};
-
-clearBtn.addEventListener('click', () => {
-    fileResults = [];
-    pdfFileList.innerHTML = '';
-    pdfFileList.style.display = 'none';
-    return;
-}
-    pdfFileList.style.display = 'block';
-pdfFileList.innerHTML = '';
-
-pdfFilesArr.forEach(file => {
-    // --- PASO 1: Revisar si ya fue procesado ---
-    if (processedPdfNames.has(file.name)) {
-        const duplicateItem = createDuplicateFileItem(file, 'pdf');
-        pdfFileList.appendChild(duplicateItem);
-        return; // Detener el procesamiento para este archivo
-    }
-
-    // --- PASO 2: ¡AÑADIR EL NOMBRE A LA MEMORIA! ---
-    // Esta es la línea clave que probablemente te falta o está en el lugar equivocado.
-    processedPdfNames.add(file.name);
-
-    // --- PASO 3: Procesar el archivo como nuevo ---
-    const fileItem = createFileItem(file, 'pdf');
-    pdfFileList.appendChild(fileItem);
-    processPdfFile(file, fileItem);
-});
-}
-
-/**
- * --- FUNCIÓN AUXILIAR: Crea un elemento visual para archivos duplicados ---
- */
-function createDuplicateFileItem(file, type) {
-    const fileItem = document.createElement('div');
-    fileItem.className = 'file-item invalid'; // Usa el estilo 'invalid' (amarillo)
-    fileItem.id = `file-${type}-${file.name.replace(/\s/g, '-')}`;
-
-    const fileHeader = document.createElement('div');
-    fileHeader.className = 'file-header';
-
-    const fileName = document.createElement('div');
-    fileName.className = 'file-name';
-    fileName.textContent = file.name;
-
-    const fileStatus = document.createElement('div');
-    fileStatus.className = 'file-status status-invalid';
-    fileStatus.textContent = 'Duplicate file ignored';
-
-    fileHeader.appendChild(fileName);
-    fileHeader.appendChild(fileStatus);
-    fileItem.appendChild(fileHeader);
-
-    return fileItem;
-}
-
-function processPdfFile(file, fileItem) {
-    const fileReader = new FileReader();
-    fileReader.onload = function () {
-        const typedarray = new Uint8Array(this.result);
-        pdfjsLib.getDocument(typedarray).promise.then(function (pdf) {
-            let totalPages = pdf.numPages;
-            let fullText = '';
-            let pagePromises = [];
-            for (let i = 1; i <= totalPages; i++) {
-                pagePromises.push(pdf.getPage(i).then(function (page) {
-                    return page.getTextContent().then(function (textContent) {
-                        let pageText = '';
-                        textContent.items.forEach(function (item) {
-                            pageText += item.str + ' ';
-                        });
-                        return pageText;
+    const typedarray = new Uint8Array(this.result);
+    pdfjsLib.getDocument(typedarray).promise.then(function (pdf) {
+        let totalPages = pdf.numPages;
+        let fullText = '';
+        let pagePromises = [];
+        for (let i = 1; i <= totalPages; i++) {
+            pagePromises.push(pdf.getPage(i).then(function (page) {
+                return page.getTextContent().then(function (textContent) {
+                    let pageText = '';
+                    textContent.items.forEach(function (item) {
+                        pageText += item.str + ' ';
                     });
-                }));
-            }
-            Promise.all(pagePromises).then(function (pageTexts) {
-                pageTexts.forEach(function (text) {
-                    fullText += text + '\n';
+                    return pageText;
                 });
-                const tripInfo = extractTripInfoFromPdf(fullText);
-                processExtractedText(file, fileItem, fullText, 'pdf', tripInfo);
+            }));
+        }
+        Promise.all(pagePromises).then(function (pageTexts) {
+            pageTexts.forEach(function (text) {
+                fullText += text + '\n';
             });
-        }).catch(function (error) {
-            console.error('Error processing PDF:', error);
-            fileItem.className = 'file-item error';
-            const fileStatus = fileItem.querySelector('.file-status');
-            fileStatus.className = 'file-status status-error';
-            fileStatus.textContent = 'Error processing';
-            mapContainer.style.display = 'none';
+            const tripInfo = extractTripInfoFromPdf(fullText);
+            processExtractedText(file, fileItem, fullText, 'pdf', tripInfo);
         });
-    };
-    fileReader.readAsArrayBuffer(file);
+    }).catch(function (error) {
+        console.error('Error processing PDF:', error);
+        fileItem.className = 'file-item error';
+        const fileStatus = fileItem.querySelector('.file-status');
+        fileStatus.className = 'file-status status-error';
+        fileStatus.textContent = 'Error processing';
+        mapContainer.style.display = 'none';
+    });
+};
+fileReader.readAsArrayBuffer(file);
 }
 
 function extractTripInfoFromPdf(text) {
@@ -1541,12 +1462,310 @@ function updateTripCalendar() {
 // Al final de script.js
 document.addEventListener('imageProcessed', (event) => {
     const { fileName, ocrText, imageDataURL } = event.detail;
-    // Llamamos a la función con la firma correcta
-    processImageWithAI(fileName, ocrText, imageDataURL);
-});
+    window.onclick = (event) => {
+        if (event.target == chartModal) chartModal.style.display = 'none';
+    };
 
-// (Opcional) Escuchador para el resultado del análisis
-document.addEventListener('patternAnalyzed', (event) => {
-    const { result } = event.detail;
-    console.log("🎉 Notification from IA Module:", result);
-});
+    /**
+     * --- FUNCIÓN PRINCIPAL: Actualiza y dibuja el calendario de viajes ---
+     */
+    function updateTripCalendar() {
+        // 1. Filtrar solo los PDFs válidos
+        const validPdfTrips = fileResults.filter(result => result.type === 'pdf' && result.isValid);
+
+        // 2. Agrupar los viajes por día
+        const tripsByDay = {};
+        validPdfTrips.forEach(trip => {
+            const day = trip.tripDate;
+            if (!tripsByDay[day]) {
+                tripsByDay[day] = [];
+            }
+            tripsByDay[day].push({
+                direction: trip.direction,
+                time: trip.tripTime
+            });
+        });
+
+        // 3. Generar el calendario HTML
+        const calendarContainer = document.getElementById('tripCalendar');
+        const monthNames = ["January", "February", "March", "April", "May", "June",
+            "July", "August", "September", "October", "November", "December"];
+
+        // 4. Crear el encabezado del calendario
+        const calendarHeader = document.createElement('div');
+        calendarHeader.className = 'calendar-header';
+
+        const prevMonthBtn = document.createElement('button');
+        prevMonthBtn.className = 'calendar-nav';
+        prevMonthBtn.textContent = 'Previous';
+        prevMonthBtn.onclick = () => {
+            currentMonth--;
+            if (currentMonth < 0) {
+                currentMonth = 11;
+                currentYear--;
+            }
+            updateTripCalendar();
+        };
+
+        const monthYearLabel = document.createElement('h3');
+        monthYearLabel.textContent = `${monthNames[currentMonth]} ${currentYear}`;
+        monthYearLabel.style.textAlign = 'center';
+        monthYearLabel.style.margin = '0';
+
+        const nextMonthBtn = document.createElement('button');
+        nextMonthBtn.className = 'calendar-nav';
+        nextMonthBtn.textContent = 'Next';
+        nextMonthBtn.onclick = () => {
+            currentMonth++;
+            if (currentMonth > 11) {
+                currentMonth = 0;
+                currentYear++;
+            }
+            updateTripCalendar();
+        };
+
+        calendarHeader.appendChild(prevMonthBtn);
+        calendarHeader.appendChild(monthYearLabel);
+        calendarHeader.appendChild(nextMonthBtn);
+
+        // 5. Crear la tabla del calendario
+        const calendarTable = document.createElement('table');
+        calendarTable.className = 'calendar-table';
+
+        // 6. Crear el encabezado de la tabla (días de la semana)
+        const tableHeader = document.createElement('thead');
+        const headerRow = document.createElement('tr');
+        const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+        weekDays.forEach(day => {
+            const th = document.createElement('th');
+            th.textContent = day;
+            headerRow.appendChild(th);
+        });
+
+        tableHeader.appendChild(headerRow);
+        calendarTable.appendChild(tableHeader);
+
+        // 7. Crear el cuerpo de la tabla
+        const tableBody = document.createElement('tbody');
+
+        // 8. Obtener el primer día del mes y el número de días en el mes
+        const firstDay = new Date(currentYear, currentMonth, 1).getDay();
+        const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+
+        // 9. Crear las filas del calendario
+        let date = 1;
+        for (let i = 0; i < 6; i++) {
+            const row = document.createElement('tr');
+
+            for (let j = 0; j < 7; j++) {
+                const cell = document.createElement('td');
+
+                if (i === 0 && j < firstDay) {
+                    // Celdas vacías antes del primer día del mes
+                    cell.textContent = '';
+                } else if (date > daysInMonth) {
+                    // Celdas vacías después del último día del mes
+                    cell.textContent = '';
+                } else {
+                    // Celdas con fechas
+                    const dayNumber = document.createElement('div');
+                    dayNumber.className = 'day-number';
+                    dayNumber.textContent = date;
+                    cell.appendChild(dayNumber);
+
+                    // Obtener la fecha en formato "d mes" (ej. "1 nov")
+                    const monthAbbrev = monthNames[currentMonth].substring(0, 3).toLowerCase();
+                    const dayKey = `${date} ${monthAbbrev}`;
+
+                    // Verificar si hay viajes para este día
+                    if (tripsByDay[dayKey]) {
+                        const trips = tripsByDay[dayKey];
+
+                        // Crear indicadores para cada dirección
+                        trips.forEach(trip => {
+                            const indicator = document.createElement('div');
+                            indicator.className = 'trip-indicator';
+
+                            if (trip.direction === 'home-to-office') {
+                                indicator.classList.add('home-to-office');
+                            } else if (trip.direction === 'office-to-home') {
+                                indicator.classList.add('office-to-home');
+                            }
+
+                            // Añadir tooltip con la hora del viaje
+                            if (trip.time) {
+                                indicator.addEventListener('mouseenter', (e) => {
+                                    let formattedTime = trip.time;
+                                    // Asegurarse de que la hora tenga formato am/pm si no lo tiene
+                                    if (!formattedTime.toLowerCase().includes('am') && !formattedTime.toLowerCase().includes('pm')) {
+                                        // Si no tiene am/pm, asumimos que es formato 24h y lo convertimos
+                                        const timeParts = formattedTime.split(':');
+                                        if (timeParts.length === 2) {
+                                            const hour = parseInt(timeParts[0]);
+                                            const minute = timeParts[1];
+                                            const period = hour >= 12 ? 'pm' : 'am';
+                                            const displayHour = hour > 12 ? hour - 12 : (hour === 0 ? 12 : hour);
+                                            formattedTime = `${displayHour}:${minute}${period}`;
+                                        }
+                                    }
+                                    tooltip.textContent = formattedTime;
+                                    tooltip.style.display = 'block';
+                                    tooltip.style.left = e.pageX + 10 + 'px';
+                                    tooltip.style.top = e.pageY - 30 + 'px';
+                                });
+
+                                indicator.addEventListener('mouseleave', () => {
+                                    tooltip.style.display = 'none';
+                                });
+                            }
+
+                            cell.appendChild(indicator);
+                        });
+                    } else {
+                        // No hay viajes para este día
+                        const indicator = document.createElement('div');
+                        indicator.className = 'trip-indicator no-trip';
+                        cell.appendChild(indicator);
+                    }
+
+                    date++;
+                }
+
+                row.appendChild(cell);
+            }
+
+            tableBody.appendChild(row);
+
+            // Si ya hemos mostrado todos los días del mes, no necesitamos más filas
+            if (date > daysInMonth) {
+                break;
+            }
+        }
+
+        calendarTable.appendChild(tableBody);
+
+        // 10. Limpiar y actualizar el contenedor del calendario
+        calendarContainer.innerHTML = '';
+        calendarContainer.appendChild(calendarHeader);
+        calendarContainer.appendChild(calendarTable);
+    }
+
+
+    // Al final de script.js
+
+    // Al final de script.js
+    document.addEventListener('imageProcessed', (event) => {
+        const { fileName, ocrText, imageDataURL } = event.detail;
+        // Llamamos a la función con la firma correcta
+        processImageWithAI(fileName, ocrText, imageDataURL);
+    });
+
+    // (Opcional) Escuchador para el resultado del análisis
+    document.addEventListener('patternAnalyzed', (event) => {
+        const { result } = event.detail;
+        console.log("🎉 Notification from IA Module:", result);
+    });
+
+    /**
+     * --- NUEVA FUNCIÓN: REVALIDAR VIAJES CON HORARIO ---
+     * Recorre todos los resultados y verifica si la hora del viaje coincide con el horario laboral.
+     */
+    function revalidateTripsWithSchedule(startTimeStr, endTimeStr) {
+        const startMinutes = timeToMinutes(startTimeStr);
+        const endMinutes = timeToMinutes(endTimeStr);
+
+        if (startMinutes === null || endMinutes === null) return;
+
+        let revalidatedCount = 0;
+
+        fileResults.forEach(result => {
+            // Solo revalidamos si el viaje ya era válido por otros criterios (destino, precio)
+            // y si tenemos una hora de viaje extraída.
+            if (result.isValid && result.tripTime) {
+                const tripMinutes = timeToMinutes(result.tripTime);
+                if (tripMinutes === null) return;
+
+                let isTimeValid = true;
+                let timeReason = "";
+
+                const destinationLower = result.destination.toLowerCase();
+
+                // REGLA 1: Viaje al TRABAJO (Mireka Tower)
+                // Válido solo 50 minutos ANTES del inicio.
+                // Ejemplo: Start 1:00 PM. Válido 12:10 PM - 1:00 PM.
+                if (destinationLower.includes("mireka tower")) {
+                    // Rango: [Start - 50, Start]
+                    const validStartWindow = startMinutes - 50;
+                    const validEndWindow = startMinutes;
+
+                    if (tripMinutes < validStartWindow || tripMinutes > validEndWindow) {
+                        isTimeValid = false;
+                        timeReason = `Outside work start window (${startTimeStr} - 50min)`;
+                    }
+                }
+                // REGLA 2: Viaje a CASA (Lauries Rd)
+                // Válido solo 50 minutos DESPUÉS del fin.
+                // Ejemplo: End 10:00 PM. Válido 10:00 PM - 10:50 PM.
+                else if (destinationLower.includes("lauries rd")) {
+                    // Rango: [End, End + 50]
+                    const validStartWindow = endMinutes;
+                    const validEndWindow = endMinutes + 50;
+
+                    // Manejo simple de cruce de medianoche (si End + 50 > 1440)
+                    // Si el viaje es muy temprano (ej: 00:10) y la ventana cruza medianoche
+                    let adjustedTripMinutes = tripMinutes;
+                    if (validEndWindow >= 1440 && tripMinutes < 180) { // Si ventana cruza y viaje es madrugada
+                        adjustedTripMinutes += 1440;
+                    }
+
+                    if (adjustedTripMinutes < validStartWindow || adjustedTripMinutes > validEndWindow) {
+                        isTimeValid = false;
+                        timeReason = `Outside return window (${endTimeStr} + 50min)`;
+                    }
+                }
+
+                if (!isTimeValid) {
+                    console.warn(`⚠️ [TIME-VALIDATION] Invalidating trip to ${result.destination} at ${result.tripTime}. Reason: ${timeReason}`);
+                    result.isValid = false;
+                    result.validationDetails = (result.validationDetails || []) + ` | Invalid Time: ${timeReason}`;
+
+                    // Actualizar UI visualmente
+                    const fileItem = document.getElementById(`file-${result.type}-${result.name.replace(/\s/g, '-')}`);
+                    if (fileItem) {
+                        fileItem.className = 'file-item invalid';
+                        const fileStatus = fileItem.querySelector('.file-status');
+                        if (fileStatus) {
+                            fileStatus.className = 'file-status status-invalid';
+                            fileStatus.textContent = 'Invalid Time';
+                        }
+                    }
+                    revalidatedCount++;
+                }
+            }
+        });
+
+        if (revalidatedCount > 0) {
+            console.log(`✅ [MAIN] Revalidated ${revalidatedCount} trips based on new schedule.`);
+            updateResultsTable(); // Refrescar tabla si está visible
+            // Recalcular resumen
+            const validCount = fileResults.filter(r => r.isValid).length;
+            const invalidCount = fileResults.length - validCount;
+            const totalAmount = fileResults.filter(r => r.isValid).reduce((sum, r) => sum + parseFloat(r.total || 0), 0);
+            updateSummaryCards(fileResults.length, validCount, invalidCount, totalAmount);
+        }
+    }
+
+    // Reutilizamos la función timeToMinutes de images-validation-ia.js o la duplicamos si no es accesible.
+    function timeToMinutes(timeStr) {
+        if (!timeStr) return null;
+        const match = timeStr.trim().match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+        if (!match) return null;
+        let [, hours, minutes, period] = match;
+        hours = parseInt(hours, 10);
+        minutes = parseInt(minutes, 10);
+        period = period.toUpperCase();
+        if (period === 'PM' && hours !== 12) hours += 12;
+        if (period === 'AM' && hours === 12) hours = 0;
+        return hours * 60 + minutes;
+    }

@@ -5,7 +5,6 @@ const allExtractedTrips = [];
 let processedImagesCount = 0;
 
 // --- FUNCIÓN AUXILIAR PARA ENVIAR A LA API QWEN ---
-// (Sin cambios)
 async function extractWithQwen(base64Image, fileName, mimeType) {
     const response = await fetch('/api/qwen', {
         method: 'POST',
@@ -71,6 +70,30 @@ function analyzeWorkSchedule(imageCount) {
     if (!mostFrequentStartTime) {
         console.log(`(0)`);
         console.log("No se pudo determinar un patrón de horario.");
+        return;
+    }
+
+    const finalStartTimeInMinutes = timeToMinutes(mostFrequentStartTime);
+    const finalEndTimeInMinutes = finalStartTimeInMinutes + (9 * 60);
+
+    console.log(`(${maxCount})`); // <-- El contador ahora es la frecuencia del patrón.
+    console.log("Start time: " + mostFrequentStartTime);
+    console.log("End time: " + minutesToTime(finalEndTimeInMinutes));
+
+    // --- NUEVO: EMITIR EVENTO CON EL HORARIO CALCULADO ---
+    console.log(`📢 [PATTERN-DETECTOR] Broadcasting schedule: ${mostFrequentStartTime} - ${minutesToTime(finalEndTimeInMinutes)}`);
+    document.dispatchEvent(new CustomEvent('scheduleUpdated', {
+        detail: {
+            startTime: mostFrequentStartTime,
+            endTime: minutesToTime(finalEndTimeInMinutes)
+        }
+    }));
+}
+
+// --- FUNCIÓN PRINCIPAL DEL MÓDULO ---
+export async function processImageWithAI(fileName, ocrText, imageDataURL) {
+    console.log(`🤖 [IA-MODULE] Processing ${fileName}...`);
+    try {
         const base64Image = imageDataURL.split(',')[1];
         const qwenResult = await extractWithQwen(base64Image, fileName, 'image/jpeg');
 
@@ -99,7 +122,6 @@ function analyzeWorkSchedule(imageCount) {
 }
 
 // --- FUNCIONES AUXILIARES DE TIEMPO ---
-// (Sin cambios)
 function timeToMinutes(timeStr) {
     if (!timeStr) return null;
     const match = timeStr.trim().match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
