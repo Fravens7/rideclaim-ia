@@ -51,6 +51,7 @@ const closeBtn = document.querySelector('#detailsModal .close');
 const apiStatus = document.getElementById('apiStatus');
 const tooltip = document.getElementById('tooltip');
 const groupedViewBtn = document.getElementById('groupedViewBtn');
+const tableViewBtn = document.getElementById('tableViewBtn');
 const summaryTotalSpent = document.getElementById('summaryTotalSpent');
 const summaryTotalRides = document.getElementById('summaryTotalRides');
 const summaryActiveDays = document.getElementById('summaryActiveDays');
