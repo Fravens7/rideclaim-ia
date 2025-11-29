@@ -202,186 +202,49 @@
 
             100% {
                 transform: rotate(360deg);
-            }
-        }
-    </style>
-</head>
 
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>🚗 RideClaim IA</h1>
-            <p>Sistema de validación de viajes con Qwen + Supabase</p>
-        </div>
+                async function loadTrips() {
+                    try {
+                        const response=await fetch('/api/get-validated-trips');
 
-        <div class="upload-section">
-            <h2>📸 Subir Recibo</h2>
-            <input type="file" id="imageInput" accept="image/*">
-            <div id="status"></div>
-        </div>
+                        if ( !response.ok) {
+                            throw new Error(`Error $ {
+                                    response.status
+                                }
 
-        <div id="summarySection" style="display: none;">
-            <div class="summary">
-                <div class="summary-card">
-                    <h3>Total de Viajes</h3>
-                    <div class="value" id="totalTrips">0</div>
-                </div>
-                <div class="summary-card valid">
-                    <h3>✅ Viajes Válidos</h3>
-                    <div class="value" id="validCount">0</div>
-                </div>
-                <div class="summary-card invalid">
-                    <h3>❌ Viajes Inválidos</h3>
-                    <div class="value" id="invalidCount">0</div>
-                </div>
-                <div class="summary-card valid">
-                    <h3>💰 Total Válido</h3>
-                    <div class="value">LKR <span id="totalValid">0.00</span></div>
-                </div>
-            </div>
-        </div>
+                                `);
+                        }
 
-        <div id="validTripsSection" class="trips-section valid" style="display: none;">
-            <h2>✅ Viajes Válidos</h2>
-            <table id="validTripsTable">
-                <thead>
-                    <tr>
-                        <th>Fecha</th>
-                        <th>Hora</th>
-                        <th>Destino</th>
-                        <th>Monto</th>
-                        <th>Tipo</th>
-                    </tr>
-                </thead>
-                <tbody></tbody>
-            </table>
-        </div>
+                        const data=await response.json();
+                        console.log('📊 Datos validados:', data);
 
-        <div id="invalidTripsSection" class="trips-section invalid" style="display: none;">
-            <h2>❌ Viajes Inválidos</h2>
-            <table id="invalidTripsTable">
-                <thead>
-                    <tr>
-                        <th>Fecha</th>
-                        <th>Hora</th>
-                        <th>Destino</th>
-                        <th>Monto</th>
-                        <th>Tipo</th>
-                    </tr>
-                </thead>
-                <tbody></tbody>
-            </table>
-        </div>
-    </div>
+                        // Actualizar resumen
+                        document.getElementById('totalTrips').textContent=data.summary.totalTrips;
+                        document.getElementById('validCount').textContent=data.summary.validCount;
+                        document.getElementById('invalidCount').textContent=data.summary.invalidCount;
+                        document.getElementById('totalValid').textContent=data.totalValid;
 
-    <script>
-        const imageInput = document.getElementById('imageInput');
-        const status = document.getElementById('status');
+                        // Mostrar secciones
+                        document.getElementById('summarySection').style.display='block';
 
-        // Cargar viajes al inicio
-        loadTrips();
+                        // Renderizar tablas
+                        renderTripsTable('validTripsTable', data.valid, 'validTripsSection');
+                        renderTripsTable('invalidTripsTable', data.invalid, 'invalidTripsSection');
 
-        imageInput.addEventListener('change', async (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
+                    }
 
-            console.log('📁 Archivo:', file.name);
-            status.className = 'loading';
-            status.textContent = '⏳ Procesando con Qwen y guardando en Supabase...';
 
-            try {
-                const base64 = await fileToBase64(file);
-
-                const response = await fetch('/api/qwen', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        image: base64,
-                        fileName: file.name,
-                        mimeType: file.type
-                    })
-                });
-
-                if (!response.ok) {
-                    throw new Error(`Error ${response.status}`);
+                    </span></td></tr>`).join('');
                 }
 
-                const result = await response.json();
-                console.log('✅ Respuesta:', result);
-
-                status.className = 'success';
-                status.textContent = '✅ Datos extraídos y guardados! Recargando...';
-
-                // Recargar viajes después de 1 segundo
-                setTimeout(loadTrips, 1000);
-
-            } catch (error) {
-                console.error('❌ Error:', error);
-                status.className = 'error';
-                status.textContent = `❌ Error: ${error.message}`;
-            }
-        });
-
-        async function loadTrips() {
-            try {
-                const response = await fetch('/api/get-validated-trips');
-                if (!response.ok) {
-                    throw new Error(`Error ${response.status}`);
+                function fileToBase64(file) {
+                    return new Promise((resolve, reject)=> {
+                            const reader=new FileReader();
+                            reader.onload=()=> resolve(reader.result.split(',')[1]);
+                            reader.onerror=reject;
+                            reader.readAsDataURL(file);
+                        });
                 }
 
-                const data = await response.json();
-                console.log('📊 Datos validados:', data);
-
-                // Actualizar resumen
-                document.getElementById('totalTrips').textContent = data.summary.totalTrips;
-                document.getElementById('validCount').textContent = data.summary.validCount;
-                document.getElementById('invalidCount').textContent = data.summary.invalidCount;
-                document.getElementById('totalValid').textContent = data.totalValid;
-
-                // Mostrar secciones
-                document.getElementById('summarySection').style.display = 'block';
-
-                // Renderizar tablas
-                renderTripsTable('validTripsTable', data.valid, 'validTripsSection');
-                renderTripsTable('invalidTripsTable', data.invalid, 'invalidTripsSection');
-
-            } catch (error) {
-                console.error('❌ Error cargando viajes:', error);
-            }
-        }
-
-        function renderTripsTable(tableId, trips, sectionId) {
-            const tbody = document.querySelector(`#${tableId} tbody`);
-            const section = document.getElementById(sectionId);
-
-            if (trips.length === 0) {
-                section.style.display = 'none';
-                return;
-            }
-
-            section.style.display = 'block';
-            tbody.innerHTML = trips.map(trip => `
-                <tr>
-                    <td>${trip.date || 'N/A'}</td>
-                    <td>${trip.time || 'N/A'}</td>
-                    <td>${trip.location || 'N/A'}</td>
-                    <td><strong>${trip.amount || 'N/A'}</strong></td>
-                    <td><span class="badge ${trip.type}">${trip.type || 'N/A'}</span></td>
-                </tr>
-            `).join('');
-        }
-
-        function fileToBase64(file) {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = () => resolve(reader.result.split(',')[1]);
-                reader.onerror = reject;
-                reader.readAsDataURL(file);
-            });
-        }
-
-        console.log('🚀 RideClaim IA cargado');
-    </script>
-</body>
-
-</html>
+                console.log('🚀 RideClaim IA cargado');
+                </script></body></html>
