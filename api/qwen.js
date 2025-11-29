@@ -31,34 +31,6 @@ export default async function handler(req, res) {
     // Calculate image hash for duplicate detection
     const imageHash = crypto.createHash('sha256').update(image).digest('hex');
     console.log("🔑 Image hash:", imageHash);
-
-    // Check for duplicates in Supabase
-    const supabaseUrl = process.env.SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_ANON_KEY;
-
-    if (supabaseUrl && supabaseKey) {
-      const supabase = createClient(supabaseUrl, supabaseKey);
-
-      const { data: existingTrips, error: checkError } = await supabase
-        .from('tripsimg')
-        .select('id')
-        .eq('image_hash', imageHash)
-        .limit(1);
-
-      if (checkError) {
-        console.error("⚠️ Error checking duplicates:", checkError);
-      } else if (existingTrips && existingTrips.length > 0) {
-        console.log("⚠️ Duplicate image detected, skipping processing");
-        return res.status(200).json({
-          extractedText: "Duplicate image - already processed",
-          fileName: fileName,
-          success: true,
-          duplicate: true,
-        });
-      }
-    }
-
-    const hfKey = process.env.HUGGINGFACE_API_KEY;
     console.log("🔑 API key check:", hfKey ? "Present" : "Missing");
 
     if (!hfKey) {

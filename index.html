@@ -162,13 +162,12 @@
         const status = document.getElementById('status');
         const analyzeBtn = document.getElementById('analyzeBtn');
         const scheduleStatus = document.getElementById('scheduleStatus');
-
-        let sessionTrips = []; // Clears on refresh
+        let sessionTrips = [];
 
         analyzeBtn.addEventListener('click', async () => {
             scheduleStatus.textContent = 'Analyzing...';
             try {
-                const res = await fetch('/api/infer-schedule');
+                const res = await fetch('/image/infer-schedule');
                 const data = await res.json();
                 if (data.success) {
                     document.getElementById('scheduleInfo').style.display = 'block';
@@ -204,7 +203,10 @@
 
                     if (result.duplicate) {
                         duplicates++;
-                    } else {
+                    }
+
+                    // Parse trips (works for both new and duplicate)
+                    if (result.extractedText) {
                         try {
                             let jsonText = result.extractedText.trim();
                             if (jsonText.startsWith('```json')) jsonText = jsonText.replace(/```json\n?/g, '').replace(/```\n?/g, '');
@@ -215,6 +217,7 @@
                             console.error('Parse error:', e);
                         }
                     }
+
                     processed++;
                 } catch (error) {
                     console.error(`Error: ${file.name}`, error);
