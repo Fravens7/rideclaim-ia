@@ -120,14 +120,23 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: false, error: "Invalid JSON format from AI" });
         }
 
-        // 6. Guardar en Supabase
+// 6. Guardar en Supabase
         if (supabaseUrl && supabaseKey) {
             const supabase = createClient(supabaseUrl, supabaseKey);
+            
+            // --- NUEVO: ASEGURAR QUE EL BATCH EXISTE ---
+            // Intentamos crear el batch primero. Si ya existe, no pasa nada.
+            const { error: batchError } = await supabase
+                .from('analysis_batches')
+                .upsert({ id: batchId, status: 'processing' }, { onConflict: 'id' });
+            
+            if (batchError) console.error("⚠️ Error creating batch:", batchError);
+            // -------------------------------------------
+
             // Asegurar que es array
             const tripsToSave = Array.isArray(tripsArray) ? tripsArray : [tripsArray];
 
             for (const trip of tripsToSave) {
-                // Validación mínima antes de guardar
                 if (trip.amount || trip.time) {
                     await supabase.from('tripsimg').insert({
                         batch_id: batchId,
