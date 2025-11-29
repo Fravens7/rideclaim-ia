@@ -8,36 +8,57 @@ export default async function handler(req, res) {
         const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
 
         // 1. Obtener Horario del Lote
-        const { data: schedules } = await supabase
+        const { data: schedules, error: scheduleError } = await supabase
             .from('employee_schedules')
             .select('*')
             .eq('batch_id', batchId);
         
+        if (scheduleError) console.error("⚠️ Error fetching schedule:", scheduleError);
         const schedule = schedules?.[0] || null;
 
         // 2. Obtener Viajes del Lote
-        const { data: trips } = await supabase
+        const { data: trips, error: tripsError } = await supabase
             .from('tripsimg')
             .select('*')
             .eq('batch_id', batchId)
-            .order('date', { ascending: true }); // Ordenar por fecha para leer mejor
+            .order('date', { ascending: true });
+
+        // PROTECCIÓN 1: Manejo de error de base de datos
+        if (tripsError) {
+            console.error("❌ Error fetching trips:", tripsError);
+            return res.status(500).json({ error: "Database error fetching trips" });
+        }
+
+        // PROTECCIÓN 2: Si no hay viajes, devolvemos array vacío en lugar de romper
+        if (!trips || trips.length === 0) {
+            return res.json({
+                valid: [], invalid: [], pending: [],
+                totalValid: "0.00",
+                summary: { validCount: 0, invalidCount: 0 }
+            });
+        }
 
         // 3. Validar uno por uno
         const valid = [], invalid = [], pending = [];
         let totalAmount = 0;
 
         trips.forEach(trip => {
-            const result = validateTrip(trip, schedule);
-            
-            const processedTrip = { ...trip, validation_reason: result.reason };
+            try {
+                const result = validateTrip(trip, schedule);
+                const processedTrip = { ...trip, validation_reason: result.reason };
 
-            if (result.status === 'valid') {
-                valid.push(processedTrip);
-                totalAmount += parseAmount(trip.amount);
-            } else if (result.status === 'invalid') {
-                invalid.push(processedTrip);
-            } else {
-                pending.push(processedTrip);
+                if (result.status === 'valid') {
+                    valid.push(processedTrip);
+                    totalAmount += parseAmount(trip.amount);
+                } else if (result.status === 'invalid') {
+                    invalid.push(processedTrip);
+                } else {
+                    pending.push(processedTrip);
+                }
+            } catch (innerError) {
+                console.error("⚠️ Error validating specific trip:", trip, innerError);
+                // Si falla un viaje específico, lo marcamos como error en lugar de tumbar toda la API
+                pending.push({ ...trip, validation_reason: "Internal processing error", status: 'pending' });
             }
         });
 
@@ -51,6 +72,7 @@ export default async function handler(req, res) {
         });
 
     } catch (err) {
+        console.error("💥 CRITICAL API ERROR:", err);
         return res.status(500).json({ error: err.message });
     }
 }
@@ -58,7 +80,6 @@ export default async function handler(req, res) {
 // --- LOGICA DE VALIDACIÓN ---
 function validateTrip(trip, schedule) {
     // 1. Validar Fecha (Estricto NOVIEMBRE)
-    // Buscamos "Nov" insensible a mayusculas
     if (!trip.date || !/Nov/i.test(trip.date)) {
         return { status: 'invalid', reason: 'Receipt not from November' };
     }
@@ -70,8 +91,10 @@ function validateTrip(trip, schedule) {
     }
 
     // 3. Validar Ubicación
-    const isOffice = trip.location && trip.location.includes('Mireka');
-    const isHome = trip.location && trip.location.includes('Lauries');
+    const location = trip.location || "";
+    // Búsqueda insensible a mayúsculas/minúsculas
+    const isOffice = /Mireka/i.test(location);
+    const isHome = /Lauries/i.test(location);
 
     if (!isOffice && !isHome) {
         return { status: 'invalid', reason: 'Unknown location' };
@@ -84,13 +107,14 @@ function validateTrip(trip, schedule) {
 
         const startMins = parseTime(schedule.work_start_time);
         const endMins = parseTime(schedule.work_end_time);
+        
+        // Si falló el parseo del horario del empleado, no podemos validar
+        if (startMins === null || endMins === null) {
+             return { status: 'pending', reason: 'Schedule time format error' };
+        }
 
-        // Ventanas de tolerancia
-        // Mañana: Entre (Entrada - 90min) y (Entrada + 30min) -> Ampliamos ventana para ser flexibles
         const morningStart = startMins - 90; 
         const morningEnd = startMins + 30;
-
-        // Tarde: Entre (Salida - 30min) y (Salida + 4 horas)
         const eveningStart = endMins - 30;
         const eveningEnd = endMins + 240;
 
@@ -109,30 +133,18 @@ function validateTrip(trip, schedule) {
         }
     }
 
-    // Si no hay horario aun (raro porque tenemos fallback), o falla algo más
     return { status: 'pending', reason: 'Awaiting schedule analysis' };
 }
 
+// PROTECCIÓN 3: Parseo de Monto seguro
 function parseAmount(str) {
     if (!str) return 0;
-    return parseFloat(str.replace(/[^0-9.]/g, '')) || 0;
+    // Convertimos a String primero por si viene como número desde la IA
+    return parseFloat(String(str).replace(/[^0-9.]/g, '')) || 0;
 }
 
+// PROTECCIÓN 4: Parseo de Hora seguro
 function parseTime(timeStr) {
     try {
-        const match = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
-        if (!match) return null;
-        let h = parseInt(match[1]), m = parseInt(match[2]);
-        if (match[3].toUpperCase() === 'PM' && h !== 12) h += 12;
-        if (match[3].toUpperCase() === 'AM' && h === 12) h = 0;
-        return h * 60 + m;
-    } catch { return null; }
-}
-
-function minutesToTime(minutes) {
-    let h = Math.floor(minutes / 60) % 24;
-    let m = Math.floor(minutes % 60);
-    const p = h >= 12 ? 'PM' : 'AM';
-    h = h % 12 || 12;
-    return `${h}:${String(m).padStart(2,'0')} ${p}`;
-}
+        if (!timeStr) return null;
+        const str = String(timeStr); // Aseg
