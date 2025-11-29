@@ -203,48 +203,9 @@
             100% {
                 transform: rotate(360deg);
 
-                async function loadTrips() {
-                    try {
-                        const response=await fetch('/api/get-validated-trips');
+                reader.readAsDataURL(file);
+            });
+        }
 
-                        if ( !response.ok) {
-                            throw new Error(`Error $ {
-                                    response.status
-                                }
-
-                                `);
-                        }
-
-                        const data=await response.json();
-                        console.log('📊 Datos validados:', data);
-
-                        // Actualizar resumen
-                        document.getElementById('totalTrips').textContent=data.summary.totalTrips;
-                        document.getElementById('validCount').textContent=data.summary.validCount;
-                        document.getElementById('invalidCount').textContent=data.summary.invalidCount;
-                        document.getElementById('totalValid').textContent=data.totalValid;
-
-                        // Mostrar secciones
-                        document.getElementById('summarySection').style.display='block';
-
-                        // Renderizar tablas
-                        renderTripsTable('validTripsTable', data.valid, 'validTripsSection');
-                        renderTripsTable('invalidTripsTable', data.invalid, 'invalidTripsSection');
-
-                    }
-
-
-                    </span></td></tr>`).join('');
-                }
-
-                function fileToBase64(file) {
-                    return new Promise((resolve, reject)=> {
-                            const reader=new FileReader();
-                            reader.onload=()=> resolve(reader.result.split(',')[1]);
-                            reader.onerror=reject;
-                            reader.readAsDataURL(file);
-                        });
-                }
-
-                console.log('🚀 RideClaim IA cargado');
-                </script></body></html>
+        console.log('🚀 RideClaim IA cargado');
+        </script></body></html>
