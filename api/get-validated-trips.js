@@ -2,10 +2,30 @@ import { createClient } from '@supabase/supabase-js';
 
 export default async function handler(req, res) {
     try {
-        const { batchId } = req.query;
-        if (!batchId) return res.status(400).json({ error: "Missing batchId" });
+        console.log("🔍 Starting validation request...");
 
-        const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+        // Validación de método
+        if (req.method !== "GET") {
+            return res.status(405).json({ error: "Method Not Allowed" });
+        }
+
+        const { batchId } = req.query;
+        
+        // Validación de batchId
+        if (!batchId) {
+            console.error("❌ Missing batchId");
+            return res.status(400).json({ error: "Missing batchId" });
+        }
+
+        const supabaseUrl = process.env.SUPABASE_URL;
+        const supabaseKey = process.env.SUPABASE_ANON_KEY;
+
+        if (!supabaseUrl || !supabaseKey) {
+            console.error("❌ Missing Supabase credentials");
+            return res.status(500).json({ error: "Server configuration error" });
+        }
+
+        const supabase = createClient(supabaseUrl, supabaseKey);
 
         // 1. Obtener Horario del Lote
         const { data: schedules, error: scheduleError } = await supabase
@@ -13,8 +33,11 @@ export default async function handler(req, res) {
             .select('*')
             .eq('batch_id', batchId);
         
-        if (scheduleError) console.error("⚠️ Error fetching schedule:", scheduleError);
-        const schedule = schedules?.[0] || null;
+        if (scheduleError) {
+            console.error("⚠️ Error fetching schedule:", scheduleError);
+        }
+        
+        const schedule = schedules && schedules.length > 0 ? schedules[0] : null;
 
         // 2. Obtener Viajes del Lote
         const { data: trips, error: tripsError } = await supabase
@@ -29,17 +52,21 @@ export default async function handler(req, res) {
             return res.status(500).json({ error: "Database error fetching trips" });
         }
 
-        // PROTECCIÓN 2: Si no hay viajes, devolvemos array vacío en lugar de romper
+        // PROTECCIÓN 2: Si no hay viajes, devolvemos array vacío
         if (!trips || trips.length === 0) {
-            return res.json({
-                valid: [], invalid: [], pending: [],
+            return res.status(200).json({
+                valid: [], 
+                invalid: [], 
+                pending: [],
                 totalValid: "0.00",
                 summary: { validCount: 0, invalidCount: 0 }
             });
         }
 
         // 3. Validar uno por uno
-        const valid = [], invalid = [], pending = [];
+        const valid = [];
+        const invalid = [];
+        const pending = [];
         let totalAmount = 0;
 
         trips.forEach(trip => {
@@ -56,28 +83,33 @@ export default async function handler(req, res) {
                     pending.push(processedTrip);
                 }
             } catch (innerError) {
-                console.error("⚠️ Error validating specific trip:", trip, innerError);
-                // Si falla un viaje específico, lo marcamos como error en lugar de tumbar toda la API
+                console.error("⚠️ Error validating trip:", trip.id, innerError);
                 pending.push({ ...trip, validation_reason: "Internal processing error", status: 'pending' });
             }
         });
 
-        return res.json({
-            valid, invalid, pending,
+        console.log(`✅ Validation complete. Valid: ${valid.length}, Invalid: ${invalid.length}`);
+
+        return res.status(200).json({
+            valid, 
+            invalid, 
+            pending,
             totalValid: totalAmount.toFixed(2),
             summary: {
                 validCount: valid.length,
-                invalidCount: invalid.length
+                invalidCount: invalid.length,
+                pendingCount: pending.length
             }
         });
 
     } catch (err) {
         console.error("💥 CRITICAL API ERROR:", err);
-        return res.status(500).json({ error: err.message });
+        return res.status(500).json({ error: err.message, stack: err.stack });
     }
 }
 
-// --- LOGICA DE VALIDACIÓN ---
+// --- FUNCIONES HELPER (FUERA DEL HANDLER) ---
+
 function validateTrip(trip, schedule) {
     // 1. Validar Fecha (Estricto NOVIEMBRE)
     if (!trip.date || !/Nov/i.test(trip.date)) {
@@ -92,7 +124,6 @@ function validateTrip(trip, schedule) {
 
     // 3. Validar Ubicación
     const location = trip.location || "";
-    // Búsqueda insensible a mayúsculas/minúsculas
     const isOffice = /Mireka/i.test(location);
     const isHome = /Lauries/i.test(location);
 
@@ -108,15 +139,15 @@ function validateTrip(trip, schedule) {
         const startMins = parseTime(schedule.work_start_time);
         const endMins = parseTime(schedule.work_end_time);
         
-        // Si falló el parseo del horario del empleado, no podemos validar
         if (startMins === null || endMins === null) {
              return { status: 'pending', reason: 'Schedule time format error' };
         }
 
+        // Ventanas de tolerancia
         const morningStart = startMins - 90; 
         const morningEnd = startMins + 30;
         const eveningStart = endMins - 30;
-        const eveningEnd = endMins + 240;
+        const eveningEnd = endMins + 240; // 4 horas después
 
         if (isOffice) {
             if (tripMins >= morningStart && tripMins <= morningEnd) {
@@ -136,15 +167,28 @@ function validateTrip(trip, schedule) {
     return { status: 'pending', reason: 'Awaiting schedule analysis' };
 }
 
-// PROTECCIÓN 3: Parseo de Monto seguro
 function parseAmount(str) {
     if (!str) return 0;
-    // Convertimos a String primero por si viene como número desde la IA
     return parseFloat(String(str).replace(/[^0-9.]/g, '')) || 0;
 }
 
-// PROTECCIÓN 4: Parseo de Hora seguro
 function parseTime(timeStr) {
     try {
         if (!timeStr) return null;
-        const str = String(timeStr); // Aseg
+        const str = String(timeStr);
+        const match = str.match(/(\d+):(\d+)\s*(AM|PM)/i);
+        if (!match) return null;
+        let h = parseInt(match[1]), m = parseInt(match[2]);
+        if (match[3].toUpperCase() === 'PM' && h !== 12) h += 12;
+        if (match[3].toUpperCase() === 'AM' && h === 12) h = 0;
+        return h * 60 + m;
+    } catch { return null; }
+}
+
+function minutesToTime(minutes) {
+    let h = Math.floor(minutes / 60) % 24;
+    let m = Math.floor(minutes % 60);
+    const p = h >= 12 ? 'PM' : 'AM';
+    h = h % 12 || 12;
+    return `${h}:${String(m).padStart(2,'0')} ${p}`;
+}
