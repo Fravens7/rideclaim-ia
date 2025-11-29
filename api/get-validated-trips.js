@@ -7,7 +7,7 @@ export default async function handler(req, res) {
 
         const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
 
-        // 1. Fetch Raw Trips
+        // 1. Obtener Viajes Crudos
         const { data: rawTrips, error } = await supabase
             .from('tripsimg')
             .select('*')
@@ -15,75 +15,94 @@ export default async function handler(req, res) {
 
         if (error || !rawTrips) return res.status(500).json({ error: "DB Error" });
 
-        // --- INTELLIGENT VALIDATION LOGIC ---
+        // --- LÓGICA NORMATIVA (STRICT 9-HOUR RULE) ---
 
-        const VALID_YEAR = "2025";
-        const VALID_MONTH = "Nov";
-        
-        // Step 1: Pre-Classification (Hard Filters)
-        // We separate trips into "Candidates for Schedule" and "Garbage"
-        let officeCandidates = [];
-        let homeCandidates = [];
+        // Fase 1: Filtros Duros (Ubicación, Precio, Fecha)
+        let officeArrivals = []; // Solo usaremos estos para calcular el horario
+        let allCandidates = [];
         let rejectedTrips = [];
 
         rawTrips.forEach(trip => {
             const reason = checkHardRules(trip);
             if (reason) {
-                // Failed Hard Rules (Date, Location, Price)
                 rejectedTrips.push({ ...trip, status: 'invalid', reason });
             } else {
-                // Passed Hard Rules -> This is a candidate for schedule calculation
+                // Es un candidato válido (pasó precio y lugar)
+                allCandidates.push(trip);
+                
+                // Si es un viaje HACIA la oficina, lo guardamos para el cálculo
                 if (isLocation(trip.location, 'office')) {
-                    officeCandidates.push(trip);
-                } else if (isLocation(trip.location, 'home')) {
-                    homeCandidates.push(trip);
+                    officeArrivals.push(trip);
                 }
             }
         });
 
-        // Step 2: Infer Schedule (The "Magic")
-        // We only use the valid candidates to calculate the time
-        const workStartTime = calculateMedianTime(officeCandidates);
-        const workEndTime = calculateMedianTime(homeCandidates);
+        // Fase 2: Inferencia del Horario Oficial (Rounding Up)
+        const schedule = inferOfficialSchedule(officeArrivals);
 
-        const scheduleText = (workStartTime && workEndTime) 
-            ? `${minutesToTime(workStartTime)} - ${minutesToTime(workEndTime)}` 
-            : "Insufficient Data";
-
-        // Step 3: Final Time Validation
-        // Now we check the "Candidates" against the calculated schedule
+        // Fase 3: Veredicto Final
         const validTrips = [];
         
-        // Validate Office Trips
-        officeCandidates.forEach(trip => {
-            if (validateTimeWindow(trip.time, workStartTime, -40, 30)) { // 40m before, 30m after
-                validTrips.push({ ...trip, status: 'valid', reason: 'Valid Morning Commute' });
+        allCandidates.forEach(trip => {
+            const isOffice = isLocation(trip.location, 'office');
+            const isHome = isLocation(trip.location, 'home');
+            let isValidTime = false;
+            let timeReason = "";
+
+            if (!schedule.start) {
+                // Si no hay suficientes datos para calcular horario, no podemos validar tiempo
+                // Opción A: Rechazar todo. Opción B: Dejar pendiente.
+                // Según tu regla estricta: si no sé tu horario, no puedo pagarte.
+                rejectedTrips.push({ ...trip, status: 'invalid', reason: "Insufficient office trips to determine shift" });
+                return;
+            }
+
+            const tripMins = parseTime(trip.time);
+
+            if (isOffice) {
+                // REGLA ENTRADA: Debe llegar ANTES o MUY CERCA de la hora de inicio
+                // Ventana: Desde 60 min antes hasta 10 min después (tolerancia tráfico)
+                // Ej: Inicio 1:00 PM. Válido: 12:00 PM a 1:10 PM.
+                const validStart = schedule.start - 60;
+                const validEnd = schedule.start + 10;
+                
+                if (tripMins >= validStart && tripMins <= validEnd) {
+                    isValidTime = true;
+                    timeReason = "Valid Morning Commute";
+                } else {
+                    timeReason = `Outside entry window (Shift starts ${minutesToTime(schedule.start)})`;
+                }
+            } 
+            
+            else if (isHome) {
+                // REGLA SALIDA ESTRICTA: Debe irse DESPUÉS de cumplir las 9 horas
+                // Ej: Salida 10:00 PM. Viaje 9:34 PM -> INVALID. Viaje 10:02 PM -> VALID.
+                // Tolerancia: 0 minutos antes. (O quizás 5 min de gracia? Dejo 0 por ahora).
+                
+                if (tripMins >= schedule.end) {
+                    isValidTime = true;
+                    timeReason = "Valid Evening Commute (Shift completed)";
+                } else {
+                    timeReason = `Left too early (Shift ends ${minutesToTime(schedule.end)})`;
+                }
+            }
+
+            if (isValidTime) {
+                validTrips.push({ ...trip, status: 'valid', reason: timeReason });
             } else {
-                rejectedTrips.push({ ...trip, status: 'invalid', reason: `Time mismatch (Exp: ${minutesToTime(workStartTime)})` });
+                rejectedTrips.push({ ...trip, status: 'invalid', reason: timeReason });
             }
         });
 
-        // Validate Home Trips
-        homeCandidates.forEach(trip => {
-            if (validateTimeWindow(trip.time, workEndTime, -30, 240)) { // 30m before, 4h after
-                validTrips.push({ ...trip, status: 'valid', reason: 'Valid Evening Commute' });
-            } else {
-                rejectedTrips.push({ ...trip, status: 'invalid', reason: `Time mismatch (Exp: ${minutesToTime(workEndTime)})` });
-            }
-        });
-
-        // Calculate Totals
+        // Totales
         const totalAmount = validTrips.reduce((sum, t) => sum + parseAmount(t.amount), 0);
+        const scheduleText = schedule.start 
+            ? `${minutesToTime(schedule.start)} - ${minutesToTime(schedule.end)} (9h Shift)` 
+            : "Unknown Schedule";
 
         return res.status(200).json({
-            trips: {
-                valid: validTrips,
-                invalid: rejectedTrips
-            },
-            summary: {
-                valid: validTrips.length,
-                invalid: rejectedTrips.length
-            },
+            trips: { valid: validTrips, invalid: rejectedTrips },
+            summary: { valid: validTrips.length, invalid: rejectedTrips.length },
             totalValid: totalAmount.toFixed(2),
             inferredSchedule: scheduleText
         });
@@ -94,22 +113,54 @@ export default async function handler(req, res) {
     }
 }
 
-// --- HELPER FUNCTIONS ---
+// --- LOGICA MATEMÁTICA PURA ---
+
+function inferOfficialSchedule(officeTrips) {
+    if (!officeTrips || officeTrips.length === 0) return { start: null, end: null };
+
+    // 1. Obtener minutos de llegada
+    const arrivalTimes = officeTrips
+        .map(t => parseTime(t.time))
+        .filter(m => m !== null)
+        .sort((a,b) => a - b);
+
+    if (arrivalTimes.length === 0) return { start: null, end: null };
+
+    // 2. Calcular Mediana de llegada real (Ej: 12:43 PM)
+    const mid = Math.floor(arrivalTimes.length / 2);
+    const medianArrival = arrivalTimes.length % 2 !== 0 
+        ? arrivalTimes[mid] 
+        : (arrivalTimes[mid - 1] + arrivalTimes[mid]) / 2;
+
+    // 3. PROYECCIÓN (ROUND UP): Redondear a la siguiente hora en punto
+    // Si la mediana es 12:43 (763 min) -> Dividir entre 60 -> 12.71 -> Ceil: 13 -> 13 * 60 = 780 (1:00 PM)
+    // Si la mediana es 12:10... ¿Debería ser 1:00 PM o 12:30? 
+    // Tu lógica sugiere que "intentan llegar antes". Asumiremos redondeo a la hora superior.
+    
+    const startHour = Math.ceil(medianArrival / 60); 
+    const officialStartMins = startHour * 60;
+
+    // 4. REGLA 9 HORAS
+    const officialEndMins = officialStartMins + (9 * 60); // + 540 minutos
+
+    return {
+        start: officialStartMins,
+        end: officialEndMins
+    };
+}
+
+// --- HELPERS BÁSICOS ---
 
 function checkHardRules(trip) {
-    // 1. Date Check
     if (!trip.date || !trip.date.includes('Nov')) return "Date not in Nov 2025";
-    
-    // 2. Price Check
     const amount = parseAmount(trip.amount);
     if (amount < 150 || amount > 600) return `Amount out of range (${amount})`;
-
-    // 3. Location Check
+    
     const isOffice = isLocation(trip.location, 'office');
     const isHome = isLocation(trip.location, 'home');
     if (!isOffice && !isHome) return "Invalid Location";
 
-    return null; // Passed
+    return null; 
 }
 
 function isLocation(text, type) {
@@ -117,29 +168,6 @@ function isLocation(text, type) {
     if (type === 'office') return /Mireka/i.test(text);
     if (type === 'home') return /Lauries/i.test(text);
     return false;
-}
-
-function validateTimeWindow(tripTimeStr, anchorMinutes, toleranceBefore, toleranceAfter) {
-    if (!anchorMinutes) return true; // If no schedule inferred, we might accept it (or fail it, depending on strictness. Here stricter is better: fail if no schedule)
-    
-    const tripMins = parseTime(tripTimeStr);
-    if (tripMins === null) return false;
-
-    const min = anchorMinutes + toleranceBefore;
-    const max = anchorMinutes + toleranceAfter;
-    
-    return tripMins >= min && tripMins <= max;
-}
-
-function calculateMedianTime(trips) {
-    if (!trips || trips.length === 0) return null;
-    const minutes = trips.map(t => parseTime(t.time)).filter(m => m !== null).sort((a,b) => a - b);
-    if (minutes.length === 0) return null;
-    
-    const mid = Math.floor(minutes.length / 2);
-    return minutes.length % 2 !== 0 
-        ? minutes[mid] 
-        : (minutes[mid - 1] + minutes[mid]) / 2;
 }
 
 function parseAmount(str) {
