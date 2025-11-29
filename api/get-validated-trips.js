@@ -2,181 +2,153 @@ import { createClient } from '@supabase/supabase-js';
 
 export default async function handler(req, res) {
     try {
-        console.log("🔍 Starting validation request...");
-
-        // Validación de método
-        if (req.method !== "GET") {
-            return res.status(405).json({ error: "Method Not Allowed" });
-        }
-
         const { batchId } = req.query;
-        
-        // Validación de batchId
-        if (!batchId) {
-            console.error("❌ Missing batchId");
-            return res.status(400).json({ error: "Missing batchId" });
-        }
+        if (!batchId) return res.status(400).json({ error: "Missing batchId" });
 
-        const supabaseUrl = process.env.SUPABASE_URL;
-        const supabaseKey = process.env.SUPABASE_ANON_KEY;
+        const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
 
-        if (!supabaseUrl || !supabaseKey) {
-            console.error("❌ Missing Supabase credentials");
-            return res.status(500).json({ error: "Server configuration error" });
-        }
-
-        const supabase = createClient(supabaseUrl, supabaseKey);
-
-        // 1. Obtener Horario del Lote
-        const { data: schedules, error: scheduleError } = await supabase
-            .from('employee_schedules')
-            .select('*')
-            .eq('batch_id', batchId);
-        
-        if (scheduleError) {
-            console.error("⚠️ Error fetching schedule:", scheduleError);
-        }
-        
-        const schedule = schedules && schedules.length > 0 ? schedules[0] : null;
-
-        // 2. Obtener Viajes del Lote
-        const { data: trips, error: tripsError } = await supabase
+        // 1. Fetch Raw Trips
+        const { data: rawTrips, error } = await supabase
             .from('tripsimg')
             .select('*')
-            .eq('batch_id', batchId)
-            .order('date', { ascending: true });
+            .eq('batch_id', batchId);
 
-        // PROTECCIÓN 1: Manejo de error de base de datos
-        if (tripsError) {
-            console.error("❌ Error fetching trips:", tripsError);
-            return res.status(500).json({ error: "Database error fetching trips" });
-        }
+        if (error || !rawTrips) return res.status(500).json({ error: "DB Error" });
 
-        // PROTECCIÓN 2: Si no hay viajes, devolvemos array vacío
-        if (!trips || trips.length === 0) {
-            return res.status(200).json({
-                valid: [], 
-                invalid: [], 
-                pending: [],
-                totalValid: "0.00",
-                summary: { validCount: 0, invalidCount: 0 }
-            });
-        }
+        // --- INTELLIGENT VALIDATION LOGIC ---
 
-        // 3. Validar uno por uno
-        const valid = [];
-        const invalid = [];
-        const pending = [];
-        let totalAmount = 0;
+        const VALID_YEAR = "2025";
+        const VALID_MONTH = "Nov";
+        
+        // Step 1: Pre-Classification (Hard Filters)
+        // We separate trips into "Candidates for Schedule" and "Garbage"
+        let officeCandidates = [];
+        let homeCandidates = [];
+        let rejectedTrips = [];
 
-        trips.forEach(trip => {
-            try {
-                const result = validateTrip(trip, schedule);
-                const processedTrip = { ...trip, validation_reason: result.reason };
-
-                if (result.status === 'valid') {
-                    valid.push(processedTrip);
-                    totalAmount += parseAmount(trip.amount);
-                } else if (result.status === 'invalid') {
-                    invalid.push(processedTrip);
-                } else {
-                    pending.push(processedTrip);
+        rawTrips.forEach(trip => {
+            const reason = checkHardRules(trip);
+            if (reason) {
+                // Failed Hard Rules (Date, Location, Price)
+                rejectedTrips.push({ ...trip, status: 'invalid', reason });
+            } else {
+                // Passed Hard Rules -> This is a candidate for schedule calculation
+                if (isLocation(trip.location, 'office')) {
+                    officeCandidates.push(trip);
+                } else if (isLocation(trip.location, 'home')) {
+                    homeCandidates.push(trip);
                 }
-            } catch (innerError) {
-                console.error("⚠️ Error validating trip:", trip.id, innerError);
-                pending.push({ ...trip, validation_reason: "Internal processing error", status: 'pending' });
             }
         });
 
-        console.log(`✅ Validation complete. Valid: ${valid.length}, Invalid: ${invalid.length}`);
+        // Step 2: Infer Schedule (The "Magic")
+        // We only use the valid candidates to calculate the time
+        const workStartTime = calculateMedianTime(officeCandidates);
+        const workEndTime = calculateMedianTime(homeCandidates);
+
+        const scheduleText = (workStartTime && workEndTime) 
+            ? `${minutesToTime(workStartTime)} - ${minutesToTime(workEndTime)}` 
+            : "Insufficient Data";
+
+        // Step 3: Final Time Validation
+        // Now we check the "Candidates" against the calculated schedule
+        const validTrips = [];
+        
+        // Validate Office Trips
+        officeCandidates.forEach(trip => {
+            if (validateTimeWindow(trip.time, workStartTime, -40, 30)) { // 40m before, 30m after
+                validTrips.push({ ...trip, status: 'valid', reason: 'Valid Morning Commute' });
+            } else {
+                rejectedTrips.push({ ...trip, status: 'invalid', reason: `Time mismatch (Exp: ${minutesToTime(workStartTime)})` });
+            }
+        });
+
+        // Validate Home Trips
+        homeCandidates.forEach(trip => {
+            if (validateTimeWindow(trip.time, workEndTime, -30, 240)) { // 30m before, 4h after
+                validTrips.push({ ...trip, status: 'valid', reason: 'Valid Evening Commute' });
+            } else {
+                rejectedTrips.push({ ...trip, status: 'invalid', reason: `Time mismatch (Exp: ${minutesToTime(workEndTime)})` });
+            }
+        });
+
+        // Calculate Totals
+        const totalAmount = validTrips.reduce((sum, t) => sum + parseAmount(t.amount), 0);
 
         return res.status(200).json({
-            valid, 
-            invalid, 
-            pending,
-            totalValid: totalAmount.toFixed(2),
+            trips: {
+                valid: validTrips,
+                invalid: rejectedTrips
+            },
             summary: {
-                validCount: valid.length,
-                invalidCount: invalid.length,
-                pendingCount: pending.length
-            }
+                valid: validTrips.length,
+                invalid: rejectedTrips.length
+            },
+            totalValid: totalAmount.toFixed(2),
+            inferredSchedule: scheduleText
         });
 
     } catch (err) {
-        console.error("💥 CRITICAL API ERROR:", err);
-        return res.status(500).json({ error: err.message, stack: err.stack });
+        console.error("Critical Error:", err);
+        return res.status(500).json({ error: err.message });
     }
 }
 
-// --- FUNCIONES HELPER (FUERA DEL HANDLER) ---
+// --- HELPER FUNCTIONS ---
 
-function validateTrip(trip, schedule) {
-    // 1. Validar Fecha (Estricto NOVIEMBRE)
-    if (!trip.date || !/Nov/i.test(trip.date)) {
-        return { status: 'invalid', reason: 'Receipt not from November' };
-    }
+function checkHardRules(trip) {
+    // 1. Date Check
+    if (!trip.date || !trip.date.includes('Nov')) return "Date not in Nov 2025";
+    
+    // 2. Price Check
+    const amount = parseAmount(trip.amount);
+    if (amount < 150 || amount > 600) return `Amount out of range (${amount})`;
 
-    // 2. Validar Monto (150 - 600 LKR)
-    const amt = parseAmount(trip.amount);
-    if (amt < 150 || amt > 600) {
-        return { status: 'invalid', reason: `Amount out of range (${amt})` };
-    }
+    // 3. Location Check
+    const isOffice = isLocation(trip.location, 'office');
+    const isHome = isLocation(trip.location, 'home');
+    if (!isOffice && !isHome) return "Invalid Location";
 
-    // 3. Validar Ubicación
-    const location = trip.location || "";
-    const isOffice = /Mireka/i.test(location);
-    const isHome = /Lauries/i.test(location);
+    return null; // Passed
+}
 
-    if (!isOffice && !isHome) {
-        return { status: 'invalid', reason: 'Unknown location' };
-    }
+function isLocation(text, type) {
+    if (!text) return false;
+    if (type === 'office') return /Mireka/i.test(text);
+    if (type === 'home') return /Lauries/i.test(text);
+    return false;
+}
 
-    // 4. Validar Horario (Si existe schedule)
-    if (schedule && trip.time) {
-        const tripMins = parseTime(trip.time);
-        if (tripMins === null) return { status: 'pending', reason: 'Invalid time format' };
+function validateTimeWindow(tripTimeStr, anchorMinutes, toleranceBefore, toleranceAfter) {
+    if (!anchorMinutes) return true; // If no schedule inferred, we might accept it (or fail it, depending on strictness. Here stricter is better: fail if no schedule)
+    
+    const tripMins = parseTime(tripTimeStr);
+    if (tripMins === null) return false;
 
-        const startMins = parseTime(schedule.work_start_time);
-        const endMins = parseTime(schedule.work_end_time);
-        
-        if (startMins === null || endMins === null) {
-             return { status: 'pending', reason: 'Schedule time format error' };
-        }
+    const min = anchorMinutes + toleranceBefore;
+    const max = anchorMinutes + toleranceAfter;
+    
+    return tripMins >= min && tripMins <= max;
+}
 
-        // Ventanas de tolerancia
-        const morningStart = startMins - 90; 
-        const morningEnd = startMins + 30;
-        const eveningStart = endMins - 30;
-        const eveningEnd = endMins + 240; // 4 horas después
-
-        if (isOffice) {
-            if (tripMins >= morningStart && tripMins <= morningEnd) {
-                return { status: 'valid', reason: 'Morning commute match' };
-            }
-            return { status: 'invalid', reason: `Outside morning window (${minutesToTime(morningStart)}-${minutesToTime(morningEnd)})` };
-        }
-
-        if (isHome) {
-            if (tripMins >= eveningStart && tripMins <= eveningEnd) {
-                return { status: 'valid', reason: 'Evening commute match' };
-            }
-            return { status: 'invalid', reason: `Outside evening window (${minutesToTime(eveningStart)}-${minutesToTime(eveningEnd)})` };
-        }
-    }
-
-    return { status: 'pending', reason: 'Awaiting schedule analysis' };
+function calculateMedianTime(trips) {
+    if (!trips || trips.length === 0) return null;
+    const minutes = trips.map(t => parseTime(t.time)).filter(m => m !== null).sort((a,b) => a - b);
+    if (minutes.length === 0) return null;
+    
+    const mid = Math.floor(minutes.length / 2);
+    return minutes.length % 2 !== 0 
+        ? minutes[mid] 
+        : (minutes[mid - 1] + minutes[mid]) / 2;
 }
 
 function parseAmount(str) {
-    if (!str) return 0;
     return parseFloat(String(str).replace(/[^0-9.]/g, '')) || 0;
 }
 
 function parseTime(timeStr) {
     try {
-        if (!timeStr) return null;
-        const str = String(timeStr);
-        const match = str.match(/(\d+):(\d+)\s*(AM|PM)/i);
+        const match = String(timeStr).match(/(\d+):(\d+)\s*(AM|PM)/i);
         if (!match) return null;
         let h = parseInt(match[1]), m = parseInt(match[2]);
         if (match[3].toUpperCase() === 'PM' && h !== 12) h += 12;
