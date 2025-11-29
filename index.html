@@ -162,7 +162,6 @@
         const status = document.getElementById('status');
         const analyzeBtn = document.getElementById('analyzeBtn');
         const scheduleStatus = document.getElementById('scheduleStatus');
-        let sessionTrips = [];
 
         analyzeBtn.addEventListener('click', async () => {
             scheduleStatus.textContent = 'Analyzing...';
@@ -175,6 +174,7 @@
                     document.getElementById('confidence').textContent = `${(data.schedule.confidence * 100).toFixed(0)}%`;
                     document.getElementById('tripsAnalyzed').textContent = data.schedule.tripsAnalyzed;
                     scheduleStatus.textContent = '✅ Done!';
+                    await loadValidatedTrips();
                 } else {
                     scheduleStatus.textContent = `⚠️ ${data.message}`;
                 }
@@ -201,23 +201,7 @@
                     if (!res.ok) throw new Error(`Error ${res.status}`);
                     const result = await res.json();
 
-                    if (result.duplicate) {
-                        duplicates++;
-                    }
-
-                    // Parse trips (works for both new and duplicate)
-                    if (result.extractedText) {
-                        try {
-                            let jsonText = result.extractedText.trim();
-                            if (jsonText.startsWith('```json')) jsonText = jsonText.replace(/```json\n?/g, '').replace(/```\n?/g, '');
-                            else if (jsonText.startsWith('```')) jsonText = jsonText.replace(/```\n?/g, '');
-                            const trips = JSON.parse(jsonText);
-                            sessionTrips.push(...(Array.isArray(trips) ? trips : [trips]));
-                        } catch (e) {
-                            console.error('Parse error:', e);
-                        }
-                    }
-
+                    if (result.duplicate) duplicates++;
                     processed++;
                 } catch (error) {
                     console.error(`Error: ${file.name}`, error);
@@ -225,27 +209,29 @@
                 }
             }
 
-            status.textContent = `✅ Processed: ${processed}, Duplicates: ${duplicates}, Errors: ${errors}`;
-            displayTrips();
+            status.textContent = `✅ Processed: ${processed}, Duplicates: ${duplicates}, Errors: ${errors}. Loading validation...`;
+            await loadValidatedTrips();
         });
 
-        function displayTrips() {
-            if (sessionTrips.length === 0) return;
+        async function loadValidatedTrips() {
+            try {
+                const res = await fetch('/image/get-validated-trips');
+                const data = await res.json();
 
-            const validLocations = ['43b Lauries Rd', 'Mireka Tower'];
-            const validTrips = sessionTrips.filter(t => validLocations.some(loc => t.location?.includes(loc)));
-            const invalidTrips = sessionTrips.filter(t => !validLocations.some(loc => t.location?.includes(loc)));
+                document.getElementById('totalTrips').textContent = data.summary.totalTrips;
+                document.getElementById('validCount').textContent = data.summary.validCount;
+                document.getElementById('invalidCount').textContent = data.summary.invalidCount;
+                document.getElementById('totalValid').textContent = data.totalValid;
+                document.getElementById('summary').style.display = 'block';
 
-            const totalValid = validTrips.reduce((sum, t) => sum + parseFloat(t.amount?.replace(/[^0-9.]/g, '') || 0), 0);
+                renderTable('validTable', data.valid, 'validSection');
+                renderTable('invalidTable', data.invalid, 'invalidSection');
 
-            document.getElementById('totalTrips').textContent = sessionTrips.length;
-            document.getElementById('validCount').textContent = validTrips.length;
-            document.getElementById('invalidCount').textContent = invalidTrips.length;
-            document.getElementById('totalValid').textContent = totalValid.toFixed(2);
-            document.getElementById('summary').style.display = 'block';
-
-            renderTable('validTable', validTrips, 'validSection');
-            renderTable('invalidTable', invalidTrips, 'invalidSection');
+                status.textContent = `✅ Validation complete!`;
+            } catch (error) {
+                console.error('Error loading validated trips:', error);
+                status.textContent = `❌ Error loading validation`;
+            }
         }
 
         function renderTable(tableId, trips, sectionId) {
