@@ -103,8 +103,8 @@
 <body>
     <h1>RideClaim AI - Trip Validation</h1>
 
-    <h2>Upload Receipt</h2>
-    <input type="file" id="imageInput" accept="image/*">
+    <h2>Upload Receipts</h2>
+    <input type="file" id="imageInput" accept="image/*" multiple>
     <div id="status"></div>
 
     <div style="margin-top: 30px;">
@@ -167,23 +167,19 @@
         loadTrips();
 
         analyzeBtn.addEventListener('click', async () => {
-            scheduleStatus.textContent = 'Analyzing work schedule...';
+            scheduleStatus.textContent = 'Analyzing...';
             try {
-                const response = await fetch('/api/infer-schedule');
-                const result = await response.json();
-
-                if (result.success) {
+                const res = await fetch('/api/infer-schedule');
+                const data = await res.json();
+                if (data.success) {
                     document.getElementById('scheduleInfo').style.display = 'block';
-                    document.getElementById('workHours').textContent =
-                        `${result.schedule.workStartTime} - ${result.schedule.workEndTime}`;
-                    document.getElementById('confidence').textContent =
-                        `${(result.schedule.confidence * 100).toFixed(0)}%`;
-                    document.getElementById('tripsAnalyzed').textContent = result.schedule.tripsAnalyzed;
-
-                    scheduleStatus.textContent = '✅ Schedule analyzed! Reloading...';
+                    document.getElementById('workHours').textContent = `${data.schedule.workStartTime} - ${data.schedule.workEndTime}`;
+                    document.getElementById('confidence').textContent = `${(data.schedule.confidence * 100).toFixed(0)}%`;
+                    document.getElementById('tripsAnalyzed').textContent = data.schedule.tripsAnalyzed;
+                    scheduleStatus.textContent = '✅ Done! Reloading...';
                     setTimeout(loadTrips, 1000);
                 } else {
-                    scheduleStatus.textContent = `⚠️ ${result.message}`;
+                    scheduleStatus.textContent = `⚠️ ${data.message}`;
                 }
             } catch (error) {
                 scheduleStatus.textContent = `❌ Error: ${error.message}`;
@@ -191,41 +187,38 @@
         });
 
         imageInput.addEventListener('change', async (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
+            const files = Array.from(e.target.files);
+            if (files.length === 0) return;
 
-            status.textContent = 'Processing...';
+            let processed = 0, duplicates = 0, errors = 0;
 
-            try {
-                const base64 = await fileToBase64(file);
-                const response = await fetch('/api/qwen', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        image: base64,
-                        fileName: file.name,
-                        mimeType: file.type
-                    })
-                });
-
-                if (!response.ok) throw new Error(`Error ${response.status}`);
-
-                const result = await response.json();
-                status.textContent = result.duplicate ?
-                    '⚠️ Duplicate image detected' :
-                    '✅ Data extracted and saved! Reloading...';
-
-                setTimeout(loadTrips, 1000);
-            } catch (error) {
-                status.textContent = `❌ Error: ${error.message}`;
+            for (const file of files) {
+                try {
+                    status.textContent = `Processing ${processed + 1}/${files.length}: ${file.name}`;
+                    const base64 = await fileToBase64(file);
+                    const res = await fetch('/api/qwen', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ image: base64, fileName: file.name, mimeType: file.type })
+                    });
+                    if (!res.ok) throw new Error(`Error ${res.status}`);
+                    const result = await res.json();
+                    if (result.duplicate) duplicates++;
+                    processed++;
+                } catch (error) {
+                    console.error(`Error processing ${file.name}:`, error);
+                    errors++;
+                }
             }
+
+            status.textContent = `✅ Processed: ${processed}, Duplicates: ${duplicates}, Errors: ${errors}. Reloading...`;
+            setTimeout(loadTrips, 1000);
         });
 
         async function loadTrips() {
             try {
-                const response = await fetch('/api/get-validated-trips');
-                const data = await response.json();
-
+                const res = await fetch('/api/get-validated-trips');
+                const data = await res.json();
                 document.getElementById('totalTrips').textContent = data.summary.totalTrips;
                 document.getElementById('validCount').textContent = data.summary.validCount;
                 document.getElementById('invalidCount').textContent = data.summary.invalidCount;
@@ -234,14 +227,11 @@
 
                 if (data.schedule) {
                     document.getElementById('scheduleInfo').style.display = 'block';
-                    document.getElementById('workHours').textContent =
-                        `${data.schedule.workStartTime} - ${data.schedule.workEndTime}`;
-                    document.getElementById('confidence').textContent =
-                        `${(data.schedule.confidence * 100).toFixed(0)}%`;
+                    document.getElementById('workHours').textContent = `${data.schedule.workStartTime} - ${data.schedule.workEndTime}`;
+                    document.getElementById('confidence').textContent = `${(data.schedule.confidence * 100).toFixed(0)}%`;
                 }
 
                 document.getElementById('summary').style.display = 'block';
-
                 renderTable('validTable', data.valid, 'validSection');
                 renderTable('invalidTable', data.invalid, 'invalidSection');
             } catch (error) {
@@ -252,12 +242,10 @@
         function renderTable(tableId, trips, sectionId) {
             const tbody = document.getElementById(tableId);
             const section = document.getElementById(sectionId);
-
             if (!trips || trips.length === 0) {
                 section.style.display = 'none';
                 return;
             }
-
             section.style.display = 'block';
             tbody.innerHTML = trips.map(trip => `
                 <tr>
@@ -277,8 +265,6 @@
                 reader.readAsDataURL(file);
             });
         }
-
-        console.log('RideClaim AI loaded');
     </script>
 </body>
 
