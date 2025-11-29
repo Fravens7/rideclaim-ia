@@ -124,7 +124,6 @@
         <p>Total Trips: <span id="totalTrips">0</span></p>
         <p>Valid Trips: <span id="validCount">0</span></p>
         <p>Invalid Trips: <span id="invalidCount">0</span></p>
-        <p>Pending Review: <span id="pendingCount">0</span></p>
         <p><strong>Valid Total: LKR <span id="totalValid">0.00</span></strong></p>
     </div>
 
@@ -164,7 +163,7 @@
         const analyzeBtn = document.getElementById('analyzeBtn');
         const scheduleStatus = document.getElementById('scheduleStatus');
 
-        loadTrips();
+        let sessionTrips = []; // Clears on refresh
 
         analyzeBtn.addEventListener('click', async () => {
             scheduleStatus.textContent = 'Analyzing...';
@@ -176,8 +175,7 @@
                     document.getElementById('workHours').textContent = `${data.schedule.workStartTime} - ${data.schedule.workEndTime}`;
                     document.getElementById('confidence').textContent = `${(data.schedule.confidence * 100).toFixed(0)}%`;
                     document.getElementById('tripsAnalyzed').textContent = data.schedule.tripsAnalyzed;
-                    scheduleStatus.textContent = '✅ Done! Reloading...';
-                    setTimeout(loadTrips, 1000);
+                    scheduleStatus.textContent = '✅ Done!';
                 } else {
                     scheduleStatus.textContent = `⚠️ ${data.message}`;
                 }
@@ -203,40 +201,48 @@
                     });
                     if (!res.ok) throw new Error(`Error ${res.status}`);
                     const result = await res.json();
-                    if (result.duplicate) duplicates++;
+
+                    if (result.duplicate) {
+                        duplicates++;
+                    } else {
+                        try {
+                            let jsonText = result.extractedText.trim();
+                            if (jsonText.startsWith('```json')) jsonText = jsonText.replace(/```json\n?/g, '').replace(/```\n?/g, '');
+                            else if (jsonText.startsWith('```')) jsonText = jsonText.replace(/```\n?/g, '');
+                            const trips = JSON.parse(jsonText);
+                            sessionTrips.push(...(Array.isArray(trips) ? trips : [trips]));
+                        } catch (e) {
+                            console.error('Parse error:', e);
+                        }
+                    }
                     processed++;
                 } catch (error) {
-                    console.error(`Error processing ${file.name}:`, error);
+                    console.error(`Error: ${file.name}`, error);
                     errors++;
                 }
             }
 
-            status.textContent = `✅ Processed: ${processed}, Duplicates: ${duplicates}, Errors: ${errors}. Reloading...`;
-            setTimeout(loadTrips, 1000);
+            status.textContent = `✅ Processed: ${processed}, Duplicates: ${duplicates}, Errors: ${errors}`;
+            displayTrips();
         });
 
-        async function loadTrips() {
-            try {
-                const res = await fetch('/api/get-validated-trips');
-                const data = await res.json();
-                document.getElementById('totalTrips').textContent = data.summary.totalTrips;
-                document.getElementById('validCount').textContent = data.summary.validCount;
-                document.getElementById('invalidCount').textContent = data.summary.invalidCount;
-                document.getElementById('pendingCount').textContent = data.summary.pendingCount || 0;
-                document.getElementById('totalValid').textContent = data.totalValid;
+        function displayTrips() {
+            if (sessionTrips.length === 0) return;
 
-                if (data.schedule) {
-                    document.getElementById('scheduleInfo').style.display = 'block';
-                    document.getElementById('workHours').textContent = `${data.schedule.workStartTime} - ${data.schedule.workEndTime}`;
-                    document.getElementById('confidence').textContent = `${(data.schedule.confidence * 100).toFixed(0)}%`;
-                }
+            const validLocations = ['43b Lauries Rd', 'Mireka Tower'];
+            const validTrips = sessionTrips.filter(t => validLocations.some(loc => t.location?.includes(loc)));
+            const invalidTrips = sessionTrips.filter(t => !validLocations.some(loc => t.location?.includes(loc)));
 
-                document.getElementById('summary').style.display = 'block';
-                renderTable('validTable', data.valid, 'validSection');
-                renderTable('invalidTable', data.invalid, 'invalidSection');
-            } catch (error) {
-                console.error('Error loading trips:', error);
-            }
+            const totalValid = validTrips.reduce((sum, t) => sum + parseFloat(t.amount?.replace(/[^0-9.]/g, '') || 0), 0);
+
+            document.getElementById('totalTrips').textContent = sessionTrips.length;
+            document.getElementById('validCount').textContent = validTrips.length;
+            document.getElementById('invalidCount').textContent = invalidTrips.length;
+            document.getElementById('totalValid').textContent = totalValid.toFixed(2);
+            document.getElementById('summary').style.display = 'block';
+
+            renderTable('validTable', validTrips, 'validSection');
+            renderTable('invalidTable', invalidTrips, 'invalidSection');
         }
 
         function renderTable(tableId, trips, sectionId) {
