@@ -35,7 +35,6 @@ export default async function handler(req, res) {
     if (supabaseUrl && supabaseKey) {
       const supabase = createClient(supabaseUrl, supabaseKey);
 
-      // Verificar si ya existe este hash
       const { data: existingTrips, error: hashError } = await supabase
         .from('tripsimg')
         .select('*')
@@ -48,7 +47,6 @@ export default async function handler(req, res) {
       if (existingTrips && existingTrips.length > 0) {
         console.log(`⚠️ Duplicate image detected - returning ${existingTrips.length} existing trips`);
 
-        // Formatear trips para el frontend
         const formattedTrips = existingTrips.map(t => ({
           date: t.date,
           time: t.time,
@@ -144,7 +142,6 @@ Devuelve SOLO un JSON array sin explicaciones:
       if (supabaseUrl && supabaseKey) {
         const supabase = createClient(supabaseUrl, supabaseKey);
 
-        // Limpiar JSON si viene con markdown
         let jsonText = cleanedExtractedText.trim();
         if (jsonText.startsWith('```json')) {
           jsonText = jsonText.replace(/```json\n?/g, '').replace(/```\n?/g, '');
@@ -152,11 +149,9 @@ Devuelve SOLO un JSON array sin explicaciones:
           jsonText = jsonText.replace(/```\n?/g, '');
         }
 
-        // Parsear JSON
         const tripsData = JSON.parse(jsonText);
         const tripsArray = Array.isArray(tripsData) ? tripsData : [tripsData];
 
-        // Guardar cada viaje en Supabase
         for (const trip of tripsArray) {
           const { data, error } = await supabase
             .from('tripsimg')
@@ -185,7 +180,6 @@ Devuelve SOLO un JSON array sin explicaciones:
       }
     } catch (supabaseError) {
       console.error("⚠️ Error procesando Supabase:", supabaseError);
-      // No fallar la request si Supabase falla
     }
 
     return res.status(200).json({
