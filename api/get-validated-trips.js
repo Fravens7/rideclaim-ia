@@ -111,7 +111,15 @@ export default async function handler(req, res) {
 
 // Función de validación de viaje
 function validateTrip(trip, schedule, officeLocation, homeLocation) {
-    // Validación básica de ubicación
+    // 1. Validación de monto (150-600 LKR)
+    const amountStr = trip.amount?.replace(/[^0-9.]/g, '') || '0';
+    const amount = parseFloat(amountStr);
+
+    if (amount < 150 || amount > 600) {
+        return { status: 'invalid', reason: `Amount out of range: LKR ${amount.toFixed(2)}` };
+    }
+
+    // 2. Validación de ubicación
     const isOfficeTrip = trip.location && trip.location.includes(officeLocation);
     const isHomeTrip = trip.location && trip.location.includes(homeLocation);
 
@@ -119,17 +127,17 @@ function validateTrip(trip, schedule, officeLocation, homeLocation) {
         return { status: 'invalid', reason: 'Invalid location' };
     }
 
-    // Si no hay horario inferido, marcar como pendiente
+    // 3. Si no hay horario inferido, marcar como pendiente
     if (!schedule) {
-        return { status: 'pending', reason: 'No schedule inferred yet - run schedule analysis' };
+        return { status: 'pending', reason: 'No schedule inferred yet' };
     }
 
-    // Si la confianza es muy baja, marcar como pendiente
+    // 4. Si la confianza es baja, marcar como pendiente
     if (schedule.confidence_score < 0.60) {
-        return { status: 'pending', reason: 'Low confidence in schedule - needs more data' };
+        return { status: 'pending', reason: 'Low confidence in schedule' };
     }
 
-    // Validar horario
+    // 5. Validar horario
     if (!trip.time) {
         return { status: 'pending', reason: 'Missing time information' };
     }
@@ -148,7 +156,7 @@ function validateTrip(trip, schedule, officeLocation, homeLocation) {
         const windowEnd = startMinutes;
 
         if (tripMinutes >= windowStart && tripMinutes <= windowEnd) {
-            return { status: 'valid', reason: 'Valid morning commute to office' };
+            return { status: 'valid', reason: 'Valid morning commute' };
         } else {
             return { status: 'invalid', reason: `Outside morning window (${minutesToTimeStr(windowStart)} - ${minutesToTimeStr(windowEnd)})` };
         }
@@ -160,7 +168,7 @@ function validateTrip(trip, schedule, officeLocation, homeLocation) {
         const windowEnd = endMinutes + 50;
 
         if (tripMinutes >= windowStart && tripMinutes <= windowEnd) {
-            return { status: 'valid', reason: 'Valid evening commute to home' };
+            return { status: 'valid', reason: 'Valid evening commute' };
         } else {
             return { status: 'invalid', reason: `Outside evening window (${minutesToTimeStr(windowStart)} - ${minutesToTimeStr(windowEnd)})` };
         }
@@ -169,7 +177,7 @@ function validateTrip(trip, schedule, officeLocation, homeLocation) {
     return { status: 'pending', reason: 'Unknown validation error' };
 }
 
-// Helper: Parsear hora "HH:MM AM/PM" a minutos desde medianoche
+// Helper: Parsear hora "HH:MM AM/PM" a minutos
 function parseTimeToMinutes(timeStr) {
     try {
         const match = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
