@@ -80,13 +80,16 @@ export default async function handler(req, res) {
             });
         }
 
-        // Calcular hora promedio de entrada (viajes a oficina + 40 min)
+        // Calcular hora de entrada: mediana de viajes a oficina - 40 min
+        // (Si viajas a las 12:20 PM, tu entrada es ~1:00 PM)
         const avgOfficeTime = calculateMedianTime(officeTimes);
         const workStartTime = addMinutes(avgOfficeTime, 40);
 
-        // Calcular hora promedio de salida (viajes a casa - 10 min)
+        // Calcular hora de salida: mediana de viajes a casa
+        // (Si viajas a las 10:00 PM, tu salida es ~10:00 PM)
         const avgHomeTime = calculateMedianTime(homeTimes);
-        const workEndTime = addMinutes(avgHomeTime, -10);
+        const workEndTime = avgHomeTime; // La mediana YA es la hora de salida
+
 
         // Detectar días laborables (analizar por día de semana)
         const dayFrequency = analyzeDayFrequency(allTrips);
