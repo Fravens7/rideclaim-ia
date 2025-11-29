@@ -124,7 +124,7 @@ Devuelve SOLO un JSON array sin explicaciones:
         // Guardar cada viaje en Supabase
         for (const trip of tripsArray) {
           const { data, error } = await supabase
-            .from('trips-img')
+            .from('tripsimg')
             .insert({
               date: trip.date || trip.timestamp || null,
               time: trip.time || null,
