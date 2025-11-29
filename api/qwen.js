@@ -18,11 +18,7 @@ export default async function handler(req, res) {
     }
 
     const { image, fileName, mimeType } = body;
-    console.log("📁 File info:", {
-      fileName,
-      mimeType,
-      imageSize: image?.length,
-    });
+    console.log("📁 File info:", { fileName, mimeType, imageSize: image?.length });
 
     if (!image) {
       return res.status(400).json({ error: "Missing image data" });
@@ -31,6 +27,47 @@ export default async function handler(req, res) {
     // Calculate image hash for duplicate detection
     const imageHash = crypto.createHash('sha256').update(image).digest('hex');
     console.log("🔑 Image hash:", imageHash);
+
+    // Check for duplicates in Supabase
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_ANON_KEY;
+
+    if (supabaseUrl && supabaseKey) {
+      const supabase = createClient(supabaseUrl, supabaseKey);
+
+      // Verificar si ya existe este hash
+      const { data: existingTrips, error: hashError } = await supabase
+        .from('tripsimg')
+        .select('*')
+        .eq('image_hash', imageHash);
+
+      if (hashError) {
+        console.error("❌ Error checking hash:", hashError);
+      }
+
+      if (existingTrips && existingTrips.length > 0) {
+        console.log(`⚠️ Duplicate image detected - returning ${existingTrips.length} existing trips`);
+
+        // Formatear trips para el frontend
+        const formattedTrips = existingTrips.map(t => ({
+          date: t.date,
+          time: t.time,
+          location: t.location,
+          amount: t.amount,
+          type: t.type
+        }));
+
+        return res.status(200).json({
+          success: true,
+          duplicate: true,
+          message: "Duplicate image detected",
+          extractedText: JSON.stringify(formattedTrips),
+          trips: formattedTrips
+        });
+      }
+    }
+
+    const hfKey = process.env.HUGGINGFACE_API_KEY;
     console.log("🔑 API key check:", hfKey ? "Present" : "Missing");
 
     if (!hfKey) {
@@ -93,9 +130,7 @@ Devuelve SOLO un JSON array sin explicaciones:
     if (!response.ok) {
       const errorText = await response.text();
       console.error("❌ Hugging Face API Error:", errorText);
-      return res
-        .status(response.status)
-        .json({ error: `Hugging Face API error: ${errorText}` });
+      return res.status(response.status).json({ error: `Hugging Face API error: ${errorText}` });
     }
 
     const result = await response.json();
