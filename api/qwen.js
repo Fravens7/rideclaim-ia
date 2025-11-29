@@ -1,5 +1,6 @@
-// --- qwen.js con Supabase integration ---
+// --- qwen.js con Supabase integration y anti-duplicados ---
 import { createClient } from '@supabase/supabase-js';
+import crypto from 'crypto';
 
 export default async function handler(req, res) {
   try {
@@ -25,6 +26,36 @@ export default async function handler(req, res) {
 
     if (!image) {
       return res.status(400).json({ error: "Missing image data" });
+    }
+
+    // Calculate image hash for duplicate detection
+    const imageHash = crypto.createHash('sha256').update(image).digest('hex');
+    console.log("🔑 Image hash:", imageHash);
+
+    // Check for duplicates in Supabase
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_ANON_KEY;
+
+    if (supabaseUrl && supabaseKey) {
+      const supabase = createClient(supabaseUrl, supabaseKey);
+
+      const { data: existingTrips, error: checkError } = await supabase
+        .from('tripsimg')
+        .select('id')
+        .eq('image_hash', imageHash)
+        .limit(1);
+
+      if (checkError) {
+        console.error("⚠️ Error checking duplicates:", checkError);
+      } else if (existingTrips && existingTrips.length > 0) {
+        console.log("⚠️ Duplicate image detected, skipping processing");
+        return res.status(200).json({
+          extractedText: "Duplicate image - already processed",
+          fileName: fileName,
+          success: true,
+          duplicate: true,
+        });
+      }
     }
 
     const hfKey = process.env.HUGGINGFACE_API_KEY;
@@ -103,9 +134,6 @@ Devuelve SOLO un JSON array sin explicaciones:
 
     // --- GUARDAR EN SUPABASE ---
     try {
-      const supabaseUrl = process.env.SUPABASE_URL;
-      const supabaseKey = process.env.SUPABASE_ANON_KEY;
-
       if (supabaseUrl && supabaseKey) {
         const supabase = createClient(supabaseUrl, supabaseKey);
 
@@ -134,6 +162,7 @@ Devuelve SOLO un JSON array sin explicaciones:
               extra_1: trip.extra_1 || null,
               extra_2: trip.extra_2 || null,
               extra_3: trip.extra_3 || null,
+              image_hash: imageHash,
             });
 
           if (error) {
