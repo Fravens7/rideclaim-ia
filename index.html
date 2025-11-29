@@ -3,59 +3,59 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RideClaim AI - Auto Validation</title>
+    <title>RideClaim AI - Smart Batch</title>
     <style>
         body { font-family: 'Segoe UI', sans-serif; max-width: 1000px; margin: 40px auto; padding: 20px; background: #f4f4f9; color: #333; }
         .card { background: white; padding: 25px; border-radius: 12px; margin-bottom: 25px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
-        h1 { margin-top: 0; color: #111; }
         
-        /* Upload Zone */
         .upload-zone { border: 2px dashed #cbd5e0; padding: 30px; text-align: center; border-radius: 8px; background: #f8fafc; cursor: pointer; transition: all 0.3s; }
         .upload-zone:hover { border-color: #3b82f6; background: #eff6ff; }
         
-        /* Status Bars */
         .status-bar { margin-top: 15px; padding: 12px; border-radius: 6px; font-weight: 500; display: none; }
         .processing { background: #e0f2fe; color: #0284c7; }
         .success { background: #dcfce7; color: #166534; }
-        .error { background: #fee2e2; color: #991b1b; }
+        
+        /* Barra de Progreso */
+        .progress-container { width: 100%; background-color: #e2e8f0; border-radius: 10px; margin-top: 15px; display: none; }
+        .progress-fill { height: 10px; background-color: #3b82f6; border-radius: 10px; width: 0%; transition: width 0.3s ease; }
 
-        /* Tables */
         table { width: 100%; border-collapse: collapse; margin-top: 20px; }
         th, td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
-        th { background: #f8fafc; font-weight: 600; font-size: 0.9em; text-transform: uppercase; color: #64748b; }
+        th { background: #f8fafc; font-weight: 600; color: #64748b; }
         
         .badge { padding: 4px 8px; border-radius: 4px; font-size: 0.8em; font-weight: bold; text-transform: uppercase; }
         .badge-valid { background: #dcfce7; color: #166534; }
         .badge-invalid { background: #fee2e2; color: #991b1b; }
         
-        /* Summary Cards */
         .summary-row { display: flex; gap: 20px; margin-top: 20px; }
         .stat-card { flex: 1; background: #f8fafc; padding: 15px; border-radius: 8px; text-align: center; border: 1px solid #e2e8f0; }
         .stat-val { display: block; font-size: 1.8em; font-weight: bold; margin-top: 5px; }
-        .total-money { color: #166534; }
     </style>
 </head>
 <body>
 
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
         <div>
-            <h1>RideClaim AI</h1>
+            <h1>RideClaim AI <span style="font-size:0.5em; background:#3b82f6; color:white; padding:3px 6px; border-radius:4px; vertical-align:middle;">PRO</span></h1>
             <div style="font-size: 0.9em; color: #666;">Batch ID: <span id="batchIdDisplay" style="font-family: monospace;">Loading...</span></div>
         </div>
-        <button onclick="initBatch()" style="padding: 8px 16px; cursor: pointer; background: white; border: 1px solid #ccc; border-radius: 4px;">🔄 New Employee</button>
+        <button onclick="initBatch()" style="padding: 8px 16px; cursor: pointer; background: white; border: 1px solid #ccc; border-radius: 4px;">🔄 New Batch</button>
     </div>
 
     <div class="card">
         <h3>1. Upload Receipts</h3>
-        <p style="color:#666; font-size: 0.9em;">System will auto-calculate schedule and validate.</p>
+        <p style="color:#666; font-size: 0.9em;">Parallel processing enabled (3x Speed).</p>
         
         <input type="file" id="fileInput" multiple accept="image/*" style="display: none;">
         <div class="upload-zone" onclick="document.getElementById('fileInput').click()">
-            <span style="font-size: 2em;">📂</span><br>
+            <span style="font-size: 2em;">🚀</span><br>
             <strong>Click to upload images</strong><br>
-            <span style="font-size: 0.9em; color: #888;">Supports JPG, PNG (Max 40 files)</span>
+            <span style="font-size: 0.9em; color: #888;">Select up to 50 files</span>
         </div>
         
+        <div class="progress-container" id="progressContainer">
+            <div class="progress-fill" id="progressBar"></div>
+        </div>
         <div id="uploadStatus" class="status-bar"></div>
     </div>
 
@@ -63,14 +63,14 @@
         <div style="display: flex; justify-content: space-between; align-items: center;">
             <h3>2. Validation Report</h3>
             <div style="text-align: right; font-size: 0.9em;">
-                <div><strong>Inferred Schedule:</strong> <span id="scheduleText">Calculating...</span></div>
+                <div><strong>Inferred Schedule:</strong> <span id="scheduleText" style="font-weight:bold; color:#3b82f6">Calculating...</span></div>
             </div>
         </div>
 
         <div class="summary-row">
             <div class="stat-card" style="background: #ecfdf5; border-color: #a7f3d0;">
                 <span style="font-size: 0.9em; color: #065f46;">Total Refund</span>
-                <span class="stat-val total-money" id="totalAmount">LKR 0.00</span>
+                <span class="stat-val" id="totalAmount" style="color: #166534">LKR 0.00</span>
             </div>
             <div class="stat-card">
                 <span style="font-size: 0.9em;">Valid Trips</span>
@@ -104,6 +104,7 @@
             document.getElementById('batchIdDisplay').textContent = currentBatchId;
             document.getElementById('resultsCard').style.display = 'none';
             document.getElementById('uploadStatus').style.display = 'none';
+            document.getElementById('progressContainer').style.display = 'none';
             document.getElementById('tableBody').innerHTML = '';
             console.log("🆕 New Batch:", currentBatchId);
         }
@@ -113,37 +114,109 @@
             if (files.length === 0) return;
 
             const status = document.getElementById('uploadStatus');
+            const progressBar = document.getElementById('progressBar');
+            
+            document.getElementById('progressContainer').style.display = 'block';
             status.style.display = 'block';
             status.className = 'status-bar processing';
             
-            // 1. Upload & Extract
-            let processed = 0;
-            for (const file of files) {
-                status.textContent = `⏳ Processing ${processed + 1}/${files.length}: ${file.name}...`;
+            // --- PARALELISMO (Enviar de 3 en 3) ---
+            const CONCURRENCY_LIMIT = 3; 
+            let index = 0;
+            let completed = 0;
+            
+            // Función Recursiva para mantener 3 subidas activas
+            const next = async () => {
+                if (index >= files.length) return;
+
+                const file = files[index++];
+                
                 try {
-                    const base64 = await toBase64(file);
+                    status.textContent = `🚀 Uploading... (${completed}/${files.length})`;
+                    
+                    // 1. Decidir si comprimir o enviar original
+                    const base64 = await smartPrepareImage(file);
+                    
+                    // 2. Enviar a Qwen
                     await fetch('/api/qwen', {
                         method: 'POST',
                         body: JSON.stringify({ 
                             image: base64, 
                             fileName: file.name, 
-                            mimeType: file.type, 
+                            mimeType: file.type || 'image/jpeg', 
                             batchId: currentBatchId 
                         })
                     });
-                    processed++;
+                    
                 } catch (err) {
-                    console.error(err);
+                    console.error("Error file:", file.name, err);
+                } finally {
+                    completed++;
+                    const pct = (completed / files.length) * 100;
+                    progressBar.style.width = pct + '%';
+                    
+                    if (index < files.length) await next();
                 }
-            }
+            };
 
-            // 2. Auto-Validation (The "No-Click" Magic)
-            status.textContent = "🧠 Calculating schedule & Validating...";
+            // Iniciar 3 workers simultáneos
+            const workers = [];
+            for (let i = 0; i < CONCURRENCY_LIMIT && i < files.length; i++) {
+                workers.push(next());
+            }
+            await Promise.all(workers);
+
+            // --- VALIDACIÓN FINAL ---
+            status.textContent = "🧠 Calculating Final Schedule...";
             await fetchValidation();
             
             status.className = 'status-bar success';
-            status.textContent = `✅ Done! Processed ${processed} files.`;
+            status.textContent = `✅ Done! Processed ${files.length} receipts.`;
         });
+
+        // --- PREPARACIÓN INTELIGENTE DE IMAGEN ---
+        function smartPrepareImage(file) {
+            return new Promise((resolve, reject) => {
+                // Si pesa menos de 150KB, NO tocamos nada (Mejor calidad)
+                if (file.size < 150 * 1024) {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result.split(',')[1]);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(file);
+                } else {
+                    // Si es pesada, la comprimimos
+                    compressImage(file).then(resolve).catch(reject);
+                }
+            });
+        }
+
+        function compressImage(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = (event) => {
+                    const img = new Image();
+                    img.src = event.target.result;
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        const MAX_WIDTH = 1000; 
+                        const scaleSize = MAX_WIDTH / img.width;
+                        
+                        if (scaleSize >= 1) { // Si ya es pequeña
+                             resolve(event.target.result.split(',')[1]);
+                             return;
+                        }
+
+                        canvas.width = MAX_WIDTH;
+                        canvas.height = img.height * scaleSize;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                        resolve(canvas.toDataURL('image/jpeg', 0.8).split(',')[1]);
+                    };
+                };
+                reader.onerror = reject;
+            });
+        }
 
         async function fetchValidation() {
             try {
@@ -154,12 +227,11 @@
                 document.getElementById('totalAmount').textContent = 'LKR ' + data.totalValid;
                 document.getElementById('validCount').textContent = data.summary.valid;
                 document.getElementById('invalidCount').textContent = data.summary.invalid;
-                document.getElementById('scheduleText').textContent = data.inferredSchedule || "Not enough data";
+                document.getElementById('scheduleText').textContent = data.inferredSchedule || "Insufficient Data";
 
                 const tbody = document.getElementById('tableBody');
                 tbody.innerHTML = '';
 
-                // Merge and Sort
                 const all = [...data.trips.valid, ...data.trips.invalid].sort((a,b) => {
                     return (a.date + a.time).localeCompare(b.date + b.time);
                 });
@@ -179,21 +251,9 @@
                         </tr>
                     `;
                 });
-
-            } catch (err) {
-                console.error("Validation error", err);
-                alert("Error validating trips.");
-            }
+            } catch (err) { console.error(err); }
         }
 
-        const toBase64 = file => new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.readAsDataURL(file);
-            reader.onload = () => resolve(reader.result.split(',')[1]);
-            reader.onerror = reject;
-        });
-
-        // Start on load
         initBatch();
     </script>
 </body>
