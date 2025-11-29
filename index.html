@@ -1,202 +1,120 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rideclaim - M1 division</title>
+    <title>Test Supabase</title>
+    <style>
+        body {
+            font-family: Arial;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+        }
 
-    <!-- Referencia al archivo CSS externo -->
-    <link rel="stylesheet" href="styles.css">
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
 
-    <!-- Leaflet CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+        input[type="file"] {
+            margin: 20px 0;
+            padding: 10px;
+            border: 2px dashed #ccc;
+            border-radius: 5px;
+            width: 100%;
+        }
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
-    <!-- Tesseract.js para OCR -->
-    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+        #status {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 5px;
+            font-weight: bold;
+        }
 
-    <!--chart.js para graficos-->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        .loading {
+            background: #fff3cd;
+            color: #856404;
+        }
 
-    <!-- Añade esto en el <head> o antes de tu script tag -->
-    <script src="https://cdn.jsdelivr.net/npm/paddleocr-js-web@2.1.0/dist/paddleocr.min.js"></script>
+        .success {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+    </style>
 </head>
 
 <body>
-    <!-- NUEVA MODAL PARA EL GRÁFICO (Moved from head) -->
-    <div id="chartModal" class="modal">
-        <div class="modal-content" style="max-width: 900px;">
-            <span class="close" id="closeChartBtn">&times;</span>
-            <h2>M1 Calendar Analysis</h2>
-            <div style="position: relative; width: 100%; overflow-x: auto;">
-                <div id="tripCalendar"></div>
-            </div>
-            <div id="calendarLegend" style="display: flex; justify-content: center; margin-top: 15px;">
-                <div style="display: flex; align-items: center; margin-right: 20px;">
-                    <div style="width: 20px; height: 20px; background-color: #28a745; margin-right: 8px;"></div>
-                    <span>Home to Office</span>
-                </div>
-                <div style="display: flex; align-items: center; margin-right: 20px;">
-                    <div style="width: 20px; height: 20px; background-color: #007bff; margin-right: 8px;"></div>
-                    <span>Office to Home</span>
-                </div>
-                <div style="display: flex; align-items: center;">
-                    <div
-                        style="width: 20px; height: 20px; background-color: #f8f9fa; border: 1px solid #ddd; margin-right: 8px;">
-                    </div>
-                    <span>No Trip</span>
-                </div>
-            </div>
-        </div>
+    <div class="container">
+        <h1>🧪 Test Supabase Integration</h1>
+        <p>Sube una imagen → Qwen extrae → Guarda en Supabase</p>
+        <input type="file" id="imageInput" accept="image/*">
+        <div id="status"></div>
     </div>
 
-    <!-- Contenedor principal -->
-    <div class="main-content">
-        <div class="container">
-            <!-- Header con logo y título alineados -->
-            <div class="header-container">
-                <!-- Logo a la izquierda -->
-                <div class="logo-container">
-                    <img src="logo.png" alt="Rideclaim Logo">
-                </div>
+    <script>
+        const imageInput = document.getElementById('imageInput');
+        const status = document.getElementById('status');
 
-                <!-- Título a la derecha -->
-                <h1>Rideclaim - M1 division</h1>
-            </div>
+        imageInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
 
-            <div class="tabs">
-                <div class="tab" id="pdf-tab">PDF</div>
-                <div class="tab active" id="image-tab">Image</div>
-            </div>
+            console.log('📁 Archivo:', file.name);
+            status.className = 'loading';
+            status.textContent = '⏳ Procesando con Qwen y guardando en Supabase...';
 
-            <div id="pdf-content" class="tab-content">
-                <div class="upload-area" id="pdfUploadArea">
-                    <label for="pdfFiles" class="upload-label">Select PDFs</label>
-                    <p>or drag and drop files here</p>
-                    <input type="file" id="pdfFiles" accept="application/pdf" multiple>
-                </div>
-                <div class="file-list" id="pdfFileList"></div>
-            </div>
+            try {
+                const base64 = await fileToBase64(file);
 
-            <div id="image-content" class="tab-content active">
-                <div class="upload-area" id="imageUploadArea">
-                    <label for="imageFiles" class="upload-label">Select Images</label>
-                    <p>or drag and drop files here (PNG, JPG)</p>
-                    <input type="file" id="imageFiles" accept="image/png, image/jpeg, image/jpg" multiple>
-                </div>
-                <div class="file-list" id="imageFileList"></div>
-                <div id="apiStatus" class="api-status" style="display: none;"></div>
-            </div>
+                const response = await fetch('/api/qwen', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        image: base64,
+                        fileName: file.name,
+                        mimeType: file.type
+                    })
+                });
 
-            <div id="map-container" class="map-container"></div>
+                if (!response.ok) {
+                    throw new Error(`Error ${response.status}`);
+                }
 
-            <div class="results-container" id="resultsContainer">
-                <h2>Results</h2>
+                const result = await response.json();
 
-                <div class="dashboard-summary" id="dashboardSummary">
-                    <div class="summary-card">
-                        <p class="summary-label">Total Spent</p>
-                        <p class="summary-value" id="summaryTotalSpent">0 LKR</p>
-                    </div>
-                    <div class="summary-card">
-                        <p class="summary-label">Total Rides</p>
-                        <p class="summary-value" id="summaryTotalRides">0</p>
-                    </div>
-                    <div class="summary-card">
-                        <p class="summary-label">Active Days</p>
-                        <p class="summary-value" id="summaryActiveDays">0</p>
-                    </div>
-                    <div class="summary-card">
-                        <p class="summary-label">Images</p>
-                        <p class="summary-value" id="summaryImages">0</p>
-                    </div>
-                </div>
+                console.log('✅ Respuesta:', result);
+                console.log('📄 Datos extraídos:', result.extractedText);
 
-                <!-- Schedule Validation Configuration -->
-                <div id="scheduleConfig" class="schedule-config" style="display: none;">
-                    <h3>⏰ Work Schedule Validation (Optional)</h3>
-                    <p class="schedule-description">Validate trips based on your work hours for higher precision</p>
+                status.className = 'success';
+                status.textContent = '✅ Datos extraídos y guardados en Supabase! Ver consola';
 
-                    <div class="schedule-inputs">
-                        <div class="input-group">
-                            <label for="startTime">Start Time (24h)</label>
-                            <input type="number" id="startTime" min="0" max="23" placeholder="13" />
-                        </div>
-                        <div class="input-group">
-                            <label for="endTime">End Time (24h)</label>
-                            <input type="number" id="endTime" min="0" max="23" placeholder="22" />
-                        </div>
-                        <button class="apply-schedule-btn" id="applySchedule">Apply Schedule</button>
-                    </div>
+            } catch (error) {
+                console.error('❌ Error:', error);
+                status.className = 'error';
+                status.textContent = `❌ Error: ${error.message}`;
+            }
+        });
 
-                    <div class="policy-rules">
-                        <p class="policy-title">📋 Validation Rules:</p>
-                        <ul>
-                            <li><strong>To Office (Mireka Tower):</strong> Valid from <span class="highlight">(START
-                                    - 40min)</span> to <span class="highlight">START</span></li>
-                            <li><strong>To Home (43b Lauries Rd):</strong> Valid from <span class="highlight">END</span>
-                                to <span class="highlight">(END + 50min)</span>
-                            </li>
-                        </ul>
-                    </div>
-                </div>
+        function fileToBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result.split(',')[1]);
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        }
 
-
-                <div class="results-actions">
-                    <div class="view-toggle">
-                        <button class="view-btn active" id="groupedViewBtn">Grouped View</button>
-                        <button class="view-btn" id="tableViewBtn">Table View</button>
-                    </div>
-                    <div class="results-buttons">
-                        <button class="clear-btn" id="clearBtn">Clear results</button>
-                        <button class="clear-btn chart-btn" id="viewChartBtn">View Trip Chart</button>
-                    </div>
-                </div>
-
-                <div id="groupedResults" class="grouped-results"></div>
-
-                <div id="tableResults" class="table-results">
-                    <table class="results-table" id="resultsTable">
-                        <thead>
-                            <tr>
-                                <th>File</th>
-                                <th>Type</th>
-                                <th>Origin</th>
-                                <th>Destination</th>
-                                <th>Total LKR</th>
-                                <th>Validation</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="resultsBody"></tbody>
-                    </table>
-                    <div class="summary" id="summary"></div>
-                </div>
-            </div>
-
-
-        </div>
-    </div>
-
-    <div id="detailsModal" class="modal">
-        <div class="modal-content">
-            <span class="close">&times;</span>
-            <h2>File Details</h2>
-            <div class="extracted-text" id="modalExtractedText"></div>
-        </div>
-    </div>
-
-    <!-- Tooltip para mostrar la hora del viaje -->
-    <div id="tooltip" class="tooltip"></div>
-
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-
-    <!-- Referencia al archivo JavaScript externo -->
-    <script type="module" src="schedule-ui.js"></script>
-    <script type="module" src="script.js"></script>
+        console.log('🚀 Test Supabase listo. Sube una imagen.');
+    </script>
 </body>
 
 </html>

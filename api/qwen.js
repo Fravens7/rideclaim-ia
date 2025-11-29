@@ -1,4 +1,5 @@
-// --- qwen.js con el nombre del modelo correcto y permitido ---
+// --- qwen.js con Supabase integration ---
+import { createClient } from '@supabase/supabase-js';
 
 export default async function handler(req, res) {
   try {
@@ -45,7 +46,6 @@ export default async function handler(req, res) {
         Authorization: `Bearer ${hfKey}`,
       },
       body: JSON.stringify({
-        // --- ¡CAMBIO CLAVE! Usamos el nombre del modelo permitido ---
         model: "Qwen/Qwen2.5-VL-7B-Instruct",
         messages: [
           {
@@ -53,33 +53,23 @@ export default async function handler(req, res) {
             content: [
               {
                 type: "text",
-                text: `Extract ALL trip information from this receipt image. This appears to be a ride-sharing or transport receipt with multiple trips.
+                text: `Analiza esta imagen de recibos de Uber y extrae TODA la información de cada viaje.
 
-Please extract:
-1. Destination/Location names for ALL trips visible
-2. Date for each trip 
-3. Time for each trip
-4. Amount for each trip
-5. Currency
-6. Status of each trip
-7. Type of service (ride, tuktuk, delivery, etc.)
+IMPORTANTE - Para el TIPO DE VEHÍCULO:
+- Observa el ICONO/MINIATURA del vehículo a la IZQUIERDA de cada viaje
+- Si ves una moto/tuktuk de color AMARILLO-VERDE = tipo: "tuktuk" o "auto"
+- Si ves un carro/taxi de color BLANCO = tipo: "taxi" o "car"
+- IGNORA completamente el botón "Rebook" - ese NO es el tipo de vehículo
 
-Return ONLY a JSON object. Do not include any explanations, introductory text, or concluding remarks outside of the JSON structure.
-{
-  "trips": [
-    {
-      "destination": "Location name",
-      "date": "Nov 7", 
-      "time": "4:10 PM",
-      "amount": "450.00",
-      "currency": "LKR",
-      "status": "Completed",
-      "type": "ride"
-    }
-  ]
-}
+Extrae para cada viaje:
+- Fecha (date)
+- Hora (time)
+- Destino/Ubicación (location)
+- Monto (amount) con moneda
+- Tipo de vehículo (type) basado en el ICONO visual, NO en el texto "Rebook"
 
-Extract ALL visible trips, not just the first one. Be thorough and capture every journey shown in the receipt.`,
+Devuelve SOLO un JSON array sin explicaciones:
+[{"date": "Nov 24", "time": "9:34 PM", "location": "43b Lauries Rd", "amount": "LKR274.00", "type": "tuktuk"}]`,
               },
               {
                 type: "image_url",
@@ -91,7 +81,7 @@ Extract ALL visible trips, not just the first one. Be thorough and capture every
           },
         ],
         temperature: 0.1,
-        max_tokens: 1000,
+        max_tokens: 2000,
       }),
     });
 
@@ -110,6 +100,58 @@ Extract ALL visible trips, not just the first one. Be thorough and capture every
 
     const extractedText = result.choices?.[0]?.message?.content || "";
     const cleanedExtractedText = extractedText.split('### Explanation of Extraction:')[0].trim();
+
+    // --- GUARDAR EN SUPABASE ---
+    try {
+      const supabaseUrl = process.env.SUPABASE_URL;
+      const supabaseKey = process.env.SUPABASE_ANON_KEY;
+
+      if (supabaseUrl && supabaseKey) {
+        const supabase = createClient(supabaseUrl, supabaseKey);
+
+        // Limpiar JSON si viene con markdown
+        let jsonText = cleanedExtractedText.trim();
+        if (jsonText.startsWith('```json')) {
+          jsonText = jsonText.replace(/```json\n?/g, '').replace(/```\n?/g, '');
+        } else if (jsonText.startsWith('```')) {
+          jsonText = jsonText.replace(/```\n?/g, '');
+        }
+
+        // Parsear JSON
+        const tripsData = JSON.parse(jsonText);
+        const tripsArray = Array.isArray(tripsData) ? tripsData : [tripsData];
+
+        // Guardar cada viaje en Supabase
+        for (const trip of tripsArray) {
+          const { data, error } = await supabase
+            .from('trips-img')
+            .insert({
+              date: trip.date || trip.timestamp || null,
+              time: trip.time || null,
+              location: trip.location || trip.destination || null,
+              amount: trip.amount || null,
+              type: trip.type || null,
+              image_filename: fileName || null,
+              extra_1: trip.extra_1 || null,
+              extra_2: trip.extra_2 || null,
+              extra_3: trip.extra_3 || null,
+            });
+
+          if (error) {
+            console.error("❌ Error guardando en Supabase:", error);
+          } else {
+            console.log("✅ Viaje guardado en Supabase");
+          }
+        }
+
+        console.log(`✅ ${tripsArray.length} viajes guardados en Supabase`);
+      } else {
+        console.log("⚠️ Supabase credentials not found, skipping save");
+      }
+    } catch (supabaseError) {
+      console.error("⚠️ Error procesando Supabase:", supabaseError);
+      // No fallar la request si Supabase falla
+    }
 
     return res.status(200).json({
       extractedText: cleanedExtractedText,
