@@ -1,0 +1,9 @@
+{
+    "name": "rideclaim-ia-test",
+    "version": "1.0.0",
+    "description": "Test Qwen extraction with Supabase integration",
+    "type": "module",
+    "dependencies": {
+        "@supabase/supabase-js": "^2.39.0"
+    }
+}
