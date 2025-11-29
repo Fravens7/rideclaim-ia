@@ -1,253 +1,269 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RideClaim AI</title>
+    <title>RideClaim AI - Validación por Lotes</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            max-width: 1000px;
-            margin: 40px auto;
-            padding: 20px;
-            background: #f5f5f5;
-        }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 1000px; margin: 40px auto; padding: 20px; background: #f0f2f5; color: #333; }
+        h1 { color: #1a1a1a; margin-bottom: 5px; }
+        .batch-info { background: #fff; padding: 10px 15px; border-radius: 6px; display: inline-block; margin-bottom: 20px; border: 1px solid #ddd; font-size: 0.9em; color: #555; }
+        
+        /* Contenedores Principales */
+        .card { background: white; padding: 25px; border-radius: 12px; margin-bottom: 25px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        
+        /* Botones y Entradas */
+        input[type="file"] { margin: 10px 0; display: block; width: 100%; padding: 10px; border: 2px dashed #cbd5e0; border-radius: 8px; background: #f8fafc; cursor: pointer; }
+        input[type="file"]:hover { border-color: #a0aec0; }
+        
+        button { padding: 12px 24px; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; transition: all 0.2s; font-size: 16px; }
+        .btn-primary { background: #3b82f6; color: white; }
+        .btn-primary:hover { background: #2563eb; transform: translateY(-1px); }
+        .btn-secondary { background: #64748b; color: white; margin-left: 10px; }
+        .btn-secondary:hover { background: #475569; }
+        .btn-reset { background: white; border: 1px solid #cbd5e0; color: #475569; float: right; padding: 8px 16px; font-size: 14px; }
+        .btn-reset:hover { background: #f1f5f9; color: #ef4444; border-color: #ef4444; }
 
-        h1 {
-            color: #333;
-        }
+        /* Estados y Tablas */
+        #status, #scheduleStatus { margin-top: 15px; padding: 10px; border-radius: 6px; font-size: 0.95em; }
+        .status-processing { background-color: #e0f2fe; color: #0369a1; }
+        .status-success { background-color: #dcfce7; color: #15803d; }
+        .status-error { background-color: #fee2e2; color: #b91c1c; }
 
-        h2 {
-            color: #666;
-            margin-top: 30px;
-        }
-
-        input[type="file"],
-        button {
-            padding: 10px 20px;
-            margin: 10px 0;
-            border: 2px solid #ddd;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-
-        button {
-            background: #667eea;
-            color: white;
-            border-color: #667eea;
-        }
-
-        button:hover {
-            background: #5568d3;
-        }
-
-        #status,
-        #scheduleStatus {
-            padding: 10px;
-            margin: 10px 0;
-            border-radius: 4px;
-            background: #e3f2fd;
-        }
-
-        #summary,
-        #scheduleInfo {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            margin: 20px 0;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-
-        #summary p,
-        #scheduleInfo p {
-            margin: 8px 0;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            background: white;
-            margin: 20px 0;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-
-        th,
-        td {
-            padding: 12px;
-            text-align: left;
-            border-bottom: 1px solid #ddd;
-        }
-
-        th {
-            background: #f8f9fa;
-            font-weight: 600;
-        }
-
-        tr:hover {
-            background: #f8f9fa;
-        }
-
-        .valid-section {
-            border-left: 4px solid #28a745;
-            padding-left: 15px;
-        }
-
-        .invalid-section {
-            border-left: 4px solid #dc3545;
-            padding-left: 15px;
-        }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 0.95em; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #e2e8f0; }
+        th { background: #f8fafc; font-weight: 600; color: #475569; }
+        tr:hover { background: #f8fafc; }
+        
+        .amount-col { font-weight: bold; font-family: monospace; }
+        .valid-row { border-left: 4px solid #22c55e; }
+        .invalid-row { border-left: 4px solid #ef4444; background-color: #fff5f5; }
+        .pending-row { border-left: 4px solid #f59e0b; }
+        
+        .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-top: 15px; }
+        .summary-item { background: #f8fafc; padding: 15px; border-radius: 8px; text-align: center; }
+        .summary-value { font-size: 1.5em; font-weight: bold; display: block; margin-top: 5px; }
+        .summary-valid .summary-value { color: #15803d; }
+        .summary-total { grid-column: 1 / -1; background: #ecfdf5; border: 1px solid #a7f3d0; }
     </style>
 </head>
 
 <body>
-    <h1>RideClaim AI - Trip Validation</h1>
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+            <h1>RideClaim AI</h1>
+            <div class="batch-info">Lote Actual ID: <strong id="displayBatchId">Generando...</strong></div>
+        </div>
+        <button onclick="startNewBatch()" class="btn-reset">🔄 Nuevo Empleado (Limpiar)</button>
+    </div>
 
-    <h2>Upload Receipts</h2>
-    <input type="file" id="imageInput" accept="image/*" multiple>
-    <div id="status"></div>
+    <div class="card">
+        <h2>1. Subir Recibos</h2>
+        <p style="color: #666; margin-bottom: 15px;">Sube todas las capturas del mes (aprox 30-40 imágenes).</p>
+        <input type="file" id="imageInput" accept="image/*" multiple>
+        <div id="status"></div>
+    </div>
 
-    <div style="margin-top: 30px;">
-        <h2>Work Schedule Analysis</h2>
-        <button id="analyzeBtn">Analyze Work Schedule</button>
+    <div class="card">
+        <h2>2. Analizar Horario y Validar</h2>
+        <div style="display: flex; align-items: center; gap: 15px;">
+            <button id="analyzeBtn" class="btn-primary">Ejecutar Análisis Inteligente</button>
+            <span style="color: #64748b; font-size: 0.9em;">(Usa solo los recibos de este lote)</span>
+        </div>
         <div id="scheduleStatus"></div>
-        <div id="scheduleInfo" style="display:none;">
-            <h3>Inferred Work Schedule:</h3>
-            <p><strong>Work Hours:</strong> <span id="workHours"></span></p>
-            <p><strong>Confidence:</strong> <span id="confidence"></span></p>
-            <p><strong>Trips Analyzed:</strong> <span id="tripsAnalyzed"></span></p>
+        
+        <div id="scheduleInfo" style="display:none; margin-top: 20px; padding-top: 20px; border-top: 1px solid #eee;">
+            <h3 style="margin-top: 0;">Horario Detectado:</h3>
+            <div class="summary-grid">
+                <div class="summary-item">
+                    <span>Entrada Estimada</span>
+                    <span id="workStart" class="summary-value">-</span>
+                </div>
+                <div class="summary-item">
+                    <span>Salida Estimada</span>
+                    <span id="workEnd" class="summary-value">-</span>
+                </div>
+                <div class="summary-item">
+                    <span>Confianza</span>
+                    <span id="confidence" class="summary-value">-</span>
+                </div>
+            </div>
         </div>
     </div>
 
-    <div id="summary" style="display:none;">
-        <h2>Summary</h2>
-        <p>Total Trips: <span id="totalTrips">0</span></p>
-        <p>Valid Trips: <span id="validCount">0</span></p>
-        <p>Invalid Trips: <span id="invalidCount">0</span></p>
-        <p><strong>Valid Total: LKR <span id="totalValid">0.00</span></strong></p>
-    </div>
+    <div id="resultsSection" class="card" style="display:none;">
+        <h2>3. Resumen de Validación</h2>
+        
+        <div class="summary-grid">
+            <div class="summary-item summary-total">
+                <span>Total a Reembolsar</span>
+                <span class="summary-value">LKR <span id="totalValidAmount">0.00</span></span>
+            </div>
+            <div class="summary-item">
+                <span>Viajes Válidos</span>
+                <span id="countValid" class="summary-value" style="color: #15803d">0</span>
+            </div>
+            <div class="summary-item">
+                <span>Inválidos</span>
+                <span id="countInvalid" class="summary-value" style="color: #ef4444">0</span>
+            </div>
+        </div>
 
-    <div id="validSection" class="valid-section" style="display:none;">
-        <h2>✅ Valid Trips</h2>
-        <table>
+        <h3 style="margin-top: 30px;">Detalle de Viajes</h3>
+        <table id="tripsTable">
             <thead>
                 <tr>
-                    <th>Date</th>
-                    <th>Time</th>
-                    <th>Location</th>
-                    <th>Amount</th>
+                    <th>Fecha/Hora</th>
+                    <th>Ubicación</th>
+                    <th>Monto</th>
+                    <th>Estado</th>
+                    <th>Razón</th>
                 </tr>
             </thead>
-            <tbody id="validTable"></tbody>
-        </table>
-    </div>
-
-    <div id="invalidSection" class="invalid-section" style="display:none;">
-        <h2>❌ Invalid Trips</h2>
-        <table>
-            <thead>
-                <tr>
-                    <th>Date</th>
-                    <th>Time</th>
-                    <th>Location</th>
-                    <th>Amount</th>
-                </tr>
-            </thead>
-            <tbody id="invalidTable"></tbody>
+            <tbody id="tripsTableBody"></tbody>
         </table>
     </div>
 
     <script>
-        const imageInput = document.getElementById('imageInput');
-        const status = document.getElementById('status');
-        const analyzeBtn = document.getElementById('analyzeBtn');
-        const scheduleStatus = document.getElementById('scheduleStatus');
+        // ESTADO GLOBAL
+        let currentBatchId = null;
 
-        analyzeBtn.addEventListener('click', async () => {
-            scheduleStatus.textContent = 'Analyzing...';
-            try {
-                const res = await fetch('/api/infer-schedule');
-                const data = await res.json();
-                if (data.success) {
-                    document.getElementById('scheduleInfo').style.display = 'block';
-                    document.getElementById('workHours').textContent = `${data.schedule.workStartTime} - ${data.schedule.workEndTime}`;
-                    document.getElementById('confidence').textContent = `${(data.schedule.confidence * 100).toFixed(0)}%`;
-                    document.getElementById('tripsAnalyzed').textContent = data.schedule.tripsAnalyzed;
-                    scheduleStatus.textContent = '✅ Done!';
-                    await loadValidatedTrips();
-                } else {
-                    scheduleStatus.textContent = `⚠️ ${data.message}`;
-                }
-            } catch (error) {
-                scheduleStatus.textContent = `❌ Error: ${error.message}`;
-            }
+        // INICIALIZACIÓN
+        document.addEventListener('DOMContentLoaded', () => {
+            startNewBatch();
         });
 
-        imageInput.addEventListener('change', async (e) => {
+        // FUNCIONES CORE
+        function startNewBatch() {
+            // Generar un ID único simple (timestamp + random)
+            currentBatchId = 'batch_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+            document.getElementById('displayBatchId').textContent = currentBatchId;
+            
+            // Limpiar UI
+            document.getElementById('imageInput').value = '';
+            document.getElementById('status').innerHTML = '';
+            document.getElementById('status').className = '';
+            document.getElementById('scheduleStatus').innerHTML = '';
+            document.getElementById('scheduleInfo').style.display = 'none';
+            document.getElementById('resultsSection').style.display = 'none';
+            document.getElementById('tripsTableBody').innerHTML = '';
+            
+            console.log("🆕 Nuevo lote iniciado:", currentBatchId);
+        }
+
+        // 1. PROCESAR IMÁGENES (QWEN)
+        document.getElementById('imageInput').addEventListener('change', async (e) => {
             const files = Array.from(e.target.files);
             if (files.length === 0) return;
 
-            let processed = 0, duplicates = 0, errors = 0;
+            const statusDiv = document.getElementById('status');
+            let processed = 0, errors = 0;
 
-            for (const file of files) {
+            statusDiv.className = 'status-processing';
+            statusDiv.textContent = `🚀 Iniciando carga de ${files.length} recibos al Lote...`;
+
+            for (const [index, file] of files.entries()) {
                 try {
-                    status.textContent = `Processing ${processed + 1}/${files.length}: ${file.name}`;
+                    statusDiv.textContent = `⏳ Procesando ${index + 1}/${files.length}: ${file.name}`;
                     const base64 = await fileToBase64(file);
+                    
                     const res = await fetch('/api/qwen', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ image: base64, fileName: file.name, mimeType: file.type })
+                        body: JSON.stringify({ 
+                            image: base64, 
+                            fileName: file.name, 
+                            mimeType: file.type,
+                            batchId: currentBatchId // <--- CLAVE: Enviamos el ID del lote
+                        })
                     });
-                    if (!res.ok) throw new Error(`Error ${res.status}`);
-                    const result = await res.json();
 
-                    if (result.duplicate) duplicates++;
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
                     processed++;
                 } catch (error) {
-                    console.error(`Error: ${file.name}`, error);
+                    console.error(error);
                     errors++;
                 }
             }
 
-            status.textContent = `✅ Processed: ${processed}, Duplicates: ${duplicates}, Errors: ${errors}. Loading validation...`;
-            await loadValidatedTrips();
+            statusDiv.className = processed > 0 ? 'status-success' : 'status-error';
+            statusDiv.textContent = `✅ Carga completa. Procesados: ${processed}, Errores: ${errors}. Ahora haz clic en "Ejecutar Análisis".`;
         });
 
-        async function loadValidatedTrips() {
+        // 2. ANALIZAR Y VALIDAR
+        document.getElementById('analyzeBtn').addEventListener('click', async () => {
+            const statusDiv = document.getElementById('scheduleStatus');
+            statusDiv.className = 'status-processing';
+            statusDiv.textContent = '🧠 Analizando patrones de horario y validando reglas...';
+
             try {
-                const res = await fetch('/api/get-validated-trips');
-                const data = await res.json();
+                // Paso A: Inferir Horario (enviando batchId)
+                const scheduleRes = await fetch(`/api/infer-schedule?batchId=${currentBatchId}`);
+                const scheduleData = await scheduleRes.json();
 
-                document.getElementById('totalTrips').textContent = data.summary.totalTrips;
-                document.getElementById('validCount').textContent = data.summary.validCount;
-                document.getElementById('invalidCount').textContent = data.summary.invalidCount;
-                document.getElementById('totalValid').textContent = data.totalValid;
-                document.getElementById('summary').style.display = 'block';
+                if (scheduleData.success) {
+                    // Mostrar info del horario
+                    document.getElementById('scheduleInfo').style.display = 'block';
+                    document.getElementById('workStart').textContent = scheduleData.schedule.workStartTime;
+                    document.getElementById('workEnd').textContent = scheduleData.schedule.workEndTime;
+                    document.getElementById('confidence').textContent = (scheduleData.schedule.confidence * 100).toFixed(0) + '%';
+                }
 
-                renderTable('validTable', data.valid, 'validSection');
-                renderTable('invalidTable', data.invalid, 'invalidSection');
+                // Paso B: Obtener Viajes Validados (enviando batchId)
+                const tripsRes = await fetch(`/api/get-validated-trips?batchId=${currentBatchId}`);
+                const tripsData = await tripsRes.json();
 
-                status.textContent = `✅ Validation complete!`;
+                renderResults(tripsData);
+                
+                statusDiv.className = 'status-success';
+                statusDiv.textContent = '✅ Análisis finalizado.';
+
             } catch (error) {
-                console.error('Error loading validated trips:', error);
-                status.textContent = `❌ Error loading validation`;
+                console.error(error);
+                statusDiv.className = 'status-error';
+                statusDiv.textContent = `❌ Error en el análisis: ${error.message}`;
             }
-        }
+        });
 
-        function renderTable(tableId, trips, sectionId) {
-            const tbody = document.getElementById(tableId);
-            const section = document.getElementById(sectionId);
-            if (!trips || trips.length === 0) {
-                section.style.display = 'none';
-                return;
-            }
+        // HELPERS
+        function renderResults(data) {
+            const section = document.getElementById('resultsSection');
+            const tbody = document.getElementById('tripsTableBody');
             section.style.display = 'block';
-            tbody.innerHTML = trips.map(trip => `
-                <tr>
-                    <td>${trip.date || 'N/A'}</td>
-                    <td>${trip.time || 'N/A'}</td>
-                    <td>${trip.location || 'N/A'}</td>
-                    <td>${trip.amount || 'N/A'}</td>
+
+            // Actualizar Resumen
+            document.getElementById('totalValidAmount').textContent = data.totalValid;
+            document.getElementById('countValid').textContent = data.summary.validCount;
+            document.getElementById('countInvalid').textContent = data.summary.invalidCount;
+
+            // Unificar listas para mostrar
+            const allTrips = [
+                ...data.valid.map(t => ({...t, status: 'valid'})),
+                ...data.invalid.map(t => ({...t, status: 'invalid'})),
+                ...data.pending.map(t => ({...t, status: 'pending'}))
+            ].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+            tbody.innerHTML = allTrips.map(trip => `
+                <tr class="${trip.status}-row">
+                    <td>
+                        <div style="font-weight:bold">${trip.date || 'Sin fecha'}</div>
+                        <div style="font-size:0.85em; color:#666">${trip.time || '--:--'}</div>
+                    </td>
+                    <td>${trip.location || 'Desconocido'}</td>
+                    <td class="amount-col">${trip.amount || '0'}</td>
+                    <td>
+                        <span style="
+                            padding: 4px 8px; 
+                            border-radius: 4px; 
+                            background: ${trip.status === 'valid' ? '#dcfce7' : '#fee2e2'};
+                            color: ${trip.status === 'valid' ? '#166534' : '#991b1b'};
+                            font-size: 0.85em; font-weight: bold;
+                        ">
+                            ${trip.status.toUpperCase()}
+                        </span>
+                    </td>
+                    <td style="font-size: 0.9em; color: #444;">${trip.validation_reason || '-'}</td>
                 </tr>
             `).join('');
         }
@@ -262,5 +278,4 @@
         }
     </script>
 </body>
-
 </html>
