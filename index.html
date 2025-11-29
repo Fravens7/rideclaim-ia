@@ -157,94 +157,109 @@
         </table>
     </div>
 
-    scheduleStatus.textContent = '✅ Done!';
-    await loadValidatedTrips();
-    } else {
-    scheduleStatus.textContent = `⚠️ ${data.message}`;
-    }
-    } catch (error) {
-    scheduleStatus.textContent = `❌ Error: ${error.message}`;
-    }
-    });
+    <script>
+        const imageInput = document.getElementById('imageInput');
+        const status = document.getElementById('status');
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        const scheduleStatus = document.getElementById('scheduleStatus');
 
-    imageInput.addEventListener('change', async (e) => {
-    const files = Array.from(e.target.files);
-    if (files.length === 0) return;
+        analyzeBtn.addEventListener('click', async () => {
+            scheduleStatus.textContent = 'Analyzing...';
+            try {
+                const res = await fetch('/api/infer-schedule');
+                const data = await res.json();
+                if (data.success) {
+                    document.getElementById('scheduleInfo').style.display = 'block';
+                    document.getElementById('workHours').textContent = `${data.schedule.workStartTime} - ${data.schedule.workEndTime}`;
+                    document.getElementById('confidence').textContent = `${(data.schedule.confidence * 100).toFixed(0)}%`;
+                    document.getElementById('tripsAnalyzed').textContent = data.schedule.tripsAnalyzed;
+                    scheduleStatus.textContent = '✅ Done!';
+                    await loadValidatedTrips();
+                } else {
+                    scheduleStatus.textContent = `⚠️ ${data.message}`;
+                }
+            } catch (error) {
+                scheduleStatus.textContent = `❌ Error: ${error.message}`;
+            }
+        });
 
-    let processed = 0, duplicates = 0, errors = 0;
+        imageInput.addEventListener('change', async (e) => {
+            const files = Array.from(e.target.files);
+            if (files.length === 0) return;
 
-    for (const file of files) {
-    try {
-    status.textContent = `Processing ${processed + 1}/${files.length}: ${file.name}`;
-    const base64 = await fileToBase64(file);
-    const res = await fetch('/api/qwen', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ image: base64, fileName: file.name, mimeType: file.type })
-    });
-    if (!res.ok) throw new Error(`Error ${res.status}`);
-    const result = await res.json();
+            let processed = 0, duplicates = 0, errors = 0;
 
-    if (result.duplicate) duplicates++;
-    processed++;
-    } catch (error) {
-    console.error(`Error: ${file.name}`, error);
-    errors++;
-    }
-    }
+            for (const file of files) {
+                try {
+                    status.textContent = `Processing ${processed + 1}/${files.length}: ${file.name}`;
+                    const base64 = await fileToBase64(file);
+                    const res = await fetch('/api/qwen', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ image: base64, fileName: file.name, mimeType: file.type })
+                    });
+                    if (!res.ok) throw new Error(`Error ${res.status}`);
+                    const result = await res.json();
 
-    status.textContent = `✅ Processed: ${processed}, Duplicates: ${duplicates}, Errors: ${errors}. Loading
-    validation...`;
-    await loadValidatedTrips();
-    });
+                    if (result.duplicate) duplicates++;
+                    processed++;
+                } catch (error) {
+                    console.error(`Error: ${file.name}`, error);
+                    errors++;
+                }
+            }
 
-    async function loadValidatedTrips() {
-    try {
-    const res = await fetch('/image/get-validated-trips');
-    const data = await res.json();
+            status.textContent = `✅ Processed: ${processed}, Duplicates: ${duplicates}, Errors: ${errors}. Loading validation...`;
+            await loadValidatedTrips();
+        });
 
-    document.getElementById('totalTrips').textContent = data.summary.totalTrips;
-    document.getElementById('validCount').textContent = data.summary.validCount;
-    document.getElementById('invalidCount').textContent = data.summary.invalidCount;
-    document.getElementById('totalValid').textContent = data.totalValid;
-    document.getElementById('summary').style.display = 'block';
+        async function loadValidatedTrips() {
+            try {
+                const res = await fetch('/api/get-validated-trips');
+                const data = await res.json();
 
-    renderTable('validTable', data.valid, 'validSection');
-    renderTable('invalidTable', data.invalid, 'invalidSection');
+                document.getElementById('totalTrips').textContent = data.summary.totalTrips;
+                document.getElementById('validCount').textContent = data.summary.validCount;
+                document.getElementById('invalidCount').textContent = data.summary.invalidCount;
+                document.getElementById('totalValid').textContent = data.totalValid;
+                document.getElementById('summary').style.display = 'block';
 
-    status.textContent = `✅ Validation complete!`;
-    } catch (error) {
-    console.error('Error loading validated trips:', error);
-    status.textContent = `❌ Error loading validation`;
-    }
-    }
+                renderTable('validTable', data.valid, 'validSection');
+                renderTable('invalidTable', data.invalid, 'invalidSection');
 
-    function renderTable(tableId, trips, sectionId) {
-    const tbody = document.getElementById(tableId);
-    const section = document.getElementById(sectionId);
-    if (!trips || trips.length === 0) {
-    section.style.display = 'none';
-    return;
-    }
-    section.style.display = 'block';
-    tbody.innerHTML = trips.map(trip => `
-    <tr>
-        <td>${trip.date || 'N/A'}</td>
-        <td>${trip.time || 'N/A'}</td>
-        <td>${trip.location || 'N/A'}</td>
-        <td>${trip.amount || 'N/A'}</td>
-    </tr>
-    `).join('');
-    }
+                status.textContent = `✅ Validation complete!`;
+            } catch (error) {
+                console.error('Error loading validated trips:', error);
+                status.textContent = `❌ Error loading validation`;
+            }
+        }
 
-    function fileToBase64(file) {
-    return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result.split(',')[1]);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-    });
-    }
+        function renderTable(tableId, trips, sectionId) {
+            const tbody = document.getElementById(tableId);
+            const section = document.getElementById(sectionId);
+            if (!trips || trips.length === 0) {
+                section.style.display = 'none';
+                return;
+            }
+            section.style.display = 'block';
+            tbody.innerHTML = trips.map(trip => `
+                <tr>
+                    <td>${trip.date || 'N/A'}</td>
+                    <td>${trip.time || 'N/A'}</td>
+                    <td>${trip.location || 'N/A'}</td>
+                    <td>${trip.amount || 'N/A'}</td>
+                </tr>
+            `).join('');
+        }
+
+        function fileToBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result.split(',')[1]);
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        }
     </script>
 </body>
 
