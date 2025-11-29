@@ -131,7 +131,6 @@ Devuelve SOLO un JSON array sin explicaciones:
               location: trip.location || trip.destination || null,
               amount: trip.amount || null,
               type: trip.type || null,
-              image_filename: fileName || null,
               extra_1: trip.extra_1 || null,
               extra_2: trip.extra_2 || null,
               extra_3: trip.extra_3 || null,
