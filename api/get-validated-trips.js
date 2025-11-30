@@ -15,10 +15,18 @@ export default async function handler(req, res) {
 
         if (error || !rawTrips) return res.status(500).json({ error: "DB Error" });
 
+        // --- MEJORA 1: ORDENAMIENTO CRONOLÓGICO ROBUSTO ---
+        rawTrips.sort((a, b) => {
+            const dateA = parseFullDate(a.date, a.time);
+            const dateB = parseFullDate(b.date, b.time);
+            return dateA - dateB;
+        });
+        // --------------------------------------------------
+
         // --- LÓGICA NORMATIVA (STRICT 9-HOUR RULE) ---
 
         // Fase 1: Filtros Duros (Ubicación, Precio, Fecha)
-        let officeArrivals = []; // Solo usaremos estos para calcular el horario
+        let officeArrivals = []; 
         let allCandidates = [];
         let rejectedTrips = [];
 
@@ -27,17 +35,15 @@ export default async function handler(req, res) {
             if (reason) {
                 rejectedTrips.push({ ...trip, status: 'invalid', reason });
             } else {
-                // Es un candidato válido (pasó precio y lugar)
                 allCandidates.push(trip);
                 
-                // Si es un viaje HACIA la oficina, lo guardamos para el cálculo
                 if (isLocation(trip.location, 'office')) {
                     officeArrivals.push(trip);
                 }
             }
         });
 
-        // Fase 2: Inferencia del Horario Oficial (Rounding Up)
+        // Fase 2: Inferencia del Horario Oficial
         const schedule = inferOfficialSchedule(officeArrivals);
 
         // Fase 3: Veredicto Final
@@ -50,19 +56,14 @@ export default async function handler(req, res) {
             let timeReason = "";
 
             if (!schedule.start) {
-                // Si no hay suficientes datos para calcular horario, no podemos validar tiempo
-                // Opción A: Rechazar todo. Opción B: Dejar pendiente.
-                // Según tu regla estricta: si no sé tu horario, no puedo pagarte.
-                rejectedTrips.push({ ...trip, status: 'invalid', reason: "Insufficient office trips to determine shift" });
+                rejectedTrips.push({ ...trip, status: 'invalid', reason: "Insufficient data to detect shift" });
                 return;
             }
 
             const tripMins = parseTime(trip.time);
 
             if (isOffice) {
-                // REGLA ENTRADA: Debe llegar ANTES o MUY CERCA de la hora de inicio
-                // Ventana: Desde 60 min antes hasta 10 min después (tolerancia tráfico)
-                // Ej: Inicio 1:00 PM. Válido: 12:00 PM a 1:10 PM.
+                // Entrada: 60 min antes a 10 min después
                 const validStart = schedule.start - 60;
                 const validEnd = schedule.start + 10;
                 
@@ -75,15 +76,13 @@ export default async function handler(req, res) {
             } 
             
             else if (isHome) {
-                // REGLA SALIDA ESTRICTA: Debe irse DESPUÉS de cumplir las 9 horas
-                // Ej: Salida 10:00 PM. Viaje 9:34 PM -> INVALID. Viaje 10:02 PM -> VALID.
-                // Tolerancia: 0 minutos antes. (O quizás 5 min de gracia? Dejo 0 por ahora).
-                
+                // Salida: Después de cumplir 9 horas
                 if (tripMins >= schedule.end) {
                     isValidTime = true;
                     timeReason = "Valid Evening Commute (Shift completed)";
                 } else {
-                    timeReason = `Left too early (Shift ends ${minutesToTime(schedule.end)})`;
+                    // --- MEJORA 2: TEXTO MENOS AGRESIVO ---
+                    timeReason = `Early departure (Calculated shift ends ${minutesToTime(schedule.end)})`;
                 }
             }
 
@@ -94,7 +93,6 @@ export default async function handler(req, res) {
             }
         });
 
-        // Totales
         const totalAmount = validTrips.reduce((sum, t) => sum + parseAmount(t.amount), 0);
         const scheduleText = schedule.start 
             ? `${minutesToTime(schedule.start)} - ${minutesToTime(schedule.end)} (9h Shift)` 
@@ -118,7 +116,6 @@ export default async function handler(req, res) {
 function inferOfficialSchedule(officeTrips) {
     if (!officeTrips || officeTrips.length === 0) return { start: null, end: null };
 
-    // 1. Obtener minutos de llegada
     const arrivalTimes = officeTrips
         .map(t => parseTime(t.time))
         .filter(m => m !== null)
@@ -126,30 +123,20 @@ function inferOfficialSchedule(officeTrips) {
 
     if (arrivalTimes.length === 0) return { start: null, end: null };
 
-    // 2. Calcular Mediana de llegada real (Ej: 12:43 PM)
     const mid = Math.floor(arrivalTimes.length / 2);
     const medianArrival = arrivalTimes.length % 2 !== 0 
         ? arrivalTimes[mid] 
         : (arrivalTimes[mid - 1] + arrivalTimes[mid]) / 2;
 
-    // 3. PROYECCIÓN (ROUND UP): Redondear a la siguiente hora en punto
-    // Si la mediana es 12:43 (763 min) -> Dividir entre 60 -> 12.71 -> Ceil: 13 -> 13 * 60 = 780 (1:00 PM)
-    // Si la mediana es 12:10... ¿Debería ser 1:00 PM o 12:30? 
-    // Tu lógica sugiere que "intentan llegar antes". Asumiremos redondeo a la hora superior.
-    
+    // Rounding Up a la hora siguiente
     const startHour = Math.ceil(medianArrival / 60); 
     const officialStartMins = startHour * 60;
+    const officialEndMins = officialStartMins + (9 * 60); 
 
-    // 4. REGLA 9 HORAS
-    const officialEndMins = officialStartMins + (9 * 60); // + 540 minutos
-
-    return {
-        start: officialStartMins,
-        end: officialEndMins
-    };
+    return { start: officialStartMins, end: officialEndMins };
 }
 
-// --- HELPERS BÁSICOS ---
+// --- HELPERS ---
 
 function checkHardRules(trip) {
     if (!trip.date || !trip.date.includes('Nov')) return "Date not in Nov 2025";
@@ -191,4 +178,16 @@ function minutesToTime(minutes) {
     const p = h >= 12 ? 'PM' : 'AM';
     h = h % 12 || 12;
     return `${h}:${String(m).padStart(2,'0')} ${p}`;
+}
+
+// Helper nuevo para ordenar fechas correctamente
+function parseFullDate(dateStr, timeStr) {
+    try {
+        const currentYear = new Date().getFullYear();
+        // Construye fecha completa para comparar (Ej: "Nov 24 2025 9:30 PM")
+        const fullString = `${dateStr} ${currentYear} ${timeStr}`;
+        return new Date(fullString).getTime();
+    } catch (e) {
+        return 0;
+    }
 }
