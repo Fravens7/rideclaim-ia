@@ -3,78 +3,83 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RideClaim AI - Hybrid Engine</title>
+    <title>RideClaim AI - AUDIT MODE</title>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; max-width: 1000px; margin: 40px auto; padding: 20px; background: #f0f2f5; color: #333; }
-        .card { background: white; padding: 25px; border-radius: 12px; margin-bottom: 25px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-        h1 { margin: 0; }
+        body { font-family: 'Segoe UI', monospace; max-width: 1000px; margin: 40px auto; padding: 20px; background: #1e1e1e; color: #fff; }
+        .card { background: #2d2d2d; padding: 25px; border-radius: 12px; margin-bottom: 25px; border: 1px solid #444; }
+        h1 { margin: 0; color: #fff; }
         
-        .upload-zone { border: 2px dashed #cbd5e0; padding: 40px; text-align: center; border-radius: 12px; background: #f8fafc; cursor: pointer; transition: all 0.2s; }
-        .upload-zone:hover { border-color: #3b82f6; background: #eff6ff; }
+        .upload-zone { border: 2px dashed #666; padding: 40px; text-align: center; border-radius: 12px; background: #333; cursor: pointer; }
+        .upload-zone:hover { border-color: #3b82f6; background: #3a3a3a; }
         
-        .progress-container { margin-top: 20px; display: none; }
-        .progress-bar { height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden; }
-        .progress-fill { height: 100%; background: linear-gradient(90deg, #3b82f6, #8b5cf6); width: 0%; transition: width 0.3s ease; }
-        #statusText { margin-top: 10px; font-weight: 500; color: #64748b; font-size: 0.9em; text-align: center; }
+        .progress-bar-container { height: 8px; background: #444; border-radius: 4px; margin-top: 20px; overflow: hidden; display: none; }
+        .progress-bar-fill { height: 100%; background: #10b981; width: 0%; transition: width 0.3s ease; }
+        
+        #statusText { margin-top: 10px; color: #bbb; font-size: 0.9em; text-align: center; font-family: monospace;}
 
-        /* Stats */
+        /* Resultados */
         .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-top: 20px; }
-        .stat-box { background: #f8fafc; padding: 15px; border-radius: 8px; text-align: center; border: 1px solid #e2e8f0; }
+        .stat-box { background: #333; padding: 15px; border-radius: 8px; text-align: center; border: 1px solid #555; }
         .stat-value { font-size: 1.5em; font-weight: bold; display: block; margin-top: 5px; }
 
         table { width: 100%; border-collapse: collapse; margin-top: 25px; font-size: 0.9em; }
-        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
-        th { background: #f8fafc; color: #64748b; font-weight: 600; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #444; }
+        th { background: #252525; color: #aaa; }
+        tr:hover { background: #383838; }
         
         .badge { padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 0.8em; }
-        .valid { background: #dcfce7; color: #166534; }
-        .invalid { background: #fee2e2; color: #991b1b; }
+        .valid { background: #064e3b; color: #6ee7b7; }
+        .invalid { background: #7f1d1d; color: #fca5a5; }
+        
+        /* Log visual en pantalla */
+        #logConsole { background: #000; padding: 15px; font-family: monospace; font-size: 0.8em; height: 200px; overflow-y: scroll; border: 1px solid #555; margin-top: 20px; color: #0f0; display: none; }
     </style>
 </head>
 <body>
 
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
         <div>
-            <h1>RideClaim AI <span style="font-size:0.5em; background:#8b5cf6; color:white; padding:4px 8px; border-radius:10px; vertical-align:middle;">HYBRID ENGINE</span></h1>
-            <div style="color: #666; font-size: 0.9em; margin-top: 5px;">Batch ID: <span id="batchIdDisplay" style="font-family: monospace;">-</span></div>
+            <h1>RideClaim AI <span style="font-size:0.5em; background:#ef4444; color:white; padding:4px 8px; border-radius:10px; vertical-align:middle;">AUDIT MODE</span></h1>
+            <div style="color: #888; font-size: 0.9em; margin-top: 5px;">Batch ID: <span id="batchIdDisplay">-</span></div>
         </div>
-        <button onclick="initBatch()" style="padding: 10px 20px; cursor: pointer; background: white; border: 1px solid #cbd5e0; border-radius: 6px; font-weight: 600;">🔄 New Batch</button>
+        <button onclick="initBatch()" style="padding: 10px 20px; cursor: pointer; background: #3b82f6; color: white; border: none; border-radius: 6px; font-weight: 600;">🔄 Reset</button>
     </div>
 
     <div class="card">
         <input type="file" id="fileInput" multiple accept="image/*" style="display: none;">
         <div class="upload-zone" onclick="document.getElementById('fileInput').click()">
-            <div style="font-size: 2.5em; margin-bottom: 10px;">⚡</div>
-            <strong>Click to Upload Receipts</strong>
-            <div style="color: #94a3b8; margin-top: 5px;">Powered by Multi-AI Load Balancing (OpenAI + Qwen)</div>
+            <div style="font-size: 2.5em; margin-bottom: 10px;">⏱️</div>
+            <strong>Subir Imágenes (Full OpenAI Speed Test)</strong>
+            <div style="color: #888; margin-top: 5px;">Configurado: 3 Workers OpenAI | 0 Qwen</div>
         </div>
 
-        <div class="progress-container" id="progressContainer">
-            <div class="progress-bar"><div class="progress-fill" id="progressBar"></div></div>
-            <div id="statusText">Waiting for files...</div>
+        <div class="progress-bar-container" id="progressContainer">
+            <div class="progress-bar-fill" id="progressBar"></div>
         </div>
+        <div id="statusText"></div>
+        <div id="logConsole"></div>
     </div>
 
     <div id="resultsCard" class="card" style="display: none;">
         <div style="display: flex; justify-content: space-between;">
-            <h3>Validation Report</h3>
+            <h3>Resultados</h3>
             <div style="text-align: right;">
-                <small style="color: #64748b;">Detected Schedule</small>
-                <div id="scheduleDisplay" style="font-weight: bold; color: #3b82f6;">Calculating...</div>
+                <small style="color: #aaa;">Horario</small>
+                <div id="scheduleDisplay" style="font-weight: bold; color: #60a5fa;">Calculando...</div>
             </div>
         </div>
 
         <div class="stats-grid">
-            <div class="stat-box" style="background: #ecfdf5; border-color: #a7f3d0;">
-                <small style="color: #047857;">Total Refund</small>
-                <span class="stat-value" id="totalMoney" style="color: #047857;">LKR 0.00</span>
+            <div class="stat-box">
+                <small style="color: #10b981;">Total</small>
+                <span class="stat-value" id="totalMoney" style="color: #10b981;">LKR 0.00</span>
             </div>
             <div class="stat-box">
-                <small>Valid Trips</small>
+                <small>Válidos</small>
                 <span class="stat-value" id="validCount">0</span>
             </div>
             <div class="stat-box">
-                <small>Invalid Trips</small>
+                <small>Inválidos</small>
                 <span class="stat-value" id="invalidCount">0</span>
             </div>
         </div>
@@ -82,11 +87,11 @@
         <table id="resultsTable">
             <thead>
                 <tr>
-                    <th>Date / Time</th>
-                    <th>Location</th>
-                    <th>Amount</th>
-                    <th>Status</th>
-                    <th>Reason</th>
+                    <th>Fecha / Hora</th>
+                    <th>Ubicación</th>
+                    <th>Monto</th>
+                    <th>Estado</th>
+                    <th>Motivo</th>
                 </tr>
             </thead>
             <tbody id="tableBody"></tbody>
@@ -96,6 +101,17 @@
     <script>
         let currentBatchId = null;
 
+        function log(msg) {
+            const consoleDiv = document.getElementById('logConsole');
+            consoleDiv.style.display = 'block';
+            const time = new Date().toLocaleTimeString();
+            const p = document.createElement('div');
+            p.innerHTML = `<span style="color:#666">[${time}]</span> ${msg}`;
+            consoleDiv.appendChild(p);
+            consoleDiv.scrollTop = consoleDiv.scrollHeight;
+            console.log(`[${time}] ${msg}`);
+        }
+
         function initBatch() {
             currentBatchId = 'batch_' + Date.now();
             document.getElementById('batchIdDisplay').textContent = currentBatchId;
@@ -103,31 +119,41 @@
             document.getElementById('progressContainer').style.display = 'none';
             document.getElementById('statusText').textContent = '';
             document.getElementById('fileInput').value = '';
+            document.getElementById('logConsole').innerHTML = '';
         }
 
         document.getElementById('fileInput').addEventListener('change', async (e) => {
             const files = Array.from(e.target.files);
             if (files.length === 0) return;
 
-            // UI Setup
             const progressContainer = document.getElementById('progressContainer');
             const progressBar = document.getElementById('progressBar');
             const statusText = document.getElementById('statusText');
+            
             progressContainer.style.display = 'block';
             
-            // --- DYNAMIC QUEUE LOGIC ---
+            // --- CONFIGURACIÓN DE TRABAJADORES (WORKERS) ---
+            // AQUÍ ESTÁ EL CAMBIO: 3 OpenAI, 0 Qwen
+            const workersConfig = [
+                { name: 'Ferrari-1 (OpenAI)', url: '/api/openai' },
+                { name: 'Ferrari-2 (OpenAI)', url: '/api/openai' },
+                { name: 'Ferrari-3 (OpenAI)', url: '/api/openai' }
+            ];
+
             let nextFileIndex = 0;
             let completedCount = 0;
+            const startTimeTotal = Date.now();
 
-            // Worker Function: Grabs next image from the pile
+            log(`🏁 INICIANDO CARRERA con ${files.length} imágenes.`);
+            log(`⚙️ Configuración: ${workersConfig.length} Workers de OpenAI Puro.`);
+
             const runWorker = async (workerName, apiUrl) => {
                 while (nextFileIndex < files.length) {
-                    // 1. Claim a file
-                    const currentIndex = nextFileIndex++; 
-                    const file = files[currentIndex];
+                    const file = files[nextFileIndex++];
+                    const startImgTime = Date.now();
                     
                     try {
-                        statusText.textContent = `⚙️ Processing... (${completedCount}/${files.length})`;
+                        log(`🟡 ${workerName} COMIENZA: ${file.name}`);
                         
                         const base64 = await fileToBase64(file);
                         
@@ -141,35 +167,30 @@
                                 batchId: currentBatchId
                             })
                         });
-                        console.log(`✅ ${workerName} finished: ${file.name}`);
+
+                        const duration = ((Date.now() - startImgTime) / 1000).toFixed(2);
+                        log(`✅ ${workerName} TERMINÓ: ${file.name} en ${duration}s`);
 
                     } catch (err) {
-                        console.error(`❌ ${workerName} failed on ${file.name}`, err);
+                        log(`❌ ${workerName} FALLÓ en ${file.name}: ${err.message}`);
                     } finally {
                         completedCount++;
                         const pct = (completedCount / files.length) * 100;
                         progressBar.style.width = pct + '%';
+                        statusText.textContent = `Procesando: ${completedCount} / ${files.length}`;
                     }
                 }
             };
 
-            // --- LAUNCH THE FLEET ---
-            // Lanzamos 3 trabajadores simultáneos:
-            // 2 x OpenAI (Rápidos)
-            // 1 x Qwen (Backup / Paralelo)
-            
-            statusText.textContent = `🚀 Launching Hybrid Engine (OpenAI + Qwen)...`;
-            
-            await Promise.all([
-                runWorker('OpenAI-Worker-1', '/api/openai'),
-                runWorker('OpenAI-Worker-2', '/api/openai'),
-                runWorker('Qwen-Worker-1',   '/api/qwen')
-            ]);
+            // Lanzar los Workers
+            const promises = workersConfig.map(w => runWorker(w.name, w.url));
+            await Promise.all(promises);
 
-            // --- FINAL VALIDATION ---
-            statusText.textContent = "🧠 Analyzing Schedule & Validating Rules...";
+            const totalDuration = ((Date.now() - startTimeTotal) / 1000).toFixed(2);
+            log(`🏁 TODO TERMINADO en ${totalDuration} segundos.`);
+
+            statusText.textContent = "🧠 Generando reporte final...";
             await fetchValidation();
-            statusText.textContent = "✅ All Done!";
         });
 
         async function fetchValidation() {
@@ -181,14 +202,17 @@
                 document.getElementById('totalMoney').textContent = 'LKR ' + data.totalValid;
                 document.getElementById('validCount').textContent = data.summary.valid;
                 document.getElementById('invalidCount').textContent = data.summary.invalid;
-                document.getElementById('scheduleDisplay').textContent = data.inferredSchedule || "Insufficient Data";
+                document.getElementById('scheduleDisplay').textContent = data.inferredSchedule || "Datos insuficientes";
 
                 const tbody = document.getElementById('tableBody');
                 tbody.innerHTML = '';
 
-                const allTrips = [...data.trips.valid, ...data.trips.invalid].sort((a,b) => 
-                    (a.date + a.time).localeCompare(b.date + b.time)
-                );
+                // Ordenamos por fecha
+                const allTrips = [...data.trips.valid, ...data.trips.invalid].sort((a,b) => {
+                    const timeA = new Date(a.date + ' 2025 ' + a.time).getTime() || 0;
+                    const timeB = new Date(b.date + ' 2025 ' + b.time).getTime() || 0;
+                    return timeA - timeB;
+                });
 
                 allTrips.forEach(trip => {
                     const statusBadge = trip.status === 'valid' 
@@ -199,12 +223,12 @@
                         <tr>
                             <td>
                                 <div>${trip.date}</div>
-                                <div style="font-size:0.85em; color:#666">${trip.time}</div>
+                                <div style="font-size:0.85em; color:#999">${trip.time}</div>
                             </td>
                             <td>${trip.location}</td>
                             <td>${trip.amount}</td>
                             <td>${statusBadge}</td>
-                            <td style="font-size:0.9em; color:#555">${trip.reason}</td>
+                            <td style="font-size:0.9em; color:#bbb">${trip.reason}</td>
                         </tr>
                     `;
                 });
