@@ -15,17 +15,9 @@ export default async function handler(req, res) {
 
         if (error || !rawTrips) return res.status(500).json({ error: "DB Error" });
 
-        // --- MEJORA 1: ORDENAMIENTO CRONOLÓGICO ROBUSTO ---
-        rawTrips.sort((a, b) => {
-            const dateA = parseFullDate(a.date, a.time);
-            const dateB = parseFullDate(b.date, b.time);
-            return dateA - dateB;
-        });
-        // --------------------------------------------------
+        // --- LÓGICA DE NEGOCIO ---
 
-        // --- LÓGICA NORMATIVA (STRICT 9-HOUR RULE) ---
-
-        // Fase 1: Filtros Duros (Ubicación, Precio, Fecha)
+        // Fase 1: Filtros Duros
         let officeArrivals = []; 
         let allCandidates = [];
         let rejectedTrips = [];
@@ -36,18 +28,17 @@ export default async function handler(req, res) {
                 rejectedTrips.push({ ...trip, status: 'invalid', reason });
             } else {
                 allCandidates.push(trip);
-                
                 if (isLocation(trip.location, 'office')) {
                     officeArrivals.push(trip);
                 }
             }
         });
 
-        // Fase 2: Inferencia del Horario Oficial
+        // Fase 2: Inferencia del Horario
         const schedule = inferOfficialSchedule(officeArrivals);
 
-        // Fase 3: Veredicto Final
-        const validTrips = [];
+        // Fase 3: Validación Final
+        let validTrips = [];
         
         allCandidates.forEach(trip => {
             const isOffice = isLocation(trip.location, 'office');
@@ -81,7 +72,6 @@ export default async function handler(req, res) {
                     isValidTime = true;
                     timeReason = "Valid Evening Commute (Shift completed)";
                 } else {
-                    // --- MEJORA 2: TEXTO MENOS AGRESIVO ---
                     timeReason = `Early departure (Calculated shift ends ${minutesToTime(schedule.end)})`;
                 }
             }
@@ -92,6 +82,18 @@ export default async function handler(req, res) {
                 rejectedTrips.push({ ...trip, status: 'invalid', reason: timeReason });
             }
         });
+
+        // --- CORRECCIÓN DE ORDENAMIENTO (EL PARCHE FINAL) ---
+        // Ordenamos ambas listas cronológicamente antes de enviar
+        const chronologicalSort = (a, b) => {
+            const timeA = getTimestamp(a.date, a.time);
+            const timeB = getTimestamp(b.date, b.time);
+            return timeA - timeB; // Menor a mayor (Ascendente)
+        };
+
+        validTrips.sort(chronologicalSort);
+        rejectedTrips.sort(chronologicalSort);
+        // ----------------------------------------------------
 
         const totalAmount = validTrips.reduce((sum, t) => sum + parseAmount(t.amount), 0);
         const scheduleText = schedule.start 
@@ -111,7 +113,20 @@ export default async function handler(req, res) {
     }
 }
 
-// --- LOGICA MATEMÁTICA PURA ---
+// --- HELPERS ---
+
+// Nuevo Helper robusto para convertir fecha a número comparable
+function getTimestamp(dateStr, timeStr) {
+    try {
+        // Normalizamos fecha: "Nov 1" -> "Nov 01" para evitar errores
+        // Pero Javascript suele ser listo. Probemos formato estándar.
+        const currentYear = 2025; // Forzamos año para evitar problemas de "año pasado"
+        const fullString = `${dateStr} ${currentYear} ${timeStr}`;
+        return new Date(fullString).getTime();
+    } catch (e) {
+        return 0;
+    }
+}
 
 function inferOfficialSchedule(officeTrips) {
     if (!officeTrips || officeTrips.length === 0) return { start: null, end: null };
@@ -128,15 +143,12 @@ function inferOfficialSchedule(officeTrips) {
         ? arrivalTimes[mid] 
         : (arrivalTimes[mid - 1] + arrivalTimes[mid]) / 2;
 
-    // Rounding Up a la hora siguiente
     const startHour = Math.ceil(medianArrival / 60); 
     const officialStartMins = startHour * 60;
     const officialEndMins = officialStartMins + (9 * 60); 
 
     return { start: officialStartMins, end: officialEndMins };
 }
-
-// --- HELPERS ---
 
 function checkHardRules(trip) {
     if (!trip.date || !trip.date.includes('Nov')) return "Date not in Nov 2025";
@@ -178,16 +190,4 @@ function minutesToTime(minutes) {
     const p = h >= 12 ? 'PM' : 'AM';
     h = h % 12 || 12;
     return `${h}:${String(m).padStart(2,'0')} ${p}`;
-}
-
-// Helper nuevo para ordenar fechas correctamente
-function parseFullDate(dateStr, timeStr) {
-    try {
-        const currentYear = new Date().getFullYear();
-        // Construye fecha completa para comparar (Ej: "Nov 24 2025 9:30 PM")
-        const fullString = `${dateStr} ${currentYear} ${timeStr}`;
-        return new Date(fullString).getTime();
-    } catch (e) {
-        return 0;
-    }
 }
