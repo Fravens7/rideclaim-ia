@@ -65,16 +65,37 @@ export default async function handler(req, res) {
 
         const trips = JSON.parse(cleanJson);
 
-        // 4. Save to DB
-        for (const trip of (Array.isArray(trips) ? trips : [trips])) {
-            if (trip.amount) {
+// 4. Save to DB (CON DEDUPLICACIÓN LÓGICA)
+        const tripsToSave = Array.isArray(trips) ? trips : [trips];
+
+        for (const trip of tripsToSave) {
+            // Solo procesar si tiene datos mínimos
+            if (trip.amount && trip.date && trip.time) {
+                
+                // --- EL PORTERO LÓGICO ---
+                // Verificamos si ya existe este viaje exacto en este lote
+                const { data: duplicates } = await supabase
+                    .from('tripsimg')
+                    .select('id')
+                    .eq('batch_id', batchId)
+                    .eq('date', trip.date)
+                    .eq('time', trip.time)
+                    .eq('amount', trip.amount); // Mismo precio, fecha y hora = DUPLICADO
+
+                // Si ya existe (longitud > 0), NO lo guardamos. Pasamos al siguiente.
+                if (duplicates && duplicates.length > 0) {
+                    console.log(`♻️ Logical duplicate skipped: ${trip.date} ${trip.time}`);
+                    continue; 
+                }
+                // -------------------------
+
                 await supabase.from('tripsimg').insert({
                     batch_id: batchId,
                     date: trip.date,
                     time: trip.time,
                     location: trip.location,
                     amount: trip.amount,
-                    type: 'gpt-4o-mini',
+                    type: 'gpt-4o-mini', // (O 'qwen-hf' en el otro archivo)
                     image_hash: imageHash
                 });
             }
