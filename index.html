@@ -3,41 +3,48 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RideClaim AI - Speed Optimized</title>
+    <title>RideClaim AI - Stable</title>
     <style>
-        body { font-family: 'Segoe UI', monospace; max-width: 1000px; margin: 40px auto; padding: 20px; background: #111; color: #eee; }
-        .card { background: #222; padding: 25px; border-radius: 12px; margin-bottom: 25px; border: 1px solid #333; }
+        body { font-family: 'Segoe UI', sans-serif; max-width: 1000px; margin: 40px auto; padding: 20px; background: #f0f2f5; color: #333; }
+        .card { background: white; padding: 25px; border-radius: 12px; margin-bottom: 25px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
         h1 { margin: 0; }
-        .upload-zone { border: 2px dashed #555; padding: 40px; text-align: center; border-radius: 12px; background: #1a1a1a; cursor: pointer; }
-        .progress-bar-container { height: 8px; background: #333; border-radius: 4px; margin-top: 20px; overflow: hidden; display: none; }
+        
+        .upload-zone { border: 2px dashed #cbd5e0; padding: 40px; text-align: center; border-radius: 12px; background: #f8fafc; cursor: pointer; }
+        .upload-zone:hover { border-color: #3b82f6; background: #eff6ff; }
+        
+        .progress-bar-container { height: 8px; background: #e2e8f0; border-radius: 4px; margin-top: 20px; overflow: hidden; display: none; }
         .progress-bar-fill { height: 100%; background: #3b82f6; width: 0%; transition: width 0.3s ease; }
-        #statusText { margin-top: 10px; color: #888; text-align: center; }
-        table { width: 100%; border-collapse: collapse; margin-top: 25px; font-size: 0.9em; }
-        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #333; }
-        .badge { padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 0.8em; }
-        .valid { background: #064e3b; color: #6ee7b7; }
-        .invalid { background: #7f1d1d; color: #fca5a5; }
+        #statusText { margin-top: 10px; font-weight: 500; color: #64748b; font-size: 0.9em; text-align: center; }
+
         .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-top: 20px; }
-        .stat-box { background: #2a2a2a; padding: 15px; border-radius: 8px; text-align: center; border: 1px solid #444; }
+        .stat-box { background: #f8fafc; padding: 15px; border-radius: 8px; text-align: center; border: 1px solid #e2e8f0; }
         .stat-value { font-size: 1.5em; font-weight: bold; display: block; margin-top: 5px; }
+
+        table { width: 100%; border-collapse: collapse; margin-top: 25px; font-size: 0.9em; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
+        th { background: #f8fafc; color: #64748b; font-weight: 600; }
+        
+        .badge { padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 0.8em; }
+        .valid { background: #dcfce7; color: #166534; }
+        .invalid { background: #fee2e2; color: #991b1b; }
     </style>
 </head>
 <body>
 
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
         <div>
-            <h1>RideClaim AI <span style="font-size:0.5em; background:#f59e0b; color:black; padding:4px 8px; border-radius:10px; vertical-align:middle;">LIGHTWEIGHT</span></h1>
+            <h1>RideClaim AI <span style="font-size:0.5em; background:#64748b; color:white; padding:4px 8px; border-radius:10px; vertical-align:middle;">STABLE</span></h1>
             <div style="color: #666; font-size: 0.9em; margin-top: 5px;">Batch ID: <span id="batchIdDisplay">-</span></div>
         </div>
-        <button onclick="initBatch()" style="padding: 10px 20px; cursor: pointer; background: #3b82f6; border: none; color: white; border-radius: 6px;">🔄 New Batch</button>
+        <button onclick="initBatch()" style="padding: 10px 20px; cursor: pointer; background: white; border: 1px solid #cbd5e0; border-radius: 6px; font-weight: 600;">🔄 New Batch</button>
     </div>
 
     <div class="card">
         <input type="file" id="fileInput" multiple accept="image/*" style="display: none;">
         <div class="upload-zone" onclick="document.getElementById('fileInput').click()">
-            <div style="font-size: 2.5em; margin-bottom: 10px;">⚡</div>
-            <strong>Click to Upload</strong>
-            <div style="color: #666; margin-top: 5px;">Optimized for Vercel Free Tier (Max Speed)</div>
+            <div style="font-size: 2.5em; margin-bottom: 10px;">📁</div>
+            <strong>Click to Upload Receipts</strong>
+            <div style="color: #94a3b8; margin-top: 5px;">Processing one by one for stability</div>
         </div>
 
         <div class="progress-bar-container" id="progressContainer">
@@ -47,12 +54,39 @@
     </div>
 
     <div id="resultsCard" class="card" style="display: none;">
-        <div class="stats-grid">
-            <div class="stat-box"><small>Total</small><span class="stat-value" id="totalMoney">0</span></div>
-            <div class="stat-box"><small>Valid</small><span class="stat-value" id="validCount">0</span></div>
-            <div class="stat-box"><small>Invalid</small><span class="stat-value" id="invalidCount">0</span></div>
+        <div style="display: flex; justify-content: space-between;">
+            <h3>Validation Report</h3>
+            <div style="text-align: right;">
+                <small style="color: #64748b;">Inferred Schedule</small>
+                <div id="scheduleDisplay" style="font-weight: bold; color: #3b82f6;">Calculating...</div>
+            </div>
         </div>
+
+        <div class="stats-grid">
+            <div class="stat-box" style="background: #ecfdf5; border-color: #a7f3d0;">
+                <small style="color: #047857;">Total Refund</small>
+                <span class="stat-value" id="totalMoney" style="color: #047857;">LKR 0.00</span>
+            </div>
+            <div class="stat-box">
+                <small>Valid</small>
+                <span class="stat-value" id="validCount">0</span>
+            </div>
+            <div class="stat-box">
+                <small>Invalid</small>
+                <span class="stat-value" id="invalidCount">0</span>
+            </div>
+        </div>
+
         <table id="resultsTable">
+            <thead>
+                <tr>
+                    <th>Date / Time</th>
+                    <th>Location</th>
+                    <th>Amount</th>
+                    <th>Status</th>
+                    <th>Reason</th>
+                </tr>
+            </thead>
             <tbody id="tableBody"></tbody>
         </table>
     </div>
@@ -78,98 +112,56 @@
             const statusText = document.getElementById('statusText');
             progressContainer.style.display = 'block';
             
-            // --- CONFIGURACIÓN ESTABLE (2 WORKERS) ---
-            // Usamos solo 2 para asegurar que el ancho de banda y Vercel aguanten
-            const workersConfig = [
-                { name: 'Worker-1', url: '/api/openai' },
-                { name: 'Worker-2', url: '/api/openai' }
-            ];
+            // --- PROCESAMIENTO EN SERIE (UNO POR UNO) ---
+            let processed = 0;
+            
+            for (const file of files) {
+                statusText.textContent = `⏳ Processing ${processed + 1}/${files.length}: ${file.name}...`;
+                
+                try {
+                    const base64 = await fileToBase64(file);
+                    
+                    // Llamada a QWEN (Hugging Face)
+                    await fetch('/api/qwen', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            image: base64,
+                            fileName: file.name,
+                            mimeType: file.type,
+                            batchId: currentBatchId
+                        })
+                    });
 
-            let nextFileIndex = 0;
-            let completedCount = 0;
-
-            const runWorker = async (workerName, apiUrl) => {
-                while (nextFileIndex < files.length) {
-                    const file = files[nextFileIndex++];
-                    try {
-                        statusText.textContent = `⚙️ Procesando... (${completedCount}/${files.length})`;
-                        
-                        // COMPRESIÓN AGRESIVA (800px)
-                        const base64 = await compressImage(file);
-                        
-                        await fetch(apiUrl, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                image: base64,
-                                fileName: file.name,
-                                mimeType: 'image/jpeg',
-                                batchId: currentBatchId
-                            })
-                        });
-                        console.log(`✅ ${workerName} completado: ${file.name}`);
-
-                    } catch (err) {
-                        console.error(`❌ Error en ${file.name}`, err);
-                        // Opcional: Reintentar o marcar como fallido visualmente
-                    } finally {
-                        completedCount++;
-                        progressBar.style.width = (completedCount / files.length * 100) + '%';
-                    }
+                } catch (err) {
+                    console.error(`Error processing ${file.name}`, err);
+                } finally {
+                    processed++;
+                    const pct = (processed / files.length) * 100;
+                    progressBar.style.width = pct + '%';
                 }
-            };
+            }
 
-            await Promise.all(workersConfig.map(w => runWorker(w.name, w.url)));
-
-            statusText.textContent = "🧠 Validando reglas de negocio...";
+            statusText.textContent = "🧠 Validating...";
             await fetchValidation();
-            statusText.textContent = "✅ Finalizado";
+            statusText.textContent = "✅ Finished!";
         });
-
-        // --- COMPRESIÓN 800PX ---
-        function compressImage(file) {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.readAsDataURL(file);
-                reader.onload = (event) => {
-                    const img = new Image();
-                    img.src = event.target.result;
-                    img.onload = () => {
-                        const canvas = document.createElement('canvas');
-                        // 800px es suficiente para leer texto y es mucho más ligero
-                        const MAX_WIDTH = 800; 
-                        const scaleSize = MAX_WIDTH / img.width;
-                        const finalScale = scaleSize < 1 ? scaleSize : 1;
-
-                        canvas.width = img.width * finalScale;
-                        canvas.height = img.height * finalScale;
-
-                        const ctx = canvas.getContext('2d');
-                        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-
-                        // Calidad 0.6 para velocidad máxima
-                        resolve(canvas.toDataURL('image/jpeg', 0.6).split(',')[1]);
-                    };
-                };
-                reader.onerror = reject;
-            });
-        }
 
         async function fetchValidation() {
             try {
                 const res = await fetch(`/api/get-validated-trips?batchId=${currentBatchId}`);
                 const data = await res.json();
+
                 document.getElementById('resultsCard').style.display = 'block';
                 document.getElementById('totalMoney').textContent = 'LKR ' + data.totalValid;
                 document.getElementById('validCount').textContent = data.summary.valid;
                 document.getElementById('invalidCount').textContent = data.summary.invalid;
-                
-                // Mostrar el horario detectado (con el nuevo cálculo de outliers)
-                document.getElementById('scheduleDisplay').textContent = data.inferredSchedule || "Datos insuficientes";
+                document.getElementById('scheduleDisplay').textContent = data.inferredSchedule || "Insufficient Data";
 
                 const tbody = document.getElementById('tableBody');
                 tbody.innerHTML = '';
-                
+
+                // Orden cronológico
                 const allTrips = [...data.trips.valid, ...data.trips.invalid].sort((a,b) => {
                     const ta = new Date(a.date + ' 2025 ' + a.time).getTime() || 0;
                     const tb = new Date(b.date + ' 2025 ' + b.time).getTime() || 0;
@@ -177,16 +169,33 @@
                 });
 
                 allTrips.forEach(trip => {
-                    const badge = trip.status === 'valid' ? '<span class="badge valid">VALID</span>' : '<span class="badge invalid">INVALID</span>';
-                    tbody.innerHTML += `<tr>
-                        <td>${trip.date}<br><small>${trip.time}</small></td>
-                        <td>${trip.location}</td>
-                        <td>${trip.amount}</td>
-                        <td>${badge}</td>
-                        <td><small>${trip.reason}</small></td>
-                    </tr>`;
+                    const statusBadge = trip.status === 'valid' 
+                        ? `<span class="badge valid">VALID</span>` 
+                        : `<span class="badge invalid">INVALID</span>`;
+                    
+                    tbody.innerHTML += `
+                        <tr>
+                            <td>
+                                <div>${trip.date}</div>
+                                <div style="font-size:0.85em; color:#666">${trip.time}</div>
+                            </td>
+                            <td>${trip.location}</td>
+                            <td>${trip.amount}</td>
+                            <td>${statusBadge}</td>
+                            <td style="font-size:0.9em; color:#555">${trip.reason}</td>
+                        </tr>
+                    `;
                 });
             } catch (err) { console.error(err); }
+        }
+
+        function fileToBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = () => resolve(reader.result.split(',')[1]);
+                reader.onerror = reject;
+            });
         }
 
         initBatch();
