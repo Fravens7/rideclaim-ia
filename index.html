@@ -3,21 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RideClaim AI - SUPABASE SPEED</title>
+    <title>RideClaim AI - Stable</title>
     <style>
         body { font-family: 'Segoe UI', sans-serif; max-width: 1000px; margin: 40px auto; padding: 20px; background: #f0f2f5; color: #333; }
         .card { background: white; padding: 25px; border-radius: 12px; margin-bottom: 25px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
         h1 { margin: 0; }
         
-        .upload-zone { border: 2px dashed #cbd5e0; padding: 40px; text-align: center; border-radius: 12px; background: #f8fafc; cursor: pointer; transition: all 0.2s; }
+        .upload-zone { border: 2px dashed #cbd5e0; padding: 40px; text-align: center; border-radius: 12px; background: #f8fafc; cursor: pointer; }
         .upload-zone:hover { border-color: #3b82f6; background: #eff6ff; }
         
         .progress-bar-container { height: 8px; background: #e2e8f0; border-radius: 4px; margin-top: 20px; overflow: hidden; display: none; }
-        .progress-bar-fill { height: 100%; background: #10b981; width: 0%; transition: width 0.3s ease; }
-        
+        .progress-bar-fill { height: 100%; background: #3b82f6; width: 0%; transition: width 0.3s ease; }
         #statusText { margin-top: 10px; font-weight: 500; color: #64748b; font-size: 0.9em; text-align: center; }
 
-        /* Resultados */
         .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-top: 20px; }
         .stat-box { background: #f8fafc; padding: 15px; border-radius: 8px; text-align: center; border: 1px solid #e2e8f0; }
         .stat-value { font-size: 1.5em; font-weight: bold; display: block; margin-top: 5px; }
@@ -35,18 +33,18 @@
 
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
         <div>
-            <h1>RideClaim AI <span style="font-size:0.5em; background:#10b981; color:white; padding:4px 8px; border-radius:10px; vertical-align:middle;">SUPABASE ENGINE</span></h1>
+            <h1>RideClaim AI <span style="font-size:0.5em; background:#64748b; color:white; padding:4px 8px; border-radius:10px; vertical-align:middle;">STABLE</span></h1>
             <div style="color: #666; font-size: 0.9em; margin-top: 5px;">Batch ID: <span id="batchIdDisplay">-</span></div>
         </div>
-        <button onclick="initBatch()" style="padding: 10px 20px; cursor: pointer; background: white; border: 1px solid #cbd5e0; border-radius: 6px; font-weight: 600;">🔄 Nuevo Lote</button>
+        <button onclick="initBatch()" style="padding: 10px 20px; cursor: pointer; background: white; border: 1px solid #cbd5e0; border-radius: 6px; font-weight: 600;">🔄 New Batch</button>
     </div>
 
     <div class="card">
         <input type="file" id="fileInput" multiple accept="image/*" style="display: none;">
         <div class="upload-zone" onclick="document.getElementById('fileInput').click()">
-            <div style="font-size: 2.5em; margin-bottom: 10px;">⚡</div>
-            <strong>Click para subir imágenes (Procesamiento Paralelo)</strong>
-            <div style="color: #94a3b8; margin-top: 5px;">Powered by Supabase Edge Functions + OpenAI</div>
+            <div style="font-size: 2.5em; margin-bottom: 10px;">📁</div>
+            <strong>Click to Upload Receipts</strong>
+            <div style="color: #94a3b8; margin-top: 5px;">Processing one by one for stability</div>
         </div>
 
         <div class="progress-bar-container" id="progressContainer">
@@ -57,24 +55,24 @@
 
     <div id="resultsCard" class="card" style="display: none;">
         <div style="display: flex; justify-content: space-between;">
-            <h3>Reporte de Validación</h3>
+            <h3>Validation Report</h3>
             <div style="text-align: right;">
-                <small style="color: #64748b;">Horario Detectado</small>
-                <div id="scheduleDisplay" style="font-weight: bold; color: #3b82f6;">Calculando...</div>
+                <small style="color: #64748b;">Inferred Schedule</small>
+                <div id="scheduleDisplay" style="font-weight: bold; color: #3b82f6;">Calculating...</div>
             </div>
         </div>
 
         <div class="stats-grid">
             <div class="stat-box" style="background: #ecfdf5; border-color: #a7f3d0;">
-                <small style="color: #047857;">Total Reembolso</small>
+                <small style="color: #047857;">Total Refund</small>
                 <span class="stat-value" id="totalMoney" style="color: #047857;">LKR 0.00</span>
             </div>
             <div class="stat-box">
-                <small>Válidos</small>
+                <small>Valid</small>
                 <span class="stat-value" id="validCount">0</span>
             </div>
             <div class="stat-box">
-                <small>Inválidos</small>
+                <small>Invalid</small>
                 <span class="stat-value" id="invalidCount">0</span>
             </div>
         </div>
@@ -82,11 +80,11 @@
         <table id="resultsTable">
             <thead>
                 <tr>
-                    <th>Fecha / Hora</th>
-                    <th>Ubicación</th>
-                    <th>Monto</th>
-                    <th>Estado</th>
-                    <th>Motivo</th>
+                    <th>Date / Time</th>
+                    <th>Location</th>
+                    <th>Amount</th>
+                    <th>Status</th>
+                    <th>Reason</th>
                 </tr>
             </thead>
             <tbody id="tableBody"></tbody>
@@ -112,64 +110,41 @@
             const progressContainer = document.getElementById('progressContainer');
             const progressBar = document.getElementById('progressBar');
             const statusText = document.getElementById('statusText');
-            
             progressContainer.style.display = 'block';
-            statusText.textContent = `🚀 Preparando ${files.length} imágenes...`;
-
-            // --- CONFIGURACIÓN SUPABASE (VELOCIDAD EXTREMA) ---
-            const FUNCTION_URL = 'https://qtytxjgruvnczzaywzlr.supabase.co/functions/v1/openai-process';
             
-            // Abrimos 5 "carriles" simultáneos porque Supabase aguanta la carga
-            const workersConfig = [
-                { name: 'Supabase-1', url: FUNCTION_URL },
-                { name: 'Supabase-2', url: FUNCTION_URL },
-                { name: 'Supabase-3', url: FUNCTION_URL },
-                { name: 'Supabase-4', url: FUNCTION_URL },
-                { name: 'Supabase-5', url: FUNCTION_URL }
-            ];
-
-            let nextFileIndex = 0;
-            let completedCount = 0;
-
-            const runWorker = async (workerName, apiUrl) => {
-                while (nextFileIndex < files.length) {
-                    const file = files[nextFileIndex++];
+            // --- PROCESAMIENTO EN SERIE (UNO POR UNO) ---
+            let processed = 0;
+            
+            for (const file of files) {
+                statusText.textContent = `⏳ Processing ${processed + 1}/${files.length}: ${file.name}...`;
+                
+                try {
+                    const base64 = await fileToBase64(file);
                     
-                    try {
-                        statusText.textContent = `⚡ Procesando... (${completedCount}/${files.length})`;
-                        
-                        const base64 = await fileToBase64(file);
-                        
-                        await fetch(apiUrl, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                image: base64,
-                                fileName: file.name,
-                                mimeType: file.type,
-                                batchId: currentBatchId
-                            })
-                        });
-                        console.log(`✅ ${workerName} terminó: ${file.name}`);
+                    // Llamada a QWEN (Hugging Face)
+                    await fetch('/api/qwen', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            image: base64,
+                            fileName: file.name,
+                            mimeType: file.type,
+                            batchId: currentBatchId
+                        })
+                    });
 
-                    } catch (err) {
-                        console.error(`❌ Error en ${file.name}`, err);
-                    } finally {
-                        completedCount++;
-                        const pct = (completedCount / files.length) * 100;
-                        progressBar.style.width = pct + '%';
-                    }
+                } catch (err) {
+                    console.error(`Error processing ${file.name}`, err);
+                } finally {
+                    processed++;
+                    const pct = (processed / files.length) * 100;
+                    progressBar.style.width = pct + '%';
                 }
-            };
+            }
 
-            // Lanzamos los 5 workers a la vez
-            const promises = workersConfig.map(w => runWorker(w.name, w.url));
-            await Promise.all(promises);
-
-            // --- FASE FINAL: VALIDACIÓN ---
-            statusText.textContent = "🧠 Calculando horarios y validando reglas...";
+            statusText.textContent = "🧠 Validating...";
             await fetchValidation();
-            statusText.textContent = "✅ ¡Listo!";
+            statusText.textContent = "✅ Finished!";
         });
 
         async function fetchValidation() {
@@ -181,16 +156,16 @@
                 document.getElementById('totalMoney').textContent = 'LKR ' + data.totalValid;
                 document.getElementById('validCount').textContent = data.summary.valid;
                 document.getElementById('invalidCount').textContent = data.summary.invalid;
-                document.getElementById('scheduleDisplay').textContent = data.inferredSchedule || "Datos insuficientes";
+                document.getElementById('scheduleDisplay').textContent = data.inferredSchedule || "Insufficient Data";
 
                 const tbody = document.getElementById('tableBody');
                 tbody.innerHTML = '';
 
+                // Orden cronológico
                 const allTrips = [...data.trips.valid, ...data.trips.invalid].sort((a,b) => {
-                    // Ordenar por fecha real
-                    const timeA = new Date(a.date + ' 2025 ' + a.time).getTime() || 0;
-                    const timeB = new Date(b.date + ' 2025 ' + b.time).getTime() || 0;
-                    return timeA - timeB;
+                    const ta = new Date(a.date + ' 2025 ' + a.time).getTime() || 0;
+                    const tb = new Date(b.date + ' 2025 ' + b.time).getTime() || 0;
+                    return ta - tb;
                 });
 
                 allTrips.forEach(trip => {
@@ -211,11 +186,7 @@
                         </tr>
                     `;
                 });
-
-            } catch (err) {
-                console.error(err);
-                alert("Error obteniendo resultados");
-            }
+            } catch (err) { console.error(err); }
         }
 
         function fileToBase64(file) {
