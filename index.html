@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RideClaim AI - TURBO MODE</title>
+    <title>RideClaim AI - Hybrid Engine</title>
     <style>
         body { font-family: 'Segoe UI', sans-serif; max-width: 1000px; margin: 40px auto; padding: 20px; background: #f0f2f5; color: #333; }
         .card { background: white; padding: 25px; border-radius: 12px; margin-bottom: 25px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
@@ -12,12 +12,12 @@
         .upload-zone { border: 2px dashed #cbd5e0; padding: 40px; text-align: center; border-radius: 12px; background: #f8fafc; cursor: pointer; transition: all 0.2s; }
         .upload-zone:hover { border-color: #3b82f6; background: #eff6ff; }
         
-        .progress-bar-container { height: 8px; background: #e2e8f0; border-radius: 4px; margin-top: 20px; overflow: hidden; display: none; }
-        .progress-bar-fill { height: 100%; background: #3b82f6; width: 0%; transition: width 0.3s ease; }
-        
-        #statusText { margin-top: 10px; font-weight: 500; color: #64748b; font-size: 0.9em; text-align: center; min-height: 20px;}
+        .progress-container { margin-top: 20px; display: none; }
+        .progress-bar { height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden; }
+        .progress-fill { height: 100%; background: linear-gradient(90deg, #3b82f6, #8b5cf6); width: 0%; transition: width 0.3s ease; }
+        #statusText { margin-top: 10px; font-weight: 500; color: #64748b; font-size: 0.9em; text-align: center; }
 
-        /* Resultados */
+        /* Stats */
         .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-top: 20px; }
         .stat-box { background: #f8fafc; padding: 15px; border-radius: 8px; text-align: center; border: 1px solid #e2e8f0; }
         .stat-value { font-size: 1.5em; font-weight: bold; display: block; margin-top: 5px; }
@@ -35,46 +35,46 @@
 
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
         <div>
-            <h1>RideClaim AI <span style="font-size:0.5em; background:#10b981; color:white; padding:4px 8px; border-radius:10px; vertical-align:middle;">OPENAI TURBO</span></h1>
+            <h1>RideClaim AI <span style="font-size:0.5em; background:#8b5cf6; color:white; padding:4px 8px; border-radius:10px; vertical-align:middle;">HYBRID ENGINE</span></h1>
             <div style="color: #666; font-size: 0.9em; margin-top: 5px;">Batch ID: <span id="batchIdDisplay" style="font-family: monospace;">-</span></div>
         </div>
-        <button onclick="initBatch()" style="padding: 10px 20px; cursor: pointer; background: white; border: 1px solid #cbd5e0; border-radius: 6px; font-weight: 600;">🔄 Nuevo Lote</button>
+        <button onclick="initBatch()" style="padding: 10px 20px; cursor: pointer; background: white; border: 1px solid #cbd5e0; border-radius: 6px; font-weight: 600;">🔄 New Batch</button>
     </div>
 
     <div class="card">
         <input type="file" id="fileInput" multiple accept="image/*" style="display: none;">
         <div class="upload-zone" onclick="document.getElementById('fileInput').click()">
             <div style="font-size: 2.5em; margin-bottom: 10px;">⚡</div>
-            <strong>Click para subir imágenes (Procesamiento Paralelo)</strong>
-            <div style="color: #94a3b8; margin-top: 5px;">Soporta lotes grandes (10, 20, 50 archivos)</div>
+            <strong>Click to Upload Receipts</strong>
+            <div style="color: #94a3b8; margin-top: 5px;">Powered by Multi-AI Load Balancing (OpenAI + Qwen)</div>
         </div>
 
-        <div class="progress-bar-container" id="progressContainer">
-            <div class="progress-bar-fill" id="progressBar"></div>
+        <div class="progress-container" id="progressContainer">
+            <div class="progress-bar"><div class="progress-fill" id="progressBar"></div></div>
+            <div id="statusText">Waiting for files...</div>
         </div>
-        <div id="statusText"></div>
     </div>
 
     <div id="resultsCard" class="card" style="display: none;">
         <div style="display: flex; justify-content: space-between;">
-            <h3>Reporte de Validación</h3>
+            <h3>Validation Report</h3>
             <div style="text-align: right;">
-                <small style="color: #64748b;">Horario Detectado</small>
-                <div id="scheduleDisplay" style="font-weight: bold; color: #3b82f6;">Calculando...</div>
+                <small style="color: #64748b;">Detected Schedule</small>
+                <div id="scheduleDisplay" style="font-weight: bold; color: #3b82f6;">Calculating...</div>
             </div>
         </div>
 
         <div class="stats-grid">
             <div class="stat-box" style="background: #ecfdf5; border-color: #a7f3d0;">
-                <small style="color: #047857;">Total Reembolso</small>
+                <small style="color: #047857;">Total Refund</small>
                 <span class="stat-value" id="totalMoney" style="color: #047857;">LKR 0.00</span>
             </div>
             <div class="stat-box">
-                <small>Válidos</small>
+                <small>Valid Trips</small>
                 <span class="stat-value" id="validCount">0</span>
             </div>
             <div class="stat-box">
-                <small>Inválidos</small>
+                <small>Invalid Trips</small>
                 <span class="stat-value" id="invalidCount">0</span>
             </div>
         </div>
@@ -82,11 +82,11 @@
         <table id="resultsTable">
             <thead>
                 <tr>
-                    <th>Fecha / Hora</th>
-                    <th>Ubicación</th>
-                    <th>Monto</th>
-                    <th>Estado</th>
-                    <th>Motivo</th>
+                    <th>Date / Time</th>
+                    <th>Location</th>
+                    <th>Amount</th>
+                    <th>Status</th>
+                    <th>Reason</th>
                 </tr>
             </thead>
             <tbody id="tableBody"></tbody>
@@ -109,30 +109,29 @@
             const files = Array.from(e.target.files);
             if (files.length === 0) return;
 
+            // UI Setup
             const progressContainer = document.getElementById('progressContainer');
             const progressBar = document.getElementById('progressBar');
             const statusText = document.getElementById('statusText');
-            
             progressContainer.style.display = 'block';
-            statusText.textContent = `🚀 Preparando ${files.length} imágenes...`;
+            
+            // --- DYNAMIC QUEUE LOGIC ---
+            let nextFileIndex = 0;
+            let completedCount = 0;
 
-            // --- AQUÍ ESTÁ LA MAGIA (PARALELISMO) ---
-            const CONCURRENCY = 3; // Enviamos 5 imágenes a la vez
-            let completed = 0;
-            let index = 0;
-
-            const processImage = async () => {
-                while (index < files.length) {
-                    const file = files[index++];
+            // Worker Function: Grabs next image from the pile
+            const runWorker = async (workerName, apiUrl) => {
+                while (nextFileIndex < files.length) {
+                    // 1. Claim a file
+                    const currentIndex = nextFileIndex++; 
+                    const file = files[currentIndex];
                     
                     try {
-                        statusText.textContent = `⚡ Procesando... (${completed}/${files.length})`;
+                        statusText.textContent = `⚙️ Processing... (${completedCount}/${files.length})`;
                         
-                        // 1. Convertir a Base64
                         const base64 = await fileToBase64(file);
                         
-                        // 2. Llamar a API (OpenAI)
-                        await fetch('/api/qwen', {
+                        await fetch(apiUrl, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
@@ -142,30 +141,35 @@
                                 batchId: currentBatchId
                             })
                         });
+                        console.log(`✅ ${workerName} finished: ${file.name}`);
 
                     } catch (err) {
-                        console.error(`Error en ${file.name}`, err);
+                        console.error(`❌ ${workerName} failed on ${file.name}`, err);
                     } finally {
-                        completed++;
-                        const pct = (completed / files.length) * 100;
+                        completedCount++;
+                        const pct = (completedCount / files.length) * 100;
                         progressBar.style.width = pct + '%';
                     }
                 }
             };
 
-            // Creamos 5 "Obreros" que trabajan al mismo tiempo
-            const workers = [];
-            for (let i = 0; i < CONCURRENCY; i++) {
-                workers.push(processImage());
-            }
+            // --- LAUNCH THE FLEET ---
+            // Lanzamos 3 trabajadores simultáneos:
+            // 2 x OpenAI (Rápidos)
+            // 1 x Qwen (Backup / Paralelo)
+            
+            statusText.textContent = `🚀 Launching Hybrid Engine (OpenAI + Qwen)...`;
+            
+            await Promise.all([
+                runWorker('OpenAI-Worker-1', '/api/openai'),
+                runWorker('OpenAI-Worker-2', '/api/openai'),
+                runWorker('Qwen-Worker-1',   '/api/qwen')
+            ]);
 
-            // Esperamos a que los 5 obreros terminen todo el trabajo
-            await Promise.all(workers);
-
-            // --- FASE FINAL: VALIDACIÓN ---
-            statusText.textContent = "🧠 Calculando horarios y validando reglas...";
+            // --- FINAL VALIDATION ---
+            statusText.textContent = "🧠 Analyzing Schedule & Validating Rules...";
             await fetchValidation();
-            statusText.textContent = "✅ ¡Listo!";
+            statusText.textContent = "✅ All Done!";
         });
 
         async function fetchValidation() {
@@ -177,7 +181,7 @@
                 document.getElementById('totalMoney').textContent = 'LKR ' + data.totalValid;
                 document.getElementById('validCount').textContent = data.summary.valid;
                 document.getElementById('invalidCount').textContent = data.summary.invalid;
-                document.getElementById('scheduleDisplay').textContent = data.inferredSchedule || "Datos insuficientes";
+                document.getElementById('scheduleDisplay').textContent = data.inferredSchedule || "Insufficient Data";
 
                 const tbody = document.getElementById('tableBody');
                 tbody.innerHTML = '';
@@ -204,11 +208,7 @@
                         </tr>
                     `;
                 });
-
-            } catch (err) {
-                console.error(err);
-                alert("Error obteniendo resultados");
-            }
+            } catch (err) { console.error(err); }
         }
 
         function fileToBase64(file) {
