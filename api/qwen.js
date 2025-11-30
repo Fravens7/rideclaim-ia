@@ -1,155 +1,68 @@
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
 
-// Función para esperar (Sleep)
-const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
-
 export default async function handler(req, res) {
     try {
         if (req.method !== "POST") return res.status(405).json({ error: "Method Not Allowed" });
 
-        // 1. Parsear Body
-        let body = {};
-        try {
-            body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
-        } catch (e) {
-            return res.status(400).json({ error: "Invalid JSON body" });
-        }
-
-        const { image, fileName, mimeType, batchId } = body;
+        const { image, fileName, mimeType, batchId } = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
         if (!batchId) return res.status(400).json({ error: "Missing batchId" });
 
-        console.log(`🚀 Processing: ${fileName}`);
-
-        // 2. Check de Duplicados (Supabase)
+        // 1. Supabase & Duplicates
+        const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
         const imageHash = crypto.createHash('sha256').update(image).digest('hex');
-        const supabaseUrl = process.env.SUPABASE_URL;
-        const supabaseKey = process.env.SUPABASE_ANON_KEY;
+
+        await supabase.from('analysis_batches').upsert({ id: batchId, status: 'processing' }, { onConflict: 'id' });
         
-        if (supabaseUrl && supabaseKey) {
-            const supabase = createClient(supabaseUrl, supabaseKey);
-            await supabase.from('analysis_batches').upsert({ id: batchId, status: 'processing' }, { onConflict: 'id' });
-            
-            const { data: existing } = await supabase
-                .from('tripsimg')
-                .select('*')
-                .eq('batch_id', batchId)
-                .eq('image_hash', imageHash);
+        const { data: existing } = await supabase.from('tripsimg').select('*').eq('batch_id', batchId).eq('image_hash', imageHash);
+        if (existing?.length > 0) return res.status(200).json({ success: true, duplicate: true });
 
-            if (existing && existing.length > 0) {
-                console.log("⚠️ Duplicate detected, skipping API.");
-                return res.status(200).json({ success: true, duplicate: true });
-            }
-        }
+        // 2. Hugging Face Logic
+        const hfKey = process.env.HUGGINGFACE_API_KEY;
+        const promptText = `TASK: Extract Uber receipt data. OUTPUT: RAW JSON ARRAY ONLY. NO EXPLANATIONS. Fields: date ("MMM DD"), time ("HH:MM AM/PM"), location, amount (with currency). Example: [{"date": "Nov 24", "time": "9:34 PM", "location": "Mireka Tower", "amount": "LKR340.00"}]`;
 
-        // 3. CONEXIÓN A OPENAI CON REINTENTO AUTOMÁTICO
-        const apiKey = process.env.OPENAI_API_KEY;
-        if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
+        const response = await fetch("https://router.huggingface.co/v1/chat/completions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${hfKey}` },
+            body: JSON.stringify({
+                model: "Qwen/Qwen2.5-VL-7B-Instruct",
+                messages: [{ role: "user", content: [{ type: "text", text: promptText }, { type: "image_url", image_url: { url: `data:${mimeType};base64,${image}` } }] }],
+                temperature: 0.1, max_tokens: 1000
+            })
+        });
 
-        const promptText = `
-        TASK: Extract Uber receipt data.
-        OUTPUT: JSON ARRAY ONLY. NO MARKDOWN.
-        Fields: date ("MMM DD"), time ("HH:MM AM/PM"), location, amount (with currency).
-        Example: [{"date": "Nov 24", "time": "9:34 PM", "location": "Mireka Tower", "amount": "LKR340.00"}]
-        `;
-
-        // --- LÓGICA DE REINTENTO (RETRY LOGIC) ---
-        let response;
-        let attempts = 0;
-        const maxAttempts = 3; // Intentaremos hasta 3 veces
-
-        while (attempts < maxAttempts) {
-            try {
-                response = await fetch("https://api.openai.com/v1/chat/completions", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "Authorization": `Bearer ${apiKey}`
-                    },
-                    body: JSON.stringify({
-                        model: "gpt-4o-mini",
-                        messages: [
-                            {
-                                role: "user",
-                                content: [
-                                    { type: "text", text: promptText },
-                                    { type: "image_url", image_url: { url: `data:${mimeType || "image/jpeg"};base64,${image}` } }
-                                ]
-                            }
-                        ],
-                        temperature: 0.1,
-                        max_tokens: 800
-                    })
-                });
-
-                // Si es error 429 (Too Many Requests), esperamos y reintentamos
-                if (response.status === 429) {
-                    console.log(`⏳ Rate Limit hit for ${fileName}. Waiting 2s... (Attempt ${attempts + 1}/${maxAttempts})`);
-                    await delay(2000); // Esperar 2 segundos
-                    attempts++;
-                    continue; // Volver al inicio del loop
-                }
-
-                // Si es otro error, lanzamos excepción
-                if (!response.ok) {
-                    const errText = await response.text();
-                    throw new Error(`OpenAI API Error: ${errText}`);
-                }
-
-                // Si todo salió bien, rompemos el loop
-                break; 
-
-            } catch (error) {
-                // Si fue un error de red, también contamos intento
-                attempts++;
-                if (attempts >= maxAttempts) throw error;
-                await delay(1000);
-            }
-        }
-        // ----------------------------------------
+        if (!response.ok) throw new Error(await response.text());
 
         const result = await response.json();
-        const extractedText = result.choices?.[0]?.message?.content || "";
+        const content = result.choices?.[0]?.message?.content || "";
         
-        // 4. Limpieza de JSON
-        let cleanJson = extractedText.replace(/```json/g, '').replace(/```/g, '').trim();
-        const firstBracket = cleanJson.indexOf('[');
-        const lastBracket = cleanJson.lastIndexOf(']');
-        if (firstBracket !== -1 && lastBracket !== -1) {
-            cleanJson = cleanJson.substring(firstBracket, lastBracket + 1);
-        }
+        // 3. Clean JSON
+        let cleanJson = content.split('###')[0].replace(/```json/g, '').replace(/```/g, '').trim();
+        const first = cleanJson.indexOf('[');
+        const last = cleanJson.lastIndexOf(']');
+        if (first !== -1 && last !== -1) cleanJson = cleanJson.substring(first, last + 1);
 
-        let tripsArray = [];
-        try {
-            tripsArray = JSON.parse(cleanJson);
-        } catch (e) {
-            return res.status(200).json({ success: false, error: "Invalid JSON" });
-        }
+        const trips = JSON.parse(cleanJson);
 
-        // 5. Guardar en Supabase
-        if (supabaseUrl && supabaseKey) {
-            const supabase = createClient(supabaseUrl, supabaseKey);
-            const tripsToSave = Array.isArray(tripsArray) ? tripsArray : [tripsArray];
-
-            for (const trip of tripsToSave) {
-                if (trip.amount || trip.time) {
-                    await supabase.from('tripsimg').insert({
-                        batch_id: batchId,
-                        date: trip.date,
-                        time: trip.time,
-                        location: trip.location,
-                        amount: trip.amount,
-                        type: 'standard',
-                        image_hash: imageHash
-                    });
-                }
+        // 4. Save
+        for (const trip of (Array.isArray(trips) ? trips : [trips])) {
+            if (trip.amount) {
+                await supabase.from('tripsimg').insert({
+                    batch_id: batchId,
+                    date: trip.date,
+                    time: trip.time,
+                    location: trip.location,
+                    amount: trip.amount,
+                    type: 'qwen-hf',
+                    image_hash: imageHash
+                });
             }
         }
 
-        return res.status(200).json({ success: true });
+        return res.status(200).json({ success: true, source: "HuggingFace" });
 
     } catch (err) {
-        console.error("💥 Server Error:", err);
+        console.error("HF Error:", err.message);
         return res.status(500).json({ error: err.message });
     }
 }
