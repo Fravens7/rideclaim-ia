@@ -3,10 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RideClaim AI - Hybrid System</title>
+    <title>RideClaim AI - Optimized</title>
     <style>
         body { font-family: 'Segoe UI', sans-serif; max-width: 1000px; margin: 40px auto; padding: 20px; background: #f0f2f5; color: #333; }
         .card { background: white; padding: 25px; border-radius: 12px; margin-bottom: 25px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        h1 { margin: 0; }
+        
         .upload-zone { border: 2px dashed #cbd5e0; padding: 40px; text-align: center; border-radius: 12px; background: #f8fafc; cursor: pointer; }
         .upload-zone:hover { border-color: #3b82f6; background: #eff6ff; }
         
@@ -31,7 +33,7 @@
 
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
         <div>
-            <h1>RideClaim AI <span style="font-size:0.5em; background:#8b5cf6; color:white; padding:4px 8px; border-radius:10px; vertical-align:middle;">HYBRID</span></h1>
+            <h1>RideClaim AI <span style="font-size:0.5em; background:#3b82f6; color:white; padding:4px 8px; border-radius:10px; vertical-align:middle;">OPTIMIZED</span></h1>
             <div style="color: #666; font-size: 0.9em; margin-top: 5px;">Batch ID: <span id="batchIdDisplay">-</span></div>
         </div>
         <button onclick="initBatch()" style="padding: 10px 20px; cursor: pointer; background: white; border: 1px solid #cbd5e0; border-radius: 6px; font-weight: 600;">🔄 New Batch</button>
@@ -40,9 +42,9 @@
     <div class="card">
         <input type="file" id="fileInput" multiple accept="image/*" style="display: none;">
         <div class="upload-zone" onclick="document.getElementById('fileInput').click()">
-            <div style="font-size: 2.5em; margin-bottom: 10px;">⚖️</div>
-            <strong>Click to Upload (Hybrid Mode)</strong>
-            <div style="color: #94a3b8; margin-top: 5px;">Uses OpenAI + Qwen concurrently</div>
+            <div style="font-size: 2.5em; margin-bottom: 10px;">⚡</div>
+            <strong>Click to Upload</strong>
+            <div style="color: #94a3b8; margin-top: 5px;">Auto-compression & Load Balancing enabled</div>
         </div>
 
         <div class="progress-bar-container" id="progressContainer">
@@ -55,7 +57,7 @@
         <div style="display: flex; justify-content: space-between;">
             <h3>Validation Report</h3>
             <div style="text-align: right;">
-                <small style="color: #64748b;">Schedule</small>
+                <small style="color: #64748b;">Inferred Schedule</small>
                 <div id="scheduleDisplay" style="font-weight: bold; color: #3b82f6;">Calculating...</div>
             </div>
         </div>
@@ -110,13 +112,12 @@
             const statusText = document.getElementById('statusText');
             progressContainer.style.display = 'block';
             
-            // --- CONFIGURACIÓN HÍBRIDA ---
-            // 2 x OpenAI (Intentan ir rápido)
-            // 1 x Qwen (Va lento pero seguro, no se cae por timeout de Vercel tan fácil)
+            // --- CONFIGURACIÓN DE WORKERS ---
+            // Usamos 3 de OpenAI para máxima velocidad y evitar timeouts de Qwen
             const workersConfig = [
-                { name: 'OpenAI-1', url: '/api/openai' },
-                { name: 'OpenAI-2', url: '/api/openai' },
-                { name: 'Qwen-1',   '/api/qwen' } 
+                { name: 'Worker-1', url: '/api/openai' },
+                { name: 'Worker-2', url: '/api/openai' },
+                { name: 'Worker-3', url: '/api/openai' }
             ];
 
             let nextFileIndex = 0;
@@ -128,7 +129,9 @@
                     
                     try {
                         statusText.textContent = `⚙️ Processing... (${completedCount}/${files.length})`;
-                        const base64 = await fileToBase64(file);
+                        
+                        // COMPRESIÓN (La clave de la velocidad)
+                        const base64 = await compressImage(file);
                         
                         await fetch(apiUrl, {
                             method: 'POST',
@@ -136,7 +139,7 @@
                             body: JSON.stringify({
                                 image: base64,
                                 fileName: file.name,
-                                mimeType: file.type,
+                                mimeType: 'image/jpeg', // Siempre enviamos jpeg optimizado
                                 batchId: currentBatchId
                             })
                         });
@@ -160,6 +163,39 @@
             statusText.textContent = "✅ Finished!";
         });
 
+        // --- FUNCIÓN DE COMPRESIÓN MÁGICA ---
+        function compressImage(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = (event) => {
+                    const img = new Image();
+                    img.src = event.target.result;
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        // Forzamos un máximo de 1000px de ancho.
+                        // Esto reduce el peso drásticamente sin perder texto legible.
+                        const MAX_WIDTH = 1000;
+                        const scaleSize = MAX_WIDTH / img.width;
+                        
+                        // Si ya es pequeña, la dejamos igual pero en JPEG calidad 0.8
+                        const finalScale = scaleSize < 1 ? scaleSize : 1;
+
+                        canvas.width = img.width * finalScale;
+                        canvas.height = img.height * finalScale;
+
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+                        // Convertir a JPEG calidad 80% (Muy ligero)
+                        const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+                        resolve(dataUrl.split(',')[1]);
+                    };
+                };
+                reader.onerror = reject;
+            });
+        }
+
         async function fetchValidation() {
             try {
                 const res = await fetch(`/api/get-validated-trips?batchId=${currentBatchId}`);
@@ -176,9 +212,9 @@
 
                 // Ordenamos por fecha
                 const allTrips = [...data.trips.valid, ...data.trips.invalid].sort((a,b) => {
-                    const timeA = new Date(a.date + ' 2025 ' + a.time).getTime() || 0;
-                    const timeB = new Date(b.date + ' 2025 ' + b.time).getTime() || 0;
-                    return timeA - timeB;
+                    // Helper simple para ordenar texto cronológicamente
+                    const getVal = (t) => new Date(t.date + ' 2025 ' + t.time).getTime() || 0;
+                    return getVal(a) - getVal(b);
                 });
 
                 allTrips.forEach(trip => {
@@ -200,15 +236,6 @@
                     `;
                 });
             } catch (err) { console.error(err); }
-        }
-
-        function fileToBase64(file) {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.readAsDataURL(file);
-                reader.onload = () => resolve(reader.result.split(',')[1]);
-                reader.onerror = reject;
-            });
         }
 
         initBatch();
