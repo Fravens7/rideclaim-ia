@@ -78,11 +78,11 @@
             const statusText = document.getElementById('statusText');
             progressContainer.style.display = 'block';
             
-            // --- CONFIGURACIÓN DE SEGURIDAD ---
-            // Solo 2 workers para no saturar la red y evitar timeouts
+            // --- CONFIGURACIÓN ESTABLE (2 WORKERS) ---
+            // Usamos solo 2 para asegurar que el ancho de banda y Vercel aguanten
             const workersConfig = [
-                { name: 'W1', url: '/api/openai' },
-                { name: 'W2', url: '/api/openai' }
+                { name: 'Worker-1', url: '/api/openai' },
+                { name: 'Worker-2', url: '/api/openai' }
             ];
 
             let nextFileIndex = 0;
@@ -92,19 +92,26 @@
                 while (nextFileIndex < files.length) {
                     const file = files[nextFileIndex++];
                     try {
-                        statusText.textContent = `⚙️ Processing... (${completedCount}/${files.length})`;
+                        statusText.textContent = `⚙️ Procesando... (${completedCount}/${files.length})`;
                         
-                        // COMPRESIÓN AGRESIVA (Clave para velocidad)
+                        // COMPRESIÓN AGRESIVA (800px)
                         const base64 = await compressImage(file);
                         
                         await fetch(apiUrl, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ image: base64, fileName: file.name, mimeType: 'image/jpeg', batchId: currentBatchId })
+                            body: JSON.stringify({
+                                image: base64,
+                                fileName: file.name,
+                                mimeType: 'image/jpeg',
+                                batchId: currentBatchId
+                            })
                         });
+                        console.log(`✅ ${workerName} completado: ${file.name}`);
 
                     } catch (err) {
                         console.error(`❌ Error en ${file.name}`, err);
+                        // Opcional: Reintentar o marcar como fallido visualmente
                     } finally {
                         completedCount++;
                         progressBar.style.width = (completedCount / files.length * 100) + '%';
@@ -114,12 +121,12 @@
 
             await Promise.all(workersConfig.map(w => runWorker(w.name, w.url)));
 
-            statusText.textContent = "🧠 Validating...";
+            statusText.textContent = "🧠 Validando reglas de negocio...";
             await fetchValidation();
-            statusText.textContent = "✅ Finished!";
+            statusText.textContent = "✅ Finalizado";
         });
 
-        // --- COMPRESIÓN MÁGICA 2.0 (Más ligera) ---
+        // --- COMPRESIÓN 800PX ---
         function compressImage(file) {
             return new Promise((resolve, reject) => {
                 const reader = new FileReader();
@@ -129,7 +136,7 @@
                     img.src = event.target.result;
                     img.onload = () => {
                         const canvas = document.createElement('canvas');
-                        // MAX WIDTH 800px (Suficiente para leer texto, ultra ligero)
+                        // 800px es suficiente para leer texto y es mucho más ligero
                         const MAX_WIDTH = 800; 
                         const scaleSize = MAX_WIDTH / img.width;
                         const finalScale = scaleSize < 1 ? scaleSize : 1;
@@ -140,8 +147,8 @@
                         const ctx = canvas.getContext('2d');
                         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-                        // JPEG 0.5 (Calidad media, peso pluma)
-                        resolve(canvas.toDataURL('image/jpeg', 0.5).split(',')[1]);
+                        // Calidad 0.6 para velocidad máxima
+                        resolve(canvas.toDataURL('image/jpeg', 0.6).split(',')[1]);
                     };
                 };
                 reader.onerror = reject;
@@ -157,6 +164,9 @@
                 document.getElementById('validCount').textContent = data.summary.valid;
                 document.getElementById('invalidCount').textContent = data.summary.invalid;
                 
+                // Mostrar el horario detectado (con el nuevo cálculo de outliers)
+                document.getElementById('scheduleDisplay').textContent = data.inferredSchedule || "Datos insuficientes";
+
                 const tbody = document.getElementById('tableBody');
                 tbody.innerHTML = '';
                 
@@ -168,7 +178,13 @@
 
                 allTrips.forEach(trip => {
                     const badge = trip.status === 'valid' ? '<span class="badge valid">VALID</span>' : '<span class="badge invalid">INVALID</span>';
-                    tbody.innerHTML += `<tr><td>${trip.date}<br><small>${trip.time}</small></td><td>${trip.location}</td><td>${trip.amount}</td><td>${badge}</td><td><small>${trip.reason}</small></td></tr>`;
+                    tbody.innerHTML += `<tr>
+                        <td>${trip.date}<br><small>${trip.time}</small></td>
+                        <td>${trip.location}</td>
+                        <td>${trip.amount}</td>
+                        <td>${badge}</td>
+                        <td><small>${trip.reason}</small></td>
+                    </tr>`;
                 });
             } catch (err) { console.error(err); }
         }
